@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">bqjs</string>
+    <string name="xposed_description">API 101 research module that is active only when the Xposed framework reports NPatch.</string>
+</resources>
