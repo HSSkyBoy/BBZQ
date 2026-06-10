@@ -136,7 +136,14 @@ class SettingsActivity : Activity() {
                 enhanceLongPressCopySwitch = layout.getChildAt(1) as Switch
             },
         )
-
+        content.addView(
+            createFeatureSwitch(
+                titleRes = R.string.purify_share_title,
+                summaryRes = R.string.purify_share_summary,
+                key = ModuleSettings.KEY_PURIFY_SHARE_ENABLED,
+                defaultValue = false,
+            ),
+        )
         content.addView(createSectionTitle(R.string.story_filter_section_title))
         content.addView(
             createFeatureSwitch(

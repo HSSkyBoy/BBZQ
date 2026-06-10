@@ -26,6 +26,7 @@ object HookRegistry {
             AccessKeyCaptureHook(packageName),
             FreeCopyHook(packageName),
             SelectableTextHook(packageName),
+            SharePurifyHook(packageName),
         )
     }
 
