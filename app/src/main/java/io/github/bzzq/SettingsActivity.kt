@@ -1,9 +1,13 @@
 package io.github.bzzq
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.widget.CheckBox
@@ -11,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 
 class SettingsActivity : Activity() {
     private val prefs by lazy { getSharedPreferences(ModuleSettings.PREFS_NAME, MODE_PRIVATE) }
@@ -49,6 +54,22 @@ class SettingsActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
+
+        root.addView(createSectionTitle("账号工具"))
+        root.addView(createClickableItem(
+            R.string.copy_access_key_title,
+            R.string.copy_access_key_summary
+        ) {
+            val token = prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)
+            if (token.isNullOrEmpty()) {
+                Toast.makeText(this, R.string.copy_access_key_not_found, Toast.LENGTH_SHORT).show()
+            } else {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("access_key", token)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, R.string.copy_access_key_success, Toast.LENGTH_SHORT).show()
+            }
+        })
 
         root.addView(createSectionTitle("通用功能"))
         
@@ -155,6 +176,27 @@ class SettingsActivity : Activity() {
                 if (!refreshing) prefs.edit().putBoolean(key, isChecked).apply()
             }
         }
+    }
+
+    private fun createClickableItem(titleRes: Int, summaryRes: Int, onClick: () -> Unit): LinearLayout {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, dp(12))
+            isClickable = true
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            setOnClickListener { onClick() }
+        }
+        layout.addView(TextView(this).apply {
+            text = getString(titleRes)
+            textSize = 18f
+            setTextColor(Color.BLACK)
+        })
+        layout.addView(TextView(this).apply {
+            text = getString(summaryRes)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+        })
+        return layout
     }
 
     private fun refresh() {

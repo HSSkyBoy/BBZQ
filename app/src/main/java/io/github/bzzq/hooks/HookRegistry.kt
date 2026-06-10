@@ -22,6 +22,7 @@ object HookRegistry {
             StoryVideoAdHook(packageName),
             MiniGameRewardAdHook(packageName),
             BiliEntryHook(packageName),
+            AccessKeyCaptureHook(packageName),
         )
     }
 
