@@ -1,8 +1,11 @@
 package io.github.bzzq
 
 import android.app.Activity
+import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.ViewGroup
+import android.view.Window
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -19,16 +22,36 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = LinearLayout(this).apply {
+        requestWindowFeature(Window.FEATURE_NO_TITLE)
+        
+        val mainLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(24), dp(24), dp(24))
+            setBackgroundColor(Color.parseColor("#F4F4F4"))
         }
 
-        root.addView(TextView(this).apply {
+        // Toolbar
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.WHITE)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            elevation = dp(2).toFloat()
+        }
+        toolbar.addView(TextView(this).apply {
             text = getString(R.string.app_name)
-            textSize = 24f
+            textSize = 20f
+            setTextColor(Color.BLACK)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
+        mainLayout.addView(toolbar)
 
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+
+        root.addView(createSectionTitle("通用功能"))
+        
         root.addView(createFeatureSwitch(
             R.string.skip_splash_ad_title,
             ModuleSettings.KEY_SKIP_SPLASH_AD_ENABLED,
@@ -60,13 +83,14 @@ class SettingsActivity : Activity() {
             false,
         ))
 
+        root.addView(createSectionTitle(getString(R.string.purify_story_video_ad_title)))
+
         storyVideoAdSwitch = Switch(this).apply {
-            text = getString(R.string.purify_story_video_ad_title)
+            text = "启用过滤"
             textSize = 18f
-            setPadding(0, dp(16), 0, dp(8))
+            setPadding(0, dp(12), 0, dp(8))
             setOnCheckedChangeListener { _, isChecked ->
                 if (refreshing) return@setOnCheckedChangeListener
-
                 prefs.edit().putBoolean(ModuleSettings.KEY_PURIFY_STORY_VIDEO_AD_ENABLED, isChecked).apply()
                 if (isChecked && selectedTagKeys().isEmpty()) {
                     prefs.edit()
@@ -81,6 +105,10 @@ class SettingsActivity : Activity() {
         }
         root.addView(storyVideoAdSwitch)
 
+        val tagsLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), 0, 0, 0)
+        }
         ModuleSettings.storyVideoAdTags.forEach { tag ->
             val checkBox = CheckBox(this).apply {
                 text = tag.label
@@ -89,32 +117,39 @@ class SettingsActivity : Activity() {
                 }
             }
             tagCheckBoxes[tag.key] = checkBox
-            root.addView(checkBox)
+            tagsLayout.addView(checkBox)
         }
+        root.addView(tagsLayout)
 
         blockedCountView = TextView(this).apply {
             textSize = 14f
-            setPadding(0, dp(16), 0, 0)
+            setPadding(0, dp(16), 0, dp(16))
+            setTextColor(Color.GRAY)
         }
         root.addView(blockedCountView)
 
-        setContentView(ScrollView(this).apply {
-            addView(
-                root,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ),
-            )
+        mainLayout.addView(ScrollView(this).apply {
+            addView(root)
         })
+        
+        setContentView(mainLayout)
         refresh()
+    }
+
+    private fun createSectionTitle(title: String): TextView {
+        return TextView(this).apply {
+            text = title
+            textSize = 14f
+            setTextColor(Color.parseColor("#FB7299"))
+            setPadding(0, dp(16), 0, dp(8))
+        }
     }
 
     private fun createFeatureSwitch(titleRes: Int, key: String, defaultValue: Boolean): Switch {
         return Switch(this).apply {
             text = getString(titleRes)
             textSize = 18f
-            setPadding(0, dp(16), 0, dp(8))
+            setPadding(0, dp(12), 0, dp(12))
             isChecked = prefs.getBoolean(key, defaultValue)
             setOnCheckedChangeListener { _, isChecked ->
                 if (!refreshing) prefs.edit().putBoolean(key, isChecked).apply()

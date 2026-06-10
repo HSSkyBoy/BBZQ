@@ -21,6 +21,7 @@ object HookRegistry {
             LiveQualityHook(packageName),
             StoryVideoAdHook(packageName),
             MiniGameRewardAdHook(packageName),
+            BiliEntryHook(packageName),
         )
     }
 
