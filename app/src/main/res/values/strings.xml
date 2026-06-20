@@ -160,6 +160,8 @@
 
     <!-- 關於頁 -->
     <string name="about_version_title">版本</string>
+    <string name="about_hide_desktop_icon_title">隐藏桌面图标</string>
+    <string name="about_hide_desktop_icon_summary">隐藏后可通过B站内设置打开。(须在LSPosed中关闭“强制显示桌面图标”)</string>
     <string name="about_hidden_features_title">隐藏功能</string>
     <string name="about_hidden_features_summary">%1$s 隐藏功能已显示。</string>
     <string name="about_skip_video_ad_switch_title">空降助手功能开关</string>

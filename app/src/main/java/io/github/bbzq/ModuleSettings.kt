@@ -42,6 +42,7 @@ object ModuleSettings {
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
     const val KEY_LAST_ACCESS_KEY = "last_access_key"
+    const val KEY_HIDE_DESKTOP_ICON = "hide_desktop_icon"
 
     const val KEY_TARGET_APP_VERSION = "target_app_version"
     const val CACHE_BILI_SETTINGS_ACTIVITY = "cache_settings_activity"
@@ -221,6 +222,9 @@ object ModuleSettings {
 
     fun isUnlockCommentGifEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_UNLOCK_COMMENT_GIF_ENABLED, false)
+
+    fun isHideDesktopIconEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_HIDE_DESKTOP_ICON, false)
 }
 
 enum class SkipVideoAdMode(val value: Int, val label: String) {

@@ -21,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import io.github.bbzq.DesktopIconHelper
 import io.github.bbzq.R
 
 class SettingsContentFactory(
@@ -372,6 +373,12 @@ class SettingsContentFactory(
 
     private fun aboutRows(): List<View> {
         val rows = mutableListOf<View>()
+        rows += createSwitchRow(
+            context.getString(R.string.about_hide_desktop_icon_title),
+            context.getString(R.string.about_hide_desktop_icon_summary),
+            ModuleSettings.KEY_HIDE_DESKTOP_ICON,
+            false,
+        )
         rows += createClickableInfoRow(
             context.getString(R.string.about_version_title),
             RuntimeEnvironmentInfo.versionSummary(context, prefs),
@@ -740,6 +747,14 @@ class SettingsContentFactory(
                         key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED
                     ) {
                         refresh()
+                    }
+                    if (key == ModuleSettings.KEY_HIDE_DESKTOP_ICON) {
+                        if (isChecked) {
+                            DesktopIconHelper.applySetting(context, true)
+                        } else {
+                            DesktopIconHelper.applySetting(context, false)
+                            Toast.makeText(context, "回复图标需重启手机后生效", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }
