@@ -303,6 +303,18 @@
     <string name="comment_no_qoe_summary">屏蔽评论区体验反馈和问卷弹窗。</string>
     <string name="comment_no_operation_title">移除评论区运营推广</string>
     <string name="comment_no_operation_summary">隐藏评论区顶部的运营活动和推广横幅。</string>
+    <string name="comment_keyword_filter_title">按关键词屏蔽评论</string>
+    <string name="comment_keyword_filter_summary">评论正文包含设定关键词时，隐藏该评论及其楼中楼。</string>
+    <string name="comment_keyword_row_title">评论屏蔽关键词</string>
+    <string name="comment_keyword_hint">每行一个关键词，或用逗号、分号分隔</string>
+    <string name="comment_keyword_dialog_title">评论屏蔽关键词</string>
+    <string name="comment_keyword_empty_summary">未配置关键词。开启后，正文包含关键词的评论会被隐藏。</string>
+    <string name="comment_keyword_enabled_summary">已配置 %1$d 个关键词：%2$s</string>
+    <string name="comment_min_level_switch_title">屏蔽低等级用户评论</string>
+    <string name="comment_min_level_switch_summary">隐藏发布者等级低于设定值的评论及其楼中楼。</string>
+    <string name="comment_min_level_row_title">最低显示等级</string>
+    <string name="comment_min_level_row_summary">仅显示等级 ≥ %1$d 的用户评论。</string>
+    <string name="comment_min_level_dialog_title">最低显示等级</string>
 
     <!-- 我的页 -->
     <string name="mine_remove_vip_title">隐藏大会员入口</string>

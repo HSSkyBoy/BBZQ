@@ -196,10 +196,9 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             env.hookBefore(onNext) { param ->
                 runCatching {
                     val reply = param.args.firstOrNull() ?: return@runCatching
-                    val removeQoe = ModuleSettings.isCommentNoQoeEnabled(prefs)
-                    val removeOperation = ModuleSettings.isCommentNoOperationEnabled(prefs)
-                    if (!removeQoe && !removeOperation) return@runCatching
-                    cleanupReplyPayload(reply, removeQoe, removeOperation)
+                    val options = currentReplyCleanupOptions()
+                    if (!options.active) return@runCatching
+                    cleanupReplyPayload(reply, options)
                 }.onFailure {
                     log("VideoComment main list cleanup failed at ${onNext.declaringClass.name}.${onNext.name}", it)
                 }
@@ -208,7 +207,26 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return symbols.mainListOnNextMethods.size
     }
 
-    private fun cleanupReplyPayload(reply: Any, removeQoe: Boolean, removeOperation: Boolean) {
+    private fun currentReplyCleanupOptions(): ReplyCleanupOptions {
+        val keywords = if (ModuleSettings.isCommentKeywordFilterEnabled(prefs)) {
+            ModuleSettings.parseCommentKeywords(ModuleSettings.getCommentKeywordsText(prefs))
+        } else {
+            emptyList()
+        }
+        val minLevel = if (ModuleSettings.isCommentMinLevelEnabled(prefs)) {
+            ModuleSettings.getCommentMinLevel(prefs)
+        } else {
+            0
+        }
+        return ReplyCleanupOptions(
+            removeQoe = ModuleSettings.isCommentNoQoeEnabled(prefs),
+            removeOperation = ModuleSettings.isCommentNoOperationEnabled(prefs),
+            keywords = keywords,
+            minLevel = minLevel,
+        )
+    }
+
+    private fun cleanupReplyPayload(reply: Any, options: ReplyCleanupOptions) {
         val visited = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
         val pending = ArrayDeque<Any>()
         pending += reply
@@ -220,10 +238,10 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val methods = replyCleanupMethods.getOrPut(current.javaClass) {
                 resolveReplyCleanupMethods(current.javaClass)
             }
-            if (removeQoe) {
+            if (options.removeQoe) {
                 methods.clearQoe?.let { runCatching { it.invoke(current) } }
             }
-            if (removeOperation) {
+            if (options.removeOperation) {
                 methods.clearOperations.forEach { method ->
                     runCatching { method.invoke(current) }
                 }
@@ -232,9 +250,69 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val children = methods.getRepliesList
                 ?.let { runCatching { it.invoke(current) as? List<*> }.getOrNull() }
                 .orEmpty()
-            children.filterNotNullTo(pending)
+            if (options.filtersActive && methods.removeReplies != null) {
+                // Walk from the end so removing by index never shifts a not-yet-visited entry.
+                for (index in children.indices.reversed()) {
+                    val child = children[index] ?: continue
+                    if (shouldRemoveReply(child, options)) {
+                        runCatching { methods.removeReplies.invoke(current, index) }
+                    } else {
+                        pending += child
+                    }
+                }
+            } else {
+                children.filterNotNullTo(pending)
+            }
         }
     }
+
+    private fun shouldRemoveReply(node: Any, options: ReplyCleanupOptions): Boolean {
+        if (options.keywords.isNotEmpty()) {
+            val message = readReplyMessage(node)
+            if (message != null && options.keywords.any { message.contains(it, ignoreCase = true) }) {
+                return true
+            }
+        }
+        if (options.minLevel > 0) {
+            val level = readReplyMemberLevel(node)
+            if (level != null && level < options.minLevel) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun readReplyMessage(node: Any): String? {
+        val getContent = noArgMethod(node.javaClass, "getContent") ?: return null
+        val content = runCatching { getContent.invoke(node) }.getOrNull() ?: return null
+        val getMessage = noArgMethod(content.javaClass, "getMessage") ?: return null
+        return runCatching { getMessage.invoke(content) as? String }.getOrNull()
+    }
+
+    private fun readReplyMemberLevel(node: Any): Int? {
+        val getMember = noArgMethod(node.javaClass, "getMember") ?: return null
+        val member = runCatching { getMember.invoke(node) }.getOrNull() ?: return null
+        // reply.v1 Member exposes the commenter level via level_info.current_level;
+        // fall back to a flat getLevel() when the schema differs.
+        intFromNoArg(member, "getLevel")?.let { return it }
+        val getLevelInfo = noArgMethod(member.javaClass, "getLevelInfo") ?: return null
+        val levelInfo = runCatching { getLevelInfo.invoke(member) }.getOrNull() ?: return null
+        return intFromNoArg(levelInfo, "getCurrentLevel")
+    }
+
+    private fun intFromNoArg(target: Any, name: String): Int? {
+        val method = noArgMethod(target.javaClass, name) ?: return null
+        return runCatching { (method.invoke(target) as? Number)?.toInt() }.getOrNull()
+    }
+
+    private fun noArgMethod(type: Class<*>, name: String): Method? =
+        noArgMethodCache.getOrPut(type.name + "#" + name) {
+            MethodLookup(
+                type.declaredMethods
+                    .firstOrNull { it.name == name && it.parameterCount == 0 }
+                    ?.apply { isAccessible = true },
+            )
+        }.method
 
     private fun resolveReplyCleanupMethods(type: Class<*>): ReplyCleanupMethods =
         ReplyCleanupMethods(
@@ -246,6 +324,12 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 .toList(),
             getRepliesList = type.declaredMethods
                 .firstOrNull { it.name == "getRepliesList" && it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) },
+            removeReplies = type.declaredMethods
+                .firstOrNull {
+                    it.name == "removeReplies" && it.parameterCount == 1 &&
+                        it.parameterTypes[0] == Int::class.javaPrimitiveType
+                }
+                ?.apply { isAccessible = true },
         )
 
     private fun Class<*>.isCommentActionType(): Boolean {
@@ -337,6 +421,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private companion object {
         private val CLEAR_OPERATION_METHOD_NAMES = setOf("clearOperation", "clearOperationV2")
         private val replyCleanupMethods = ConcurrentHashMap<Class<*>, ReplyCleanupMethods>()
+        private val noArgMethodCache = ConcurrentHashMap<String, MethodLookup>()
         private val publishDialogActionIntentFields = ConcurrentHashMap<Class<*>, FieldLookup>()
         private val publishDialogIntentFields = ConcurrentHashMap<Class<*>, PublishDialogIntentFields>()
     }
@@ -344,13 +429,26 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
 private data class FieldLookup(val field: Field?)
 
+private data class MethodLookup(val method: Method?)
+
 private data class PublishDialogIntentFields(
     val isReply: Field?,
     val pos: Field?,
 )
 
+private data class ReplyCleanupOptions(
+    val removeQoe: Boolean,
+    val removeOperation: Boolean,
+    val keywords: List<String>,
+    val minLevel: Int,
+) {
+    val filtersActive: Boolean get() = keywords.isNotEmpty() || minLevel > 0
+    val active: Boolean get() = removeQoe || removeOperation || filtersActive
+}
+
 private data class ReplyCleanupMethods(
     val clearQoe: Method?,
     val clearOperations: List<Method>,
     val getRepliesList: Method?,
+    val removeReplies: Method?,
 )

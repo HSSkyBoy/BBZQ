@@ -64,6 +64,12 @@ class SettingsContentFactory(
     private lateinit var customThemeColorSwatch: View
     private lateinit var customSkinConfigRow: View
     private lateinit var customSkinConfigSummary: TextView
+    private lateinit var commentKeywordFilterSwitch: Switch
+    private lateinit var commentKeywordRow: View
+    private lateinit var commentKeywordSummary: TextView
+    private lateinit var commentMinLevelSwitch: Switch
+    private lateinit var commentMinLevelRow: View
+    private lateinit var commentMinLevelSummary: TextView
     private lateinit var homeRecommendItemSwitch: Switch
     private lateinit var homeRecommendTitleKeywordRow: View
     private lateinit var homeRecommendTabSwitch: Switch
@@ -496,6 +502,24 @@ class SettingsContentFactory(
 
     private fun commentRows(): List<View> {
         return listOf(
+            createSwitchRow(
+                context.getString(R.string.comment_keyword_filter_title),
+                context.getString(R.string.comment_keyword_filter_summary),
+                ModuleSettings.KEY_COMMENT_KEYWORD_FILTER_ENABLED,
+                false,
+            ) {
+                commentKeywordFilterSwitch = it
+            },
+            createCommentKeywordRow(),
+            createSwitchRow(
+                context.getString(R.string.comment_min_level_switch_title),
+                context.getString(R.string.comment_min_level_switch_summary),
+                ModuleSettings.KEY_COMMENT_MIN_LEVEL_ENABLED,
+                false,
+            ) {
+                commentMinLevelSwitch = it
+            },
+            createCommentMinLevelRow(),
             createSwitchRow(
                 context.getString(R.string.comment_disable_title),
                 context.getString(R.string.comment_disable_summary),
@@ -1285,6 +1309,106 @@ class SettingsContentFactory(
             .show()
     }
 
+    private fun createCommentKeywordRow(): View {
+        commentKeywordSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(SUMMARY_COLOR)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showCommentKeywordDialog() }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.comment_keyword_row_title)
+                textSize = 15f
+                setTextColor(TITLE_COLOR)
+            })
+            addView(commentKeywordSummary)
+        }.also {
+            commentKeywordRow = it
+        }
+    }
+
+    private fun showCommentKeywordDialog() {
+        val input = EditText(context).apply {
+            setText(ModuleSettings.getCommentKeywordsText(prefs))
+            minLines = 4
+            maxLines = 8
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setSingleLine(false)
+            setSelectAllOnFocus(false)
+            setHint(R.string.comment_keyword_hint)
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.comment_keyword_dialog_title)
+            .setView(content)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                prefs.edit()
+                    .putString(ModuleSettings.KEY_COMMENT_KEYWORDS, input.text?.toString()?.trim().orEmpty())
+                    .apply()
+                refresh()
+            }
+            .show()
+    }
+
+    private fun createCommentMinLevelRow(): View {
+        return createClickableInfoRow(
+            context.getString(R.string.comment_min_level_row_title),
+            commentMinLevelSummaryText(),
+        ) {
+            showCommentMinLevelDialog()
+        }.also {
+            commentMinLevelRow = it
+            commentMinLevelSummary = (it as ViewGroup).getChildAt(1) as TextView
+        }
+    }
+
+    private fun showCommentMinLevelDialog() {
+        val picker = NumberPicker(context).apply {
+            minValue = 1
+            maxValue = 6
+            wrapSelectorWheel = false
+            value = ModuleSettings.getCommentMinLevel(prefs).coerceIn(1, 6)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.comment_min_level_dialog_title)
+            .setView(picker)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                prefs.edit()
+                    .putInt(ModuleSettings.KEY_COMMENT_MIN_LEVEL, picker.value)
+                    .apply()
+                refresh()
+            }
+            .show()
+    }
+
+    private fun commentKeywordSummaryText(): String {
+        val keywords = ModuleSettings.parseCommentKeywords(ModuleSettings.getCommentKeywordsText(prefs))
+        if (keywords.isEmpty()) {
+            return context.getString(R.string.comment_keyword_empty_summary)
+        }
+        return context.getString(
+            R.string.comment_keyword_enabled_summary,
+            keywords.size,
+            keywords.take(TITLE_KEYWORD_SUMMARY_MAX_ITEMS).joinToString(context.getString(R.string.list_separator)),
+        )
+    }
+
+    private fun commentMinLevelSummaryText(): String =
+        context.getString(R.string.comment_min_level_row_summary, ModuleSettings.getCommentMinLevel(prefs))
+
     private fun createCustomThemeColorRow(): View {
         customThemeColorSummary = TextView(context).apply {
             textSize = 12f
@@ -1743,6 +1867,8 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_CUSTOM_SKIN_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED ||
+            key == ModuleSettings.KEY_COMMENT_KEYWORD_FILTER_ENABLED ||
+            key == ModuleSettings.KEY_COMMENT_MIN_LEVEL_ENABLED ||
             key == ModuleSettings.KEY_SKIP_VIDEO_AD_ENABLED ||
             key == ModuleSettings.KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED
@@ -1901,6 +2027,28 @@ class SettingsContentFactory(
         if (::homeRecommendTitleKeywordRow.isInitialized) {
             homeRecommendTitleKeywordRow.isEnabled = homeRecommendFilterEnabled
             homeRecommendTitleKeywordRow.alpha = if (homeRecommendFilterEnabled) 1f else 0.45f
+        }
+        val commentKeywordFilterEnabled = ModuleSettings.isCommentKeywordFilterEnabled(prefs)
+        if (::commentKeywordFilterSwitch.isInitialized) {
+            commentKeywordFilterSwitch.isChecked = commentKeywordFilterEnabled
+        }
+        if (::commentKeywordSummary.isInitialized) {
+            commentKeywordSummary.text = commentKeywordSummaryText()
+        }
+        if (::commentKeywordRow.isInitialized) {
+            commentKeywordRow.isEnabled = commentKeywordFilterEnabled
+            commentKeywordRow.alpha = if (commentKeywordFilterEnabled) 1f else 0.45f
+        }
+        val commentMinLevelEnabled = ModuleSettings.isCommentMinLevelEnabled(prefs)
+        if (::commentMinLevelSwitch.isInitialized) {
+            commentMinLevelSwitch.isChecked = commentMinLevelEnabled
+        }
+        if (::commentMinLevelSummary.isInitialized) {
+            commentMinLevelSummary.text = commentMinLevelSummaryText()
+        }
+        if (::commentMinLevelRow.isInitialized) {
+            commentMinLevelRow.isEnabled = commentMinLevelEnabled
+            commentMinLevelRow.alpha = if (commentMinLevelEnabled) 1f else 0.45f
         }
         homeRecommendItemCheckBoxes.forEach { (key, checkBox) ->
             checkBox.isEnabled = homeRecommendFilterEnabled

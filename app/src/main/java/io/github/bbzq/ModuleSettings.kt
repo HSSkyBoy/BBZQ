@@ -85,6 +85,12 @@ object ModuleSettings {
     const val KEY_COMMENT_NO_EMPTY_PAGE = "vid_comment_no_empty_page"
     const val KEY_COMMENT_NO_QOE = "vid_comment_no_qoe"
     const val KEY_COMMENT_NO_OPERATION = "vid_comment_no_operation"
+    const val KEY_COMMENT_KEYWORD_FILTER_ENABLED = "vid_comment_keyword_filter_enabled"
+    const val KEY_COMMENT_KEYWORDS = "vid_comment_keywords"
+    const val KEY_COMMENT_MIN_LEVEL_ENABLED = "vid_comment_min_level_enabled"
+    const val KEY_COMMENT_MIN_LEVEL = "vid_comment_min_level"
+    const val MAX_COMMENT_KEYWORDS = 64
+    const val DEFAULT_COMMENT_MIN_LEVEL = 3
     const val KEY_MINE_REMOVE_VIP = "mine_remove_vip"
     const val KEY_MINE_KEEP_VIP_SPACE = "mine_keep_vip_space"
     const val KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED = "custom_mine_component_hide_enabled"
@@ -271,6 +277,8 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_COMMENT_NO_EMPTY_PAGE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_EMPTY_PAGE, false) },
         ExportableConfigSpec(KEY_COMMENT_NO_QOE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_QOE, false) },
         ExportableConfigSpec(KEY_COMMENT_NO_OPERATION, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_OPERATION, false) },
+        ExportableConfigSpec(KEY_COMMENT_KEYWORD_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_KEYWORD_FILTER_ENABLED, false) },
+        ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_MIN_LEVEL_ENABLED, false) },
         ExportableConfigSpec(KEY_MINE_REMOVE_VIP, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_REMOVE_VIP, false) },
         ExportableConfigSpec(KEY_MINE_KEEP_VIP_SPACE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_KEEP_VIP_SPACE, false) },
         ExportableConfigSpec(KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED, ExportableValueType.BOOLEAN) {
@@ -280,6 +288,8 @@ object ModuleSettings {
 
     val exportableManualSpecs = buildList<ExportableConfigSpec> {
         add(ExportableConfigSpec(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, "").orEmpty() })
+        add(ExportableConfigSpec(KEY_COMMENT_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_COMMENT_KEYWORDS, "").orEmpty() })
+        add(ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL, ExportableValueType.INT) { getCommentMinLevel(it) })
         add(ExportableConfigSpec(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, ExportableValueType.INT) { prefs ->
             prefs.getInt(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, 1).coerceIn(1, 12)
         })
@@ -648,6 +658,27 @@ object ModuleSettings {
 
     fun isCommentNoOperationEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_COMMENT_NO_OPERATION, false)
+
+    fun isCommentKeywordFilterEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_COMMENT_KEYWORD_FILTER_ENABLED, false)
+
+    fun getCommentKeywordsText(prefs: SharedPreferences): String =
+        prefs.getString(KEY_COMMENT_KEYWORDS, "").orEmpty()
+
+    fun parseCommentKeywords(raw: String): List<String> =
+        raw.split('\n', '\r', ',', '，', ';', '；')
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .take(MAX_COMMENT_KEYWORDS)
+            .toList()
+
+    fun isCommentMinLevelEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_COMMENT_MIN_LEVEL_ENABLED, false)
+
+    fun getCommentMinLevel(prefs: SharedPreferences): Int =
+        prefs.getInt(KEY_COMMENT_MIN_LEVEL, DEFAULT_COMMENT_MIN_LEVEL).coerceIn(0, 6)
 
     fun isMineRemoveVipEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_MINE_REMOVE_VIP, false)
