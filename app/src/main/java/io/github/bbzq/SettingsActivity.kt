@@ -50,6 +50,7 @@ class SettingsActivity : Activity() {
             },
             onExportClick = { launchExportConfig() },
             onImportClick = { launchImportConfig() },
+            onCustomSkinImportClick = { launchCustomSkinImport() },
         )
         contentFactory = factory
         val content = factory.createScrollView()
@@ -111,6 +112,7 @@ class SettingsActivity : Activity() {
         when (requestCode) {
             REQUEST_EXPORT_CONFIG -> data?.data?.let(::doExport)
             REQUEST_IMPORT_CONFIG -> data?.data?.let(::loadImportArchive)
+            REQUEST_IMPORT_CUSTOM_SKIN -> data?.data?.let(::loadCustomSkinFile)
         }
     }
 
@@ -166,6 +168,36 @@ class SettingsActivity : Activity() {
                 getString(R.string.config_import_failed, throwable.message ?: "無法開啟檔案選擇器"),
                 Toast.LENGTH_LONG,
             ).show()
+        }
+    }
+
+    private fun launchCustomSkinImport() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/json", "application/zip", "application/x-zip-compressed", "application/octet-stream"),
+            )
+        }
+        startActivityForResult(intent, REQUEST_IMPORT_CUSTOM_SKIN)
+    }
+
+    private fun loadCustomSkinFile(uri: Uri) {
+        val result = runCatching {
+            contentResolver.openInputStream(uri)?.use { CustomSkinConfigPorter.read(it.readBytes()) }
+                ?: CustomSkinConfigPorter.Result.Failure("无法读取文件")
+        }.getOrElse { CustomSkinConfigPorter.Result.Failure(it.message ?: "无法读取文件") }
+        when (result) {
+            is CustomSkinConfigPorter.Result.Success -> {
+                prefs.edit()
+                    .putString(ModuleSettings.KEY_CUSTOM_SKIN_JSON, result.json)
+                    .putBoolean(ModuleSettings.KEY_CUSTOM_SKIN_ENABLED, true)
+                    .apply()
+                Toast.makeText(this, R.string.custom_skin_config_imported, Toast.LENGTH_SHORT).show()
+                recreate()
+            }
+            is CustomSkinConfigPorter.Result.Failure -> Toast.makeText(this, result.reason, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -363,5 +395,6 @@ class SettingsActivity : Activity() {
         const val PAGE_CONFIG_BACKUP = "config_backup"
         private const val REQUEST_EXPORT_CONFIG = 0x5001
         private const val REQUEST_IMPORT_CONFIG = 0x5002
+        private const val REQUEST_IMPORT_CUSTOM_SKIN = 0x5003
     }
 }

@@ -61,6 +61,11 @@ object ModuleSettings {
     const val KEY_DISABLE_LONG_PRESS_COPY_ENABLED = "disable_long_press_copy_enabled"
     const val KEY_ENHANCE_LONG_PRESS_COPY_ENABLED = "enhance_long_press_copy_enabled"
     const val KEY_CUSTOM_BOTTOM_BAR_ENABLED = "custom_bottom_bar_enabled"
+    const val KEY_CUSTOM_THEME_ENABLED = "custom_theme_enabled"
+    const val KEY_CUSTOM_THEME_COLOR = "custom_theme_color"
+    const val KEY_CUSTOM_SKIN_ENABLED = "custom_skin_enabled"
+    const val KEY_CUSTOM_SKIN_JSON = "custom_skin_json"
+    const val DEFAULT_CUSTOM_THEME_COLOR = 0xFFFB7299.toInt()
     const val KEY_HIDDEN_BOTTOM_BAR_ITEMS = "hidden_bottom_bar_items"
     const val KEY_KNOWN_BOTTOM_BAR_ITEMS = "known_bottom_bar_items"
     const val KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED = "hide_home_top_bar_promotion_enabled"
@@ -250,6 +255,8 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_DISABLE_LONG_PRESS_COPY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_DISABLE_LONG_PRESS_COPY_ENABLED, false) },
         ExportableConfigSpec(KEY_ENHANCE_LONG_PRESS_COPY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_ENHANCE_LONG_PRESS_COPY_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_BOTTOM_BAR_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_BOTTOM_BAR_ENABLED, false) },
+        ExportableConfigSpec(KEY_CUSTOM_THEME_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_THEME_ENABLED, false) },
+        ExportableConfigSpec(KEY_CUSTOM_SKIN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
@@ -281,6 +288,12 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_STORY_VIDEO_COMPONENT_ALPHA, ExportableValueType.INT) { prefs ->
             getStoryVideoComponentAlphaPercent(prefs)
+        })
+        add(ExportableConfigSpec(KEY_CUSTOM_THEME_COLOR, ExportableValueType.INT) { prefs ->
+            getCustomThemeColor(prefs)
+        })
+        add(ExportableConfigSpec(KEY_CUSTOM_SKIN_JSON, ExportableValueType.STRING) { prefs ->
+            getCustomSkinJson(prefs)
         })
         add(ExportableConfigSpec(KEY_HIDDEN_HOME_RECOMMEND_ITEMS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_HIDDEN_HOME_RECOMMEND_ITEMS, emptySet<String>())?.toSet() ?: emptySet<String>()
@@ -535,6 +548,19 @@ object ModuleSettings {
 
     fun isCustomDownloadThreadEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_DOWNLOAD_THREAD_ENABLED, false)
+
+    fun isCustomThemeEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CUSTOM_THEME_ENABLED, false)
+
+    fun getCustomThemeColor(prefs: SharedPreferences): Int =
+        prefs.getInt(KEY_CUSTOM_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR)
+            .let { color -> (color and 0x00FFFFFF) or 0xFF000000.toInt() }
+
+    fun isCustomSkinEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false)
+
+    fun getCustomSkinJson(prefs: SharedPreferences): String =
+        prefs.getString(KEY_CUSTOM_SKIN_JSON, "").orEmpty().trim()
 
     fun getCustomDownloadConcurrency(prefs: SharedPreferences): Int =
         prefs.getInt(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, 1).coerceIn(1, 12)

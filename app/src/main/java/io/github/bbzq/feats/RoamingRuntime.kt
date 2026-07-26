@@ -11,6 +11,7 @@ import io.github.bbzq.feats.hook.BottomBarHook
 import io.github.bbzq.feats.hook.AutoLikeHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
+import io.github.bbzq.feats.hook.CustomThemeHook
 import io.github.bbzq.feats.hook.DownloadThreadHook
 import io.github.bbzq.feats.hook.DynamicPageHook
 import io.github.bbzq.feats.hook.TeenagersModeHook
@@ -161,6 +162,7 @@ object RoamingRuntime {
                 ::VideoCommentHook,
                 ::FullNumberFormatHook,
                 ::MineProfileHook,
+                ::CustomThemeHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }
@@ -169,6 +171,11 @@ object RoamingRuntime {
             val hook = factory(env)
             runCatching { hook.startHook() }
                 .onFailure { env.log("Hook failed: ${hook.javaClass.simpleName}", it) }
+        }
+
+        if (processScope == ProcessScope.WEB) {
+            runCatching { CustomThemeHook(env).insertColorForWebProcess() }
+                .onFailure { env.log("CustomTheme web process hook failed", it) }
         }
 
         env.log("BBZQ runtime installed ${hooks.size} hook(s)")

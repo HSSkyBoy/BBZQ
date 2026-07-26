@@ -332,4 +332,22 @@
     <string name="playback_portrait_control_summary">隐藏播放器控制层中的“竖屏”切换按钮。需重启哔哩哔哩后生效。</string>
     <string name="playback_triple_speed_title">解锁播放器 3 倍速</string>
     <string name="playback_triple_speed_summary">3 倍速是服务端灰度 A/B 实验，开启后强制进入实验组，倍速菜单新增 3.0X 档位並去除原有的 50 帧限制。需重启哔哩哔哩后生效。</string>
+    <string name="custom_theme_title">自制主题</string>
+    <string name="custom_theme_summary">在 Bilibili 主题列表中加入自定义主色主题；修改后重新进入主题页即可生效。</string>
+    <string name="custom_theme_color_title">自制主题颜色</string>
+    <string name="custom_theme_color_summary">当前颜色：%1$s</string>
+    <string name="custom_theme_color_dialog_title">自制主题颜色</string>
+    <string name="custom_theme_color_dialog_message">请输入 6 位十六进制颜色，例如 FB7299。</string>
+    <string name="custom_theme_color_invalid">请输入有效的 6 位十六进制颜色。</string>
+    <string name="custom_skin_title">自制主题</string>
+    <string name="custom_skin_summary">使用导入的主题配置；保存后重启 B 站即可套用。</string>
+    <string name="custom_skin_config_title">导入自制主题配置</string>
+    <string name="custom_skin_config_message">粘贴导出的主题 JSON 配置。</string>
+    <string name="custom_skin_config_empty">尚未导入配置</string>
+    <string name="custom_skin_config_loaded">已导入：%1$s</string>
+    <string name="custom_skin_config_invalid">配置必须是包含 package_url 的有效主题 JSON。</string>
+    <string name="custom_skin_config_copy">复制</string>
+    <string name="custom_skin_config_copied">主题配置已复制</string>
+    <string name="custom_skin_config_import_file">从文件导入</string>
+    <string name="custom_skin_config_imported">自制主题配置已导入，重启 B 站后套用。</string>
 </resources>

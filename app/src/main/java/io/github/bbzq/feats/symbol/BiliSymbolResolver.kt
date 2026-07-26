@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.os.Bundle
 import android.util.AttributeSet
+import android.util.SparseArray
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -29,6 +30,7 @@ import java.io.File
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.lang.reflect.ParameterizedType
 import kotlin.coroutines.Continuation
 
 object BiliSymbolResolver {
@@ -137,6 +139,8 @@ object BiliSymbolResolver {
     private const val HP_CHRONOS_GEMINI_OPERATION_UPDATE = "ChronosPromotionHook.GeminiOperationUpdate"
     private const val HP_FULL_NUMBER_FORMAT = "FullNumberFormatHook.NumberFormat"
     private const val HP_TRIPLE_SPEED = "TripleSpeedHook.ExperimentReader"
+    private const val HP_CUSTOM_THEME = "CustomThemeHook.ThemeStore"
+    private const val HP_CUSTOM_SKIN = "CustomSkinHook.GarbResolver"
     private const val PLAY_SPEED_EXPERIMENT_PREF_KEY = "sp_play_speed_experiment"
     private const val HIGH_FRAME_RATE_SPEED_RESET_LOG = "reset 3x speed because target quality"
     private const val PLAY_SPEED_UTILS_CLASS = "com.bilibili.playerbizcommonv2.utils.D"
@@ -327,6 +331,12 @@ object BiliSymbolResolver {
         val tripleSpeed = scanHookPoint(HP_TRIPLE_SPEED, hookPoints, scanErrors, log) {
             scanTripleSpeed(classLoader, ::bridge)
         }
+        val customTheme = scanOptionalHookPoint(HP_CUSTOM_THEME, hookPoints, scanErrors, log) {
+            scanCustomTheme(classLoader, ::bridge)
+        }
+        val customSkin = scanOptionalHookPoint(HP_CUSTOM_SKIN, hookPoints, scanErrors, log) {
+            scanCustomSkin(classLoader, ::bridge)
+        }
 
         runCatching { bridge?.close() }
             .onFailure { recordError("DexKitBridge close failed: ${it.scanMessage()}") }
@@ -362,6 +372,8 @@ object BiliSymbolResolver {
             chronosPromotion = chronosPromotion,
             fullNumberFormat = fullNumberFormat,
             tripleSpeed = tripleSpeed,
+            customTheme = customTheme,
+            customSkin = customSkin,
         )
     }
 
@@ -887,6 +899,155 @@ object BiliSymbolResolver {
             evidence = "fragments=${methods.size},preference=${preferenceClass.name}",
         )
         return SymbolScanResult.Found(symbols, methods.joinToString("|") { it.declaringClass.name }, symbols.evidence)
+    }
+
+    private fun scanCustomSkin(
+        classLoader: ClassLoader,
+        bridge: () -> DexKitBridge?,
+    ): SymbolScanResult<CustomSkinSymbols> {
+        val currentBridge = bridge() ?: return SymbolScanResult.Missing("DexKitBridge unavailable")
+        val resolverMethod = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create().matcher(MethodMatcher.create().usingStrings("shouldApplyForceOpGarb =")),
+            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .firstOrNull { method ->
+                    method.parameterCount == 1 &&
+                        method.returnType != Void.TYPE &&
+                        method.returnType.name.contains("GarbDetail")
+                }
+        }.getOrNull() ?: return SymbolScanResult.Missing("garb resolver method not found")
+        resolverMethod.isAccessible = true
+        val symbols = CustomSkinSymbols(
+            resolverMethod = MethodDescriptor.of(resolverMethod),
+            evidence = "resolver=${resolverMethod.declaringClass.name}.${resolverMethod.name}",
+        )
+        return SymbolScanResult.Found(symbols, resolverMethod.declaringClass.name, symbols.evidence)
+    }
+
+    private fun scanCustomTheme(
+        classLoader: ClassLoader,
+        bridge: () -> DexKitBridge?,
+    ): SymbolScanResult<CustomThemeSymbols> {
+        val currentBridge = bridge() ?: return SymbolScanResult.Missing("DexKitBridge unavailable")
+        val themeStoreActivity = classLoader.loadClassOrNull(THEME_STORE_ACTIVITY)
+            ?: return SymbolScanResult.Missing("ThemeStoreActivity not found")
+        val skinListClass = classLoader.loadClassOrNull(BILI_SKIN_LIST)
+            ?: return SymbolScanResult.Missing("BiliSkinList not found")
+        val skinClass = classLoader.loadClassOrNull(BILI_SKIN)
+            ?: return SymbolScanResult.Missing("BiliSkin not found")
+
+        val colorArrayMethod = currentBridge.findMethod(
+            FindMethod.create().matcher(MethodMatcher.create().usingStrings("theme_entries_last_key")),
+        ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+            .firstOrNull {
+                it.parameterTypes.contentEquals(arrayOf(Context::class.java)) &&
+                    it.returnType == Int::class.javaPrimitiveType
+            }
+            ?: return SymbolScanResult.Missing("theme color array method not found")
+        val themeHelperClass = colorArrayMethod.declaringClass
+        val colorArrayField = themeHelperClass.declaredFields.firstOrNull {
+            it.name == colorArrayMethod.name && it.type == SparseArray::class.java && Modifier.isStatic(it.modifiers)
+        }?.apply { isAccessible = true }
+            ?: return SymbolScanResult.Missing("theme color SparseArray not found")
+
+        val themeColorsClass = currentBridge.findClass(
+            FindClass.create().matcher(ClassMatcher.create().usingStrings("GarbThemeColors(garb=")),
+        ).mapNotNull { classLoader.loadClassOrNull(it.name) }
+            .firstOrNull { type -> type.declaredConstructors.any { Modifier.isPrivate(it.modifiers) } }
+
+        val skinListMethod = themeStoreActivity.declaredMethods.firstOrNull {
+            it.parameterTypes.size == 2 &&
+                it.parameterTypes[0] == skinListClass &&
+                it.parameterTypes[1] == Boolean::class.javaPrimitiveType
+        }?.apply { isAccessible = true }
+            ?: return SymbolScanResult.Missing("theme skin list method not found")
+
+        val themeProcessorClass = findClassNamesByNameContains(bridge, listOf("tv.danmaku.bili.ui.theme"))
+            .mapNotNull(classLoader::loadClassOrNull)
+            .firstOrNull { type -> type.declaredFields.count { it.type == skinListClass } > 1 }
+            ?: return SymbolScanResult.Missing("theme processor class not found")
+        val themeResetMethods = themeProcessorClass.declaredMethods.filter {
+            it.parameterCount == 0 && it.modifiers == 0
+        }.onEach { it.isAccessible = true }
+        if (themeResetMethods.isEmpty()) {
+            return SymbolScanResult.Missing("theme reset methods not found")
+        }
+
+        val themeListClickClass = themeStoreActivity.declaredClasses.firstOrNull {
+            it.interfaces.contains(View.OnClickListener::class.java)
+        } ?: return SymbolScanResult.Missing("theme list click listener not found")
+
+        val themeNameClass = findThemeNameClass(classLoader, currentBridge)
+            ?: return SymbolScanResult.Missing("theme name map class not found")
+        val themeNameField = themeNameClass.declaredFields.firstOrNull {
+            it.type == Map::class.java && Modifier.isStatic(it.modifiers)
+        }?.apply { isAccessible = true }
+            ?: return SymbolScanResult.Missing("theme name map field not found")
+
+        val builtInThemeCandidate = findClassNamesByNameContains(bridge, listOf("theme", "garb"))
+            .mapNotNull(classLoader::loadClassOrNull)
+            .firstNotNullOfOrNull { type ->
+                type.declaredFields.firstOrNull {
+                    it.type == Map::class.java && Modifier.isStatic(it.modifiers)
+                }?.apply { isAccessible = true }?.let { type to it }
+            }
+
+        // Mirror BiliRoamingX's response replacement at Bilibili's parsed model boundary.
+        // This narrows the hook to skin data instead of intercepting every OkHttp response.
+        val skinResponseClass = runCatching {
+            currentBridge.findClass(
+                FindClass.create().matcher(ClassMatcher.create().usingStrings("user_equip")),
+            ).mapNotNull { classLoader.loadClassOrNull(it.name) }
+                .firstOrNull { type ->
+                    type.declaredMethods.any { it.name == "setUserGarb" && it.parameterCount == 1 }
+                }
+        }.getOrNull()
+        val skinResponseUserGarbSetter = skinResponseClass?.declaredMethods?.firstOrNull {
+            it.name == "setUserGarb" && it.parameterCount == 1
+        }?.apply { isAccessible = true }
+        val skinResponseLoadEquipSetter = skinResponseClass?.declaredMethods?.firstOrNull {
+            it.name == "setLoadEquip" && it.parameterCount == 1
+        }?.apply { isAccessible = true }
+        val skinResolveMethod = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create().matcher(MethodMatcher.create().usingStrings("shouldApplyForceOpGarb =")),
+            ).mapNotNull { it.getMethodInstance(classLoader) }
+                .firstOrNull { it.parameterCount == 1 && it.returnType != Void.TYPE }
+                ?.apply { isAccessible = true }
+        }.getOrNull()
+
+        val symbols = CustomThemeSymbols(
+            themeHelperClassName = themeHelperClass.name,
+            themeHelperColorArray = FieldDescriptor.of(colorArrayField),
+            themeNameClassName = themeNameClass.name,
+            themeNameField = FieldDescriptor.of(themeNameField),
+            builtInThemesClassName = builtInThemeCandidate?.first?.name,
+            builtInThemesField = builtInThemeCandidate?.second?.let(FieldDescriptor::of),
+            themeColorsClassName = themeColorsClass?.name,
+            skinListMethod = MethodDescriptor.of(skinListMethod),
+            themeListClickClassName = themeListClickClass.name,
+            skinClassName = skinClass.name,
+            themeProcessorClassName = themeProcessorClass.name,
+            themeResetMethods = themeResetMethods.map(MethodDescriptor::of),
+            evidence = "helper=${themeHelperClass.name},processor=${themeProcessorClass.name},reset=${themeResetMethods.size},builtIn=${builtInThemeCandidate != null}",
+            skinResponseClassName = skinResponseClass?.name,
+            skinResponseUserGarbSetter = skinResponseUserGarbSetter?.let(MethodDescriptor::of),
+            skinResponseLoadEquipSetter = skinResponseLoadEquipSetter?.let(MethodDescriptor::of),
+            skinResolveMethod = skinResolveMethod?.let(MethodDescriptor::of),
+        )
+        return SymbolScanResult.Found(symbols, themeStoreActivity.name, symbols.evidence)
+    }
+
+    private fun findThemeNameClass(classLoader: ClassLoader, bridge: DexKitBridge): Class<*>? {
+        val candidates = bridge.findClass(
+            FindClass.create().matcher(ClassMatcher.create().usingStrings(".garb.GARB_CHANGE")),
+        ).map { it.name }.toList() + bridge.findClass(
+            FindClass.create().matcher(ClassMatcher.create().usingStrings("white")),
+        ).map { it.name }.toList()
+        return candidates.asSequence().distinct().mapNotNull(classLoader::loadClassOrNull)
+            .firstOrNull { type ->
+                type.declaredFields.any { Modifier.isStatic(it.modifiers) && it.type == Map::class.java }
+            }
     }
 
     private fun scanBlockUpdate(
@@ -3347,7 +3508,8 @@ object BiliSymbolResolver {
         val stringCandidates = runCatching {
             currentBridge.findClass(
                 FindClass.create()
-                    .searchPackages("com.bilibili", "Kj", "Dj")
+                    // 9.4.0 moves ShowPublishDialog to p2477hk.z\$k.
+                    .searchPackages("com.bilibili", "Kj", "Dj", "p2477hk", "hk")
                     .matcher(ClassMatcher.create().usingStrings(QUICK_REPLY_SHOW_PUBLISH_DIALOG_STRING)),
             ).map { it.name }.toList()
         }.getOrElse { throwable ->
@@ -3815,6 +3977,9 @@ object BiliSymbolResolver {
     )
 
     private const val STORY_VIDEO_ACTIVITY = "com.bilibili.video.story.StoryVideoActivity"
+    private const val THEME_STORE_ACTIVITY = "tv.danmaku.bili.ui.theme.ThemeStoreActivity"
+    private const val BILI_SKIN_LIST = "tv.danmaku.bili.ui.theme.api.BiliSkinList"
+    private const val BILI_SKIN = "tv.danmaku.bili.ui.theme.api.BiliSkin"
     private const val STORY_VIDEO_FRAGMENT = "com.bilibili.video.story.StoryVideoFragment"
     private const val STORY_PAGER_PLAYER = "com.bilibili.video.story.player.StoryPagerPlayer"
     private const val STORY_FEED_RESPONSE = "com.bilibili.video.story.api.StoryFeedResponse"

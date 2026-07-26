@@ -15,10 +15,20 @@ class BbzqModule : XposedModule() {
     private var processName: String = ""
     private val attachHookInstalled = AtomicBoolean(false)
     private val runtimeStarted = AtomicBoolean(false)
+    private var environmentAbnormal = false
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         processName = param.getProcessName()
-        verifyFrameworkEnvironment()
+        environmentAbnormal = isFrameworkEnvironmentAbnormal()
+        if (environmentAbnormal) {
+            log(
+                Log.WARN,
+                LOG_TAG,
+                "Environment abnormal, module disabled: " +
+                    "frameworkVersionCode=$frameworkVersionCode, frameworkVersion=$frameworkVersion",
+            )
+            return
+        }
         log(
             Log.INFO,
             LOG_TAG,
@@ -27,6 +37,7 @@ class BbzqModule : XposedModule() {
     }
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
+        if (environmentAbnormal) return
         val packageName = param.getPackageName()
         if (packageName !in TARGET_PACKAGES) return
         if (!RoamingRuntime.isProcessSupported(packageName, processName)) {
@@ -119,13 +130,8 @@ class BbzqModule : XposedModule() {
         }.getOrNull()
     }
 
-    private fun verifyFrameworkEnvironment() {
-        if (frameworkVersionCode.toString() != "7777") return
-        if (frameworkVersion == "2.1.0-it") return
-        error(
-            "Environment abnormal: frameworkVersionCode=$frameworkVersionCode, frameworkVersion=$frameworkVersion",
-        )
-    }
+    private fun isFrameworkEnvironmentAbnormal(): Boolean =
+        LinkerGuard.isFrameworkEnvironmentAbnormal(frameworkVersionCode.toString(), frameworkVersion)
 
     private companion object {
         private const val LOG_TAG = "BBZQ"

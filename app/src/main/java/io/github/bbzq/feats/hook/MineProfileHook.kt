@@ -72,10 +72,23 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun collectAndApplyMineComponents(root: View) {
         val components = linkedMapOf<String, View>()
         mineListItemRoots(root).forEach { itemRoot ->
+            val itemComponents = linkedMapOf<String, MutableList<TextView>>()
             collectTextViews(itemRoot) { textView ->
                 val name = textView.text?.toString()?.trim().orEmpty()
                 if (name.isBlank() || name.length > MAX_COMPONENT_NAME_LENGTH || name.contains('\n')) return@collectTextViews
-                findComponentContainer(textView, itemRoot)?.let { components.putIfAbsent(name, it) }
+                itemComponents.getOrPut(name) { mutableListOf() } += textView
+            }
+            itemComponents.forEach { (name, textViews) ->
+                val componentRoot = if (itemComponents.size == 1) {
+                    // A one-component adapter item must be removed as a whole; hiding only its
+                    // clickable child leaves the RecyclerView row's padding behind.
+                    itemRoot
+                } else {
+                    textViews.asSequence()
+                        .mapNotNull { findComponentContainer(it, itemRoot) }
+                        .firstOrNull()
+                }
+                componentRoot?.let { components.putIfAbsent(name, it) }
             }
         }
         if (components.isEmpty()) return
@@ -129,18 +142,19 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun findComponentContainer(textView: TextView, root: View): View? {
         var current: View = textView
-        var fallback: View? = null
+        var outermostCell: View? = null
         while (current !== root) {
             val parent = current.parent as? ViewGroup ?: break
             if (parent !== root && parent.width > 0 && parent.height > 0 &&
                 parent.width * 3 <= root.width * 2 && parent.height <= MAX_COMPONENT_HEIGHT_PX
             ) {
-                fallback = parent
+                // Prefer the outermost cell below the RecyclerView item.  A clickable child is
+                // often wrapped by a fixed-size layout, and hiding that child alone leaves a gap.
+                outermostCell = parent
             }
-            if (parent !== root && (parent.isClickable || parent.hasOnClickListeners())) return parent
             current = parent
         }
-        return fallback
+        return outermostCell
     }
 
     private fun saveKnownComponents(names: Set<String>) {

@@ -3,6 +3,7 @@ package io.github.bbzq
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
@@ -30,6 +31,7 @@ import android.widget.Toast
 import io.github.bbzq.DesktopIconHelper
 import io.github.bbzq.R
 import okhttp3.Call
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,6 +43,7 @@ class SettingsContentFactory(
     private val openPage: (String) -> Unit,
     private val onExportClick: () -> Unit,
     private val onImportClick: () -> Unit,
+    private val onCustomSkinImportClick: () -> Unit,
 ) {
     private val tagCheckBoxes = mutableMapOf<String, CheckBox>()
     private val bottomBarItemCheckBoxes = mutableMapOf<String, CheckBox>()
@@ -54,6 +57,13 @@ class SettingsContentFactory(
     private lateinit var downloadConcurrencyRow: View
     private lateinit var downloadConcurrencySummary: TextView
     private lateinit var bottomBarSwitch: Switch
+    private lateinit var customThemeSwitch: Switch
+    private lateinit var customSkinSwitch: Switch
+    private lateinit var customThemeColorRow: View
+    private lateinit var customThemeColorSummary: TextView
+    private lateinit var customThemeColorSwatch: View
+    private lateinit var customSkinConfigRow: View
+    private lateinit var customSkinConfigSummary: TextView
     private lateinit var homeRecommendItemSwitch: Switch
     private lateinit var homeRecommendTitleKeywordRow: View
     private lateinit var homeRecommendTabSwitch: Switch
@@ -383,6 +393,24 @@ class SettingsContentFactory(
         ) {
             bottomBarSwitch = it
         }
+        rows += createSwitchRow(
+            context.getString(R.string.custom_theme_title),
+            context.getString(R.string.custom_theme_summary),
+            ModuleSettings.KEY_CUSTOM_THEME_ENABLED,
+            false,
+        ) {
+            customThemeSwitch = it
+        }
+        rows += createCustomThemeColorRow()
+        rows += createSwitchRow(
+            context.getString(R.string.custom_skin_title),
+            context.getString(R.string.custom_skin_summary),
+            ModuleSettings.KEY_CUSTOM_SKIN_ENABLED,
+            false,
+        ) {
+            customSkinSwitch = it
+        }
+        rows += createCustomSkinConfigRow()
 
         val items = bottomBarItems()
         if (items.isEmpty()) {
@@ -1257,6 +1285,133 @@ class SettingsContentFactory(
             .show()
     }
 
+    private fun createCustomThemeColorRow(): View {
+        customThemeColorSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(SUMMARY_COLOR)
+            setPadding(0, dp(4), 0, 0)
+        }
+        customThemeColorSwatch = View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply {
+                marginStart = dp(8)
+            }
+            background = GradientDrawable().apply { cornerRadius = dp(6).toFloat() }
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showCustomThemeColorDialog() }
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(context).apply {
+                        text = context.getString(R.string.custom_theme_color_title)
+                        textSize = 15f
+                        setTextColor(TITLE_COLOR)
+                    })
+                    addView(customThemeColorSummary)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(customThemeColorSwatch)
+        }.also { customThemeColorRow = it }
+    }
+
+    private fun showCustomThemeColorDialog() {
+        val input = EditText(context).apply {
+            setSingleLine(true)
+            setSelectAllOnFocus(true)
+            setText("%06X".format(ModuleSettings.getCustomThemeColor(prefs) and 0xFFFFFF))
+            hint = "RRGGBB"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.custom_theme_color_dialog_title)
+            .setMessage(R.string.custom_theme_color_dialog_message)
+            .setView(input)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                val raw = input.text?.toString()?.trim()?.removePrefix("#").orEmpty()
+                val color = raw.takeIf { it.matches(Regex("[0-9a-fA-F]{6}")) }
+                    ?.let { Color.parseColor("#$it") }
+                if (color == null) {
+                    Toast.makeText(context, R.string.custom_theme_color_invalid, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                prefs.edit().putInt(ModuleSettings.KEY_CUSTOM_THEME_COLOR, color).apply()
+                refresh()
+            }
+            .show()
+    }
+
+    private fun createCustomSkinConfigRow(): View {
+        customSkinConfigSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(SUMMARY_COLOR)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showCustomSkinConfigDialog() }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.custom_skin_config_title)
+                textSize = 15f
+                setTextColor(TITLE_COLOR)
+            })
+            addView(customSkinConfigSummary)
+        }.also { customSkinConfigRow = it }
+    }
+
+    private fun showCustomSkinConfigDialog() {
+        val input = EditText(context).apply {
+            minLines = 8
+            maxLines = 16
+            setText(ModuleSettings.getCustomSkinJson(prefs))
+            gravity = Gravity.TOP
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        val wrapper = ScrollView(context).apply {
+            setPadding(dp(20), 0, dp(20), 0)
+            addView(input)
+        }
+        val dialog = AlertDialog.Builder(context)
+            .setTitle(R.string.custom_skin_config_title)
+            .setMessage(R.string.custom_skin_config_message)
+            .setView(wrapper)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setNeutralButton(R.string.custom_skin_config_import_file, null)
+            .setPositiveButton(R.string.dialog_save, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                dialog.dismiss()
+                onCustomSkinImportClick()
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val text = input.text?.toString()?.trim().orEmpty()
+                val config = runCatching { JSONObject(text) }.getOrNull()
+                val skin = config?.optJSONObject("user_equip") ?: config
+                if (skin == null || skin.optString("package_url").isBlank()) {
+                    input.error = context.getString(R.string.custom_skin_config_invalid)
+                    return@setOnClickListener
+                }
+                prefs.edit()
+                    .putString(ModuleSettings.KEY_CUSTOM_SKIN_JSON, text)
+                    .putBoolean(ModuleSettings.KEY_CUSTOM_SKIN_ENABLED, true)
+                    .apply()
+                refresh()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
     private fun createBlockedCountRow(): View {
         blockedCountView = TextView(context).apply {
             textSize = 12f
@@ -1584,6 +1739,8 @@ class SettingsContentFactory(
         key == ModuleSettings.KEY_PURIFY_STORY_VIDEO_AD_ENABLED ||
             key == ModuleSettings.KEY_DISABLE_LONG_PRESS_COPY_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_BOTTOM_BAR_ENABLED ||
+            key == ModuleSettings.KEY_CUSTOM_THEME_ENABLED ||
+            key == ModuleSettings.KEY_CUSTOM_SKIN_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED ||
             key == ModuleSettings.KEY_SKIP_VIDEO_AD_ENABLED ||
@@ -1690,6 +1847,46 @@ class SettingsContentFactory(
         }
         if (::bottomBarSwitch.isInitialized) {
             bottomBarSwitch.isChecked = bottomBarEnabled
+        }
+        if (::customThemeSwitch.isInitialized) {
+            customThemeSwitch.isChecked = ModuleSettings.isCustomThemeEnabled(prefs)
+        }
+        if (::customSkinSwitch.isInitialized) {
+            customSkinSwitch.isChecked = ModuleSettings.isCustomSkinEnabled(prefs)
+        }
+        if (::customThemeColorRow.isInitialized) {
+            val enabled = ModuleSettings.isCustomThemeEnabled(prefs)
+            customThemeColorRow.isEnabled = enabled
+            customThemeColorRow.alpha = if (enabled) 1f else 0.45f
+        }
+        if (::customThemeColorSummary.isInitialized) {
+            customThemeColorSummary.text = context.getString(
+                R.string.custom_theme_color_summary,
+                "#%06X".format(ModuleSettings.getCustomThemeColor(prefs) and 0xFFFFFF),
+            )
+        }
+        if (::customThemeColorSwatch.isInitialized) {
+            customThemeColorSwatch.setBackgroundColor(ModuleSettings.getCustomThemeColor(prefs))
+        }
+        if (::customSkinConfigRow.isInitialized) {
+            val enabled = ModuleSettings.isCustomSkinEnabled(prefs)
+            customSkinConfigRow.isEnabled = enabled
+            customSkinConfigRow.alpha = if (enabled) 1f else 0.45f
+        }
+        if (::customSkinConfigSummary.isInitialized) {
+            val config = ModuleSettings.getCustomSkinJson(prefs)
+            customSkinConfigSummary.text = if (config.isBlank()) {
+                context.getString(R.string.custom_skin_config_empty)
+            } else {
+                runCatching {
+                    val root = JSONObject(config)
+                    val skin = root.optJSONObject("user_equip") ?: root
+                    context.getString(
+                        R.string.custom_skin_config_loaded,
+                        skin.optString("name", skin.optLong("id").toString()),
+                    )
+                }.getOrElse { context.getString(R.string.custom_skin_config_loaded, "JSON") }
+            }
         }
         bottomBarItemCheckBoxes.forEach { (id, checkBox) ->
             checkBox.isEnabled = bottomBarEnabled
