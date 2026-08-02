@@ -86,6 +86,7 @@ class SettingsContentFactory(
     private lateinit var mineComponentPickerRow: View
     private lateinit var mineComponentPickerSummary: TextView
     private lateinit var symbolScanStatusSummary: TextView
+    private lateinit var customCdnHostSummary: TextView
     /** 「检查更新」行的摘要文本视图，用于回显检查状态；界面销毁时置空避免泄漏。 */
     private var updateCheckSummaryView: TextView? = null
 
@@ -147,6 +148,9 @@ class SettingsContentFactory(
 
                 pageRoot.addView(createSectionLabel(context.getString(R.string.section_download_features)))
                 pageRoot.addView(createSectionCard(downloadRows()))
+
+                pageRoot.addView(createSectionLabel(context.getString(R.string.section_video_cdn)))
+                pageRoot.addView(createSectionCard(customCdnRows()))
 
                 pageRoot.addView(createSectionLabel(context.getString(R.string.section_home_recommend_purify)))
                 pageRoot.addView(createSectionCard(homeRecommendRows()))
@@ -499,6 +503,16 @@ class SettingsContentFactory(
         )
         return rows
     }
+
+    private fun customCdnRows(): List<View> = listOf(
+        createSwitchRow(
+            context.getString(R.string.custom_cdn_enabled_title),
+            context.getString(R.string.custom_cdn_enabled_summary),
+            ModuleSettings.KEY_CUSTOM_CDN_ENABLED,
+            false,
+        ),
+        createCustomCdnHostRow(),
+    )
 
     private fun commentRows(): List<View> {
         return listOf(
@@ -1492,6 +1506,77 @@ class SettingsContentFactory(
         }.also { customSkinConfigRow = it }
     }
 
+    private fun createCustomCdnHostRow(): View {
+        customCdnHostSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(SUMMARY_COLOR)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showCustomCdnHostDialog() }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.custom_cdn_host_title)
+                textSize = 15f
+                setTextColor(TITLE_COLOR)
+            })
+            addView(customCdnHostSummary)
+        }
+    }
+
+    private fun showCustomCdnHostDialog() {
+        val endpoints = ModuleSettings.cdnEndpoints
+        val current = ModuleSettings.getCustomCdnHost(prefs)
+        val selected = endpoints.indexOfFirst { it.host == current }
+        val labels = (endpoints.map { "${it.name}\n${it.host}" } + context.getString(R.string.custom_cdn_host_custom)).toTypedArray()
+        AlertDialog.Builder(context)
+            .setTitle(R.string.custom_cdn_host_dialog_title)
+            .setSingleChoiceItems(labels, if (selected >= 0) selected else endpoints.size) { dialog, which ->
+                dialog.dismiss()
+                if (which < endpoints.size) {
+                    prefs.edit().putString(ModuleSettings.KEY_CUSTOM_CDN_HOST, endpoints[which].host).apply()
+                    refresh()
+                } else {
+                    showCustomCdnHostInputDialog()
+                }
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    private fun showCustomCdnHostInputDialog() {
+        val input = EditText(context).apply {
+            setSingleLine(true)
+            setSelectAllOnFocus(true)
+            setText(ModuleSettings.getCustomCdnHost(prefs).orEmpty())
+            hint = "upos-sz-mirrorali.bilivideo.com"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val dialog = AlertDialog.Builder(context)
+            .setTitle(R.string.custom_cdn_host_custom)
+            .setMessage(R.string.custom_cdn_host_input_message)
+            .setView(input)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val host = ModuleSettings.normalizeCdnHost(input.text?.toString())
+                if (host == null) {
+                    input.error = context.getString(R.string.custom_cdn_host_invalid)
+                    return@setOnClickListener
+                }
+                prefs.edit().putString(ModuleSettings.KEY_CUSTOM_CDN_HOST, host).apply()
+                refresh()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
     private fun showCustomSkinConfigDialog() {
         val input = EditText(context).apply {
             minLines = 8
@@ -2012,6 +2097,14 @@ class SettingsContentFactory(
                         skin.optString("name", skin.optLong("id").toString()),
                     )
                 }.getOrElse { context.getString(R.string.custom_skin_config_loaded, "JSON") }
+            }
+        }
+        if (::customCdnHostSummary.isInitialized) {
+            val host = ModuleSettings.getCustomCdnHost(prefs)
+            customCdnHostSummary.text = if (host == null) {
+                context.getString(R.string.custom_cdn_host_empty_summary)
+            } else {
+                context.getString(R.string.custom_cdn_host_current_summary, host)
             }
         }
         bottomBarItemCheckBoxes.forEach { (id, checkBox) ->

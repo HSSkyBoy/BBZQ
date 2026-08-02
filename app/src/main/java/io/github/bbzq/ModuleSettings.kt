@@ -28,6 +28,8 @@ object ModuleSettings {
     const val KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED = "hide_player_portrait_control_enabled"
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
     const val KEY_FIX_LIVE_QUALITY_URL_ENABLED = "fix_live_quality_url_enabled"
+    const val KEY_CUSTOM_CDN_ENABLED = "custom_cdn_enabled"
+    const val KEY_CUSTOM_CDN_HOST = "custom_cdn_host"
     const val KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED = "purify_home_recommend_ad_enabled"
     const val KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED = "purify_home_recommend_picture_enabled"
     const val KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED = "purify_home_recommend_game_promo_enabled"
@@ -226,6 +228,7 @@ object ModuleSettings {
             it.getBoolean(KEY_PLAYER_TRIPLE_SPEED_ENABLED, false)
         },
         ExportableConfigSpec(KEY_FIX_LIVE_QUALITY_URL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FIX_LIVE_QUALITY_URL_ENABLED, false) },
+        ExportableConfigSpec(KEY_CUSTOM_CDN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_CDN_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED, false) },
@@ -304,6 +307,9 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_CUSTOM_SKIN_JSON, ExportableValueType.STRING) { prefs ->
             getCustomSkinJson(prefs)
+        })
+        add(ExportableConfigSpec(KEY_CUSTOM_CDN_HOST, ExportableValueType.STRING) { prefs ->
+            getCustomCdnHost(prefs)
         })
         add(ExportableConfigSpec(KEY_HIDDEN_HOME_RECOMMEND_ITEMS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_HIDDEN_HOME_RECOMMEND_ITEMS, emptySet<String>())?.toSet() ?: emptySet<String>()
@@ -424,6 +430,48 @@ object ModuleSettings {
 
     fun isFixLiveQualityUrlEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_FIX_LIVE_QUALITY_URL_ENABLED, false)
+
+    /** 已知的 UPos 节点，显示名称与 PiliPlus 当前的 CDN 列表保持一致。 */
+    data class CdnEndpoint(val name: String, val host: String)
+
+    val cdnEndpoints = listOf(
+        CdnEndpoint("ali（阿里）", "upos-sz-mirrorali.bilivideo.com"),
+        CdnEndpoint("alib（阿里）", "upos-sz-mirroralib.bilivideo.com"),
+        CdnEndpoint("alio1（阿里）", "upos-sz-mirroralio1.bilivideo.com"),
+        CdnEndpoint("bos（百度）", "upos-sz-mirrorbos.bilivideo.com"),
+        CdnEndpoint("cos（腾讯）", "upos-sz-mirrorcos.bilivideo.com"),
+        CdnEndpoint("cosb（腾讯）", "upos-sz-mirrorcosb.bilivideo.com"),
+        CdnEndpoint("coso1（腾讯）", "upos-sz-mirrorcoso1.bilivideo.com"),
+        CdnEndpoint("hw（华为）", "upos-sz-mirrorhw.bilivideo.com"),
+        CdnEndpoint("hwb（华为）", "upos-sz-mirrorhwb.bilivideo.com"),
+        CdnEndpoint("hwo1（华为）", "upos-sz-mirrorhwo1.bilivideo.com"),
+        CdnEndpoint("08c（华为）", "upos-sz-mirror08c.bilivideo.com"),
+        CdnEndpoint("08h（华为）", "upos-sz-mirror08h.bilivideo.com"),
+        CdnEndpoint("08ct（华为）", "upos-sz-mirror08ct.bilivideo.com"),
+        CdnEndpoint("tf_hw（华为）", "upos-tf-all-hw.bilivideo.com"),
+        CdnEndpoint("tf_tx（腾讯）", "upos-tf-all-tx.bilivideo.com"),
+        CdnEndpoint("akamai（海外）", "upos-hz-mirrorakam.akamaized.net"),
+        CdnEndpoint("aliov（阿里海外）", "upos-sz-mirroraliov.bilivideo.com"),
+        CdnEndpoint("cosov（腾讯海外）", "upos-sz-mirrorcosov.bilivideo.com"),
+        CdnEndpoint("hwov（华为海外）", "upos-sz-mirrorhwov.bilivideo.com"),
+        CdnEndpoint("hk_bcache（Bilibili 海外）", "cn-hk-eq-bcache-01.bilivideo.com"),
+    )
+
+    fun isCustomCdnEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CUSTOM_CDN_ENABLED, false) && getCustomCdnHost(prefs) != null
+
+    fun getCustomCdnHost(prefs: SharedPreferences): String? =
+        normalizeCdnHost(prefs.getString(KEY_CUSTOM_CDN_HOST, null))
+
+    fun normalizeCdnHost(value: String?): String? {
+        val host = value.orEmpty().trim().removePrefix("https://").removePrefix("http://")
+            .substringBefore('/').substringBefore('?').trimEnd('/')
+        return host.takeIf {
+            it.length in 1..253 &&
+                it.none(Char::isWhitespace) &&
+                it.matches(Regex("[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?"))
+        }
+    }
 
     fun getHomeRecommendTitleKeywordsText(prefs: SharedPreferences): String =
         prefs.getString(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, "").orEmpty()

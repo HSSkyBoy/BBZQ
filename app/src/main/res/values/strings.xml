@@ -14,6 +14,7 @@
     <string name="intro_launcher_title">桌面入口说明</string>
     <string name="intro_launcher_body">桌面图标仅用于展示模块介绍，实际功能开关仍在应用内设置页中调整。</string>
     <string name="section_about">关于</string>
+    <string name="section_video_cdn">视频 CDN</string>
 
     <!-- 設定入口 -->
     <string name="entry_title">高级设置</string>
@@ -344,6 +345,15 @@
     <string name="playback_portrait_control_summary">隐藏播放器控制层中的“竖屏”切换按钮。需重启哔哩哔哩后生效。</string>
     <string name="playback_triple_speed_title">解锁播放器 3 倍速</string>
     <string name="playback_triple_speed_summary">3 倍速是服务端灰度 A/B 实验，开启后强制进入实验组，倍速菜单新增 3.0X 档位並去除原有的 50 帧限制。需重启哔哩哔哩后生效。</string>
+    <string name="custom_cdn_enabled_title">自定义视频 CDN</string>
+    <string name="custom_cdn_enabled_summary">将 DASH 视频、音频及备用 URL 改为选定的 UPos CDN；切换后请重新打开视频。</string>
+    <string name="custom_cdn_host_title">CDN 节点</string>
+    <string name="custom_cdn_host_empty_summary">尚未选择节点。请先选择内置 CDN 或输入自定义 Host。</string>
+    <string name="custom_cdn_host_current_summary">当前：%1$s</string>
+    <string name="custom_cdn_host_dialog_title">选择 CDN 节点</string>
+    <string name="custom_cdn_host_custom">输入自定义 Host</string>
+    <string name="custom_cdn_host_input_message">可输入域名（可选端口）；无需包含路径或查询参数。</string>
+    <string name="custom_cdn_host_invalid">请输入有效的 CDN Host。</string>
     <string name="custom_theme_title">自制主题</string>
     <string name="custom_theme_summary">在 Bilibili 主题列表中加入自定义主色主题；修改后重新进入主题页即可生效。</string>
     <string name="custom_theme_color_title">自制主题颜色</string>

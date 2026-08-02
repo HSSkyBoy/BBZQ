@@ -4140,7 +4140,7 @@ object BiliSymbolResolver {
     private val HEADER_DECORATIVE_METHOD_NAMES = setOf("a", "setData", "bindData", "update", "refresh", "submitList")
     private const val PLAYER_CORE_SERVICE_INTERFACE = "tv.danmaku.biliplayerv2.service.IPlayerCoreService"
     private const val CARD_PLAYER_CONTEXT_INTERFACE = "tv.danmaku.video.bilicardplayer.ICardPlayerContext"
-    private val PLAY_VIEW_METHOD_NAMES = setOf("executePlayViewUnite", "playViewUnite", "playView")
+    private val PLAY_VIEW_METHOD_NAMES = setOf("executePlayView", "executePlayViewUnite", "playViewUnite", "playView")
     private val STATE_METHOD_NAMES = setOf("getState")
     private val CARD_STATE_METHOD_NAMES = setOf("getPlayerState", "getState")
     private val PLAYER_MOSS_CANDIDATES = arrayOf(

@@ -12,6 +12,7 @@ import io.github.bbzq.feats.hook.AutoLikeHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
 import io.github.bbzq.feats.hook.CustomThemeHook
+import io.github.bbzq.feats.hook.CustomCdnHook
 import io.github.bbzq.feats.hook.DownloadThreadHook
 import io.github.bbzq.feats.hook.DynamicPageHook
 import io.github.bbzq.feats.hook.TeenagersModeHook
@@ -128,6 +129,7 @@ object RoamingRuntime {
 
             ProcessScope.DOWNLOAD -> listOf(
                 ::DownloadThreadHook,
+                ::CustomCdnHook,
             )
 
             ProcessScope.MAIN -> listOf(
@@ -151,6 +153,7 @@ object RoamingRuntime {
                 ::PlayerUiHook,
                 ::TripleSpeedHook,
                 ::TryFreeQualityHook,
+                ::CustomCdnHook,
                 ::ChronosPromotionHook,
                 ::SkipVideoAdHook,
                 ::SkipVideoAdProgressHook,
