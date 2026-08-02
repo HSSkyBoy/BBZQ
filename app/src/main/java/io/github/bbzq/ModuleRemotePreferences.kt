@@ -45,7 +45,9 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
     private fun syncLocalToRemote(prefs: SharedPreferences) {
         val values = prefs.all
         withRemoteEditor { editor ->
-            editor.clear()
+            // Runtime-discovered component catalogs are written by the host process only.
+            // Clearing here when the module app binds would erase them before the settings
+            // activity can import its host snapshot, which is especially visible in APKS builds.
             values.forEach { (key, value) -> editor.putValue(key, value) }
         }
     }

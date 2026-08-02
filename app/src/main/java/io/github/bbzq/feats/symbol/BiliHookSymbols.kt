@@ -140,7 +140,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 52
+    const val CURRENT = 53
 }
 
 data class HookPointStatus(
@@ -2144,8 +2144,17 @@ fun BiliHookSymbols.formatStatusLines(): List<String> =
             listOf("Scan Errors:") + scanErrors.map { "  - $it" }
         }
 
-internal fun ClassLoader.loadClassOrNull(name: String): Class<*>? =
-    runCatching { Class.forName(name, false, this) }.getOrNull()
+internal fun ClassLoader.loadClassOrNull(name: String): Class<*>? {
+    runCatching { Class.forName(name, false, this) }.getOrNull()?.let { return it }
+    val relocatedName = name
+        .takeIf { it.startsWith(BILIBILI_TV_PACKAGE_PREFIX) }
+        ?.let { BILIBILI_950_TV_PACKAGE_PREFIX + it.removePrefix(BILIBILI_TV_PACKAGE_PREFIX) }
+        ?: return null
+    return runCatching { Class.forName(relocatedName, false, this) }.getOrNull()
+}
+
+private const val BILIBILI_TV_PACKAGE_PREFIX = "tv.danmaku.bili."
+private const val BILIBILI_950_TV_PACKAGE_PREFIX = "p371tv.danmaku.bili."
 
 internal fun MethodDescriptor?.restoreOptional(classLoader: ClassLoader): Method? {
     val descriptor = this ?: return null

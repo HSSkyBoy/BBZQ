@@ -49,10 +49,6 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val group = TARGET_GROUP_KEYS.firstNotNullOfOrNull { key ->
             fragment.callMethod("findPreference", key)
         } ?: fragment.callMethod("getPreferenceScreen") ?: return
-        if (!HostAccountResolver.resolve(activity, classLoader).loggedIn) {
-            if (existing != null) group.callMethod("removePreference", existing)
-            return
-        }
         if (existing != null) return
 
         val entry = createPreference(fragment, activity, preferenceClass) ?: return

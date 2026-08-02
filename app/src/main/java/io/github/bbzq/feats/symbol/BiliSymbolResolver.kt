@@ -1707,7 +1707,6 @@ object BiliSymbolResolver {
         val interactLayerService = classLoader.loadClassOrNull(INTERACT_LAYER_SERVICE)
             ?: return SymbolScanResult.Missing("interact layer service class not found")
         val introCommentService = classLoader.loadClassOrNull(STORY_INTRO_COMMENT_SERVICE)
-        val storyTabConfig = classLoader.loadClassOrNull(STORY_TAB_CONFIG)
 
         val showSignature = commentContainerInterface.allMethods().firstOrNull { method ->
             method.name == "a" &&
@@ -1737,12 +1736,15 @@ object BiliSymbolResolver {
                 ?.apply { isAccessible = true }
                 ?.let(::add)
         }
-        val introCommentShow = if (introCommentService != null && storyTabConfig != null) {
-            introCommentService.findMethod("b", Void.TYPE, storyTabConfig)
-                ?.apply { isAccessible = true }
-        } else {
-            null
-        }
+        val introCommentShow = introCommentService
+            ?.allMethods()
+            ?.singleOrNull { method ->
+                method.name == "b" &&
+                    method.returnType == Void.TYPE &&
+                    method.parameterCount == 1 &&
+                    method.parameterTypes[0].name.startsWith(STORY_TAB_PACKAGE_PREFIX)
+            }
+            ?.apply { isAccessible = true }
         val introCommentDismiss = introCommentService?.findMethod("a", Void.TYPE)
             ?.apply { isAccessible = true }
         val setDanmakuOpacity = interactLayerService.findMethod(
@@ -3991,29 +3993,35 @@ object BiliSymbolResolver {
     private val STORY_COMMENT_CONTAINER_INTERFACE_CLASSES = arrayOf(
         "com.bilibili.video.story.action.StoryCommentHelper\$b",
         "com.bilibili.video.story.action.C\$b",
+        "com.bilibili.video.story.action.B\$b",
     )
     private val STORY_COMMENT_VERTICAL_CONTAINER_CLASSES = arrayOf(
         "com.bilibili.video.story.action.StoryCommentHelper\$VerticalContainerV2",
         "com.bilibili.video.story.action.C\$f",
+        "com.bilibili.video.story.action.B\$f",
     )
     private val STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES = arrayOf(
         "com.bilibili.video.story.action.StoryCommentHelper\$d",
         "com.bilibili.video.story.action.C\$d",
+        "com.bilibili.video.story.action.B\$d",
     )
     private val STORY_COMMENT_CALLBACK_CLASSES = arrayOf(
         "com.bilibili.video.story.action.StoryCommentHelper\$c",
         "com.bilibili.video.story.action.C\$c",
+        "com.bilibili.video.story.action.B\$c",
     )
     private val STORY_COMMENT_OFFSET_CALLBACK_CLASSES = arrayOf(
         "com.bilibili.video.story.action.StoryCommentHelper\$e",
         "com.bilibili.video.story.action.C\$e",
+        "com.bilibili.video.story.action.B\$e",
     )
     private val STORY_COMMENT_PLAYER_CALLBACK_CLASSES = arrayOf(
         "com.bilibili.video.story.action.StoryCommentHelper\$a",
         "com.bilibili.video.story.action.C\$a",
+        "com.bilibili.video.story.action.B\$a",
     )
     private const val STORY_INTRO_COMMENT_SERVICE = "com.bilibili.video.story.action.widget.comment.p"
-    private const val STORY_TAB_CONFIG = "com.bilibili.video.story.tab.W0"
+    private const val STORY_TAB_PACKAGE_PREFIX = "com.bilibili.video.story.tab."
     private const val KOTLIN_UNIT = "kotlin.Unit"
     private const val ANDROIDX_VIEW_BINDING = "androidx.viewbinding.ViewBinding"
     private const val G_AD_BIZ_KT = "com.bilibili.gripper.api.ad.biz.GAdBizKt"

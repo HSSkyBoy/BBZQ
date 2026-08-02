@@ -9,21 +9,35 @@ internal object HostAccountResolver {
             val accountClass = ACCOUNT_CLASS_NAMES.firstNotNullOfOrNull(classLoader::findClassOrNull)
                 ?: return@runCatching Snapshot.LOGGED_OUT
             val getMethod = accountClass.allMethods().firstOrNull { method ->
-                Modifier.isStatic(method.modifiers) && method.name == "get" &&
+                Modifier.isStatic(method.modifiers) &&
                     method.returnType == accountClass && method.parameterCount == 1 &&
                     Context::class.java.isAssignableFrom(method.parameterTypes[0])
             } ?: return@runCatching Snapshot.LOGGED_OUT
             val account = getMethod.invoke(null, context) ?: return@runCatching Snapshot.LOGGED_OUT
-            val isLogin = accountClass.allMethods().firstOrNull { method ->
-                method.name == "isLogin" && method.parameterCount == 0 &&
-                    method.returnType == Boolean::class.javaPrimitiveType
-            } ?: return@runCatching Snapshot.LOGGED_OUT
-            if (isLogin.invoke(account) != true) return@runCatching Snapshot.LOGGED_OUT
+            val loginMethods = accountClass.allMethods().filter { method ->
+                method.parameterCount == 0 && method.returnType == Boolean::class.javaPrimitiveType &&
+                    (method.name == "isLogin" || Modifier.isStatic(method.modifiers))
+            }.toList()
+            val loggedIn = loginMethods.any { method ->
+                runCatching {
+                    method.invoke(if (Modifier.isStatic(method.modifiers)) null else account) == true
+                }.getOrDefault(false)
+            }
+            if (!loggedIn) return@runCatching Snapshot.LOGGED_OUT
 
-            val uid = accountClass.allMethods().firstOrNull { method ->
-                method.name == "mid" && method.parameterCount == 0 &&
-                    method.returnType == Long::class.javaPrimitiveType
-            }?.invoke(account)?.toString().orEmpty().takeUnless { it == "0" }.orEmpty()
+            val uid = accountClass.allMethods().asSequence()
+                .filter { method ->
+                    method.parameterCount == 0 && method.returnType == Long::class.javaPrimitiveType &&
+                        (method.name == "mid" || Modifier.isStatic(method.modifiers))
+                }
+                .mapNotNull { method ->
+                    runCatching {
+                        method.invoke(if (Modifier.isStatic(method.modifiers)) null else account) as? Long
+                    }.getOrNull()
+                }
+                .firstOrNull { it > 0L }
+                ?.toString()
+                .orEmpty()
             Snapshot(true, uid, resolveUserName(classLoader))
         }.getOrDefault(Snapshot.LOGGED_OUT)
     }
