@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="page_background">#121212</color>
+    <color name="card_background">#1E1E1E</color>
+    <color name="toolbar_background">#1E1E1E</color>
+    <color name="title_text">#E6E6E6</color>
+    <color name="title_text_alt">#F0F0F0</color>
+    <color name="body_text">#D0D0D0</color>
+    <color name="summary_text">#8A8A8A</color>
+    <color name="section_label">#707070</color>
+    <color name="divider">#2C2C2C</color>
+
+    <color name="accent_pink">#FB7299</color>
+    <color name="disable_confirm">#F6B000</color>
+    <color name="cancel_action">#00B8E6</color>
+</resources>

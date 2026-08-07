@@ -56,7 +56,7 @@ class SettingsActivity : Activity() {
         val content = factory.createScrollView()
         val contentRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F6F7F8"))
+            setBackgroundColor(getColor(R.color.page_background))
             addView(toolbar)
             addView(
                 content,
@@ -297,21 +297,21 @@ class SettingsActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(getColor(R.color.toolbar_background))
             setPadding(dp(16), dp(14), dp(16), dp(14))
             elevation = dp(2).toFloat()
 
             addView(TextView(this@SettingsActivity).apply {
                 text = toolbarTitle(page)
                 textSize = 20f
-                setTextColor(Color.parseColor("#18191C"))
+                setTextColor(getColor(R.color.title_text))
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
 
             addView(TextView(this@SettingsActivity).apply {
                 text = getString(R.string.settings_done)
                 textSize = 15f
-                setTextColor(Color.parseColor("#FB7299"))
+                setTextColor(getColor(R.color.accent_pink))
                 isClickable = true
                 isFocusable = true
                 setPadding(dp(8), dp(4), dp(8), dp(4))
