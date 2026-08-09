@@ -6,15 +6,12 @@ import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.allFields
 import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.callMethod
-import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
-import java.util.Collections
-import java.util.IdentityHashMap
 
 /**
  * Rewrites UPos URLs at the protobuf boundary, before they reach the player or downloader.
@@ -37,30 +34,11 @@ class CustomCdnHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook(env)
                 installed++
             }.onFailure { log("CustomCdn: failed to hook ${method.declaringClass.name}.${method.name}", it) }
         }
-        installed += hookDionysusParser()
         if (installed == 0) {
-            log("CustomCdn: no compatible PlayView or Dionysus parser found")
+            log("CustomCdn: no compatible PlayView method found")
         } else {
             log("CustomCdn: hooked $installed response method(s)")
         }
-    }
-
-    /** 9.5.0 起播放链路迁移到 Dionysus，Moss 类已不再存在。 */
-    private fun hookDionysusParser(): Int {
-        val parser = classLoader.findClassOrNull(DIONYSUS_PLAY_VIEW_PARSER) ?: return 0
-        var count = 0
-        parser.allMethods()
-            .filter { method ->
-                Modifier.isStatic(method.modifiers) &&
-                    method.parameterTypes.firstOrNull()?.name?.endsWith(".KPlayViewUniteReply") == true
-            }
-            .forEach { method ->
-                runCatching {
-                    env.hookAfter(method) { param -> rewriteDionysusMedia(param.result) }
-                    count++
-                }.onFailure { log("CustomCdn: failed to hook Dionysus parser ${method.name}", it) }
-            }
-        return count
     }
 
     private fun wrapHandler(handler: Any): Any? {
@@ -93,36 +71,6 @@ class CustomCdnHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook(env)
                 response,
             ).filterNotNull().distinct().forEach { rewriteVideoInfo(it, host) }
         }.onFailure { log("CustomCdn: response rewrite failed", it) }
-    }
-
-    private fun rewriteDionysusMedia(media: Any?) {
-        val host = ModuleSettings.getCustomCdnHost(prefs)
-        if (!ModuleSettings.isCustomCdnEnabled(prefs) || host == null || media == null) return
-        val visited = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
-        runCatching { rewriteDionysusNode(media, host, visited) }
-            .onFailure { log("CustomCdn: Dionysus media rewrite failed", it) }
-    }
-
-    private fun rewriteDionysusNode(node: Any, host: String, visited: MutableSet<Any>) {
-        if (!visited.add(node)) return
-        val className = node.javaClass.name
-        if (!className.startsWith(DIONYSUS_MEDIA_PACKAGE)) return
-        if (className.endsWith(".DashVideo") ||
-            className.endsWith(".DashAudio") ||
-            className.endsWith(".SegmentVideo") ||
-            className.endsWith("\$DirectUrl")) {
-            rewriteUrlItem(node, host)
-            return
-        }
-        node.javaClass.allFields().forEach { field ->
-            if (Modifier.isStatic(field.modifiers)) return@forEach
-            when (val value = runCatching { field.get(node) }.getOrNull()) {
-                is Iterable<*> -> value.forEach { it?.let { child -> rewriteDionysusNode(child, host, visited) } }
-                else -> if (value != null && value.javaClass.name.startsWith(DIONYSUS_MEDIA_PACKAGE)) {
-                    rewriteDionysusNode(value, host, visited)
-                }
-            }
-        }
     }
 
     private fun rewriteVideoInfo(videoInfo: Any, host: String) {
@@ -267,9 +215,4 @@ class CustomCdnHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook(env)
             runCatching { method.invoke(target, value); true }.getOrDefault(false)
         } ?: false
 
-    private companion object {
-        const val DIONYSUS_PLAY_VIEW_PARSER =
-            "kntr.common.dionysus.vod.common.data.PlayViewDataParserKt"
-        const val DIONYSUS_MEDIA_PACKAGE = "kntr.common.dionysus.basic.media."
-    }
 }

@@ -345,6 +345,8 @@
     <string name="playback_portrait_control_summary">隐藏播放器控制层中的“竖屏”切换按钮。需重启哔哩哔哩后生效。</string>
     <string name="playback_triple_speed_title">解锁播放器 3 倍速</string>
     <string name="playback_triple_speed_summary">3 倍速是服务端灰度 A/B 实验，开启后强制进入实验组，倍速菜单新增 3.0X 档位並去除原有的 50 帧限制。需重启哔哩哔哩后生效。</string>
+    <string name="playback_long_press_speed_lock_title">长按倍速锁定</string>
+    <string name="playback_long_press_speed_lock_summary">仅横屏：长按播放时向下滑可锁定倍速；再次长按并向下滑动可解除。需重启哔哩哔哩后生效。</string>
     <string name="custom_cdn_enabled_title">自定义视频 CDN</string>
     <string name="custom_cdn_enabled_summary">将 DASH 视频、音频及备用 URL 改为选定的 UPos CDN；切换后请重新打开视频。</string>
     <string name="custom_cdn_host_title">CDN 节点</string>

@@ -118,15 +118,6 @@ class SettingsActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        val page = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
-        if (page != PAGE_ROOT) {
-            ModuleSettingsNavigator.open(
-                context = this,
-                runtimeValues = intent.getBundleExtra(RuntimeEnvironmentInfo.EXTRA_RUNTIME_VALUES),
-                page = PAGE_ROOT,
-            )
-            return
-        }
         finish()
     }
 

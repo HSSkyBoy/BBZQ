@@ -17,7 +17,6 @@ object ModuleSettingsNavigator {
             component = ComponentName(MODULE_PACKAGE, SETTINGS_ACTIVITY)
             runtimeValues?.let { putExtra(RuntimeEnvironmentInfo.EXTRA_RUNTIME_VALUES, it) }
             putExtra(SettingsActivity.EXTRA_PAGE, page)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             if (context !is Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }

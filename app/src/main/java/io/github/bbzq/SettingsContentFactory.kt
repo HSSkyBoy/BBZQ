@@ -509,6 +509,12 @@ class SettingsContentFactory(
             ModuleSettings.KEY_PLAYER_TRIPLE_SPEED_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_long_press_speed_lock_title),
+            context.getString(R.string.playback_long_press_speed_lock_summary),
+            ModuleSettings.KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED,
+            false,
+        )
         return rows
     }
 

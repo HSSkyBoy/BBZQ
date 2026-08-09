@@ -14,20 +14,36 @@ import java.io.File
 import java.net.URL
 import java.util.zip.ZipInputStream
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** Applies the portable skin JSON produced by BiliRoaming/BiliRoamingX. */
 internal object CustomSkinApplier {
     private val receiverRegistered = AtomicBoolean(false)
+    private val applyPending = AtomicBoolean(false)
     private val reapplyPending = AtomicBoolean(false)
+    private val reapplyLock = Any()
+    private val lastReapplyAt = AtomicLong(0L)
+    private var reapplyWindowStartedAt = 0L
+    private var reapplyCountInWindow = 0
 
     fun applyIfChanged(env: RoamingEnv) {
         if (!ModuleSettings.isCustomSkinEnabled(env.prefs)) return
         val config = ModuleSettings.getCustomSkinJson(env.prefs)
         if (config.isBlank()) return
         registerThemeChangeObserver(env)
+        val target = resolveTarget(env, config) ?: return
+        if (isTargetApplied(target)) return
+        if (!applyPending.compareAndSet(false, true)) return
         Thread {
-            runCatching { apply(env, config) }
-                .onFailure { env.log("Custom skin apply failed", it) }
+            try {
+                // Several host startup callbacks can arrive before the first background task
+                // finishes. Check again here so only the first task writes or downloads.
+                if (!isTargetApplied(target)) applyOrRestoreCached(env, config, target)
+            } catch (error: Throwable) {
+                env.log("Custom skin apply failed", error)
+            } finally {
+                applyPending.set(false)
+            }
         }.apply { name = "BBZQ-CustomSkin" }.start()
     }
 
@@ -42,6 +58,7 @@ internal object CustomSkinApplier {
         env.hostContext.registerReceiver(object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.getIntExtra("key_broadcast_data_type", 0) != 1) return
+                if (intent.getBooleanExtra(EXTRA_SELF_APPLIED, false)) return
                 if (!ModuleSettings.isCustomSkinEnabled(env.prefs)) return
                 val current = intent.getStringExtra("key_garb_data").orEmpty()
                 val customId = customSkinId(ModuleSettings.getCustomSkinJson(env.prefs))
@@ -55,6 +72,10 @@ internal object CustomSkinApplier {
 
     private fun scheduleReapply(env: RoamingEnv) {
         if (!reapplyPending.compareAndSet(false, true)) return
+        if (!reserveReapplySlot(env)) {
+            reapplyPending.set(false)
+            return
+        }
         Thread {
             try {
                 // Let Bilibili's lower-priority garb receiver finish first.
@@ -71,51 +92,98 @@ internal object CustomSkinApplier {
     private fun reapplyCached(env: RoamingEnv) {
         val raw = ModuleSettings.getCustomSkinJson(env.prefs)
         if (!ModuleSettings.isCustomSkinEnabled(env.prefs) || raw.isBlank()) return
-        val skin = JSONObject(raw).optJSONObject("user_equip") ?: JSONObject(raw)
-        val id = skin.optLong("id")
-        val version = skin.optLong("ver")
-        val uid = HostAccountResolver.resolve(env.hostContext, env.classLoader).uid.ifBlank { "0" }
-        val garbDir = File(env.hostContext.filesDir, "garb/$uid")
-        val assetsDir = File(garbDir, "$id/$version")
-        if (!assetsDir.isDirectory || assetsDir.listFiles().isNullOrEmpty()) {
-            apply(env, raw)
-            return
-        }
-        val garb = toGarb(skin, assetsDir).toString()
-        File(garbDir, "garb.conf").writeText(garb)
-        notifyGarbChanged(env, garb)
-        env.log("Custom skin re-applied after official garb change: id=$id")
+        val target = resolveTarget(env, raw) ?: return
+        if (isTargetApplied(target)) return
+        applyOrRestoreCached(env, raw, target)
+        env.log("Custom skin re-applied after official garb change: id=${target.id}")
     }
 
-    private fun apply(env: RoamingEnv, raw: String) {
+    private fun applyOrRestoreCached(env: RoamingEnv, raw: String, target: SkinTarget) {
+        if (assetsReady(target)) {
+            writeTarget(env, target)
+        } else {
+            apply(env, raw, target)
+        }
+    }
+
+    private fun apply(env: RoamingEnv, raw: String, target: SkinTarget) {
         val root = JSONObject(raw)
         val skin = root.optJSONObject("user_equip") ?: root
-        val id = skin.optLong("id")
-        val version = skin.optLong("ver")
         val packageUrl = skin.optString("package_url")
-        require(id > 0 && packageUrl.isNotBlank()) { "Invalid skin JSON: id/package_url missing" }
+        require(packageUrl.isNotBlank()) { "Invalid skin JSON: package_url missing" }
 
-        val uid = HostAccountResolver.resolve(env.hostContext, env.classLoader).uid.ifBlank { "0" }
-        val garbDir = File(env.hostContext.filesDir, "garb/$uid").apply { mkdirs() }
-        val assetsDir = File(garbDir, "$id/$version").apply { mkdirs() }
-        val archive = File(garbDir, "$id.zip")
+        target.garbDir.mkdirs()
+        target.assetsDir.mkdirs()
+        val archive = File(target.garbDir, "${target.id}.zip")
         URL(packageUrl).openStream().use { input -> archive.outputStream().use(input::copyTo) }
-        unzipSafely(archive, assetsDir)
+        unzipSafely(archive, target.assetsDir)
 
-        val garb = toGarb(skin, assetsDir).toString()
-        File(garbDir, "garb.conf").writeText(garb)
-        notifyGarbChanged(env, garb)
-        env.log("Custom skin applied: id=$id version=$version")
+        writeTarget(env, target)
+        env.log("Custom skin applied: id=${target.id} version=${target.version}")
     }
 
     private fun notifyGarbChanged(env: RoamingEnv, garb: String) {
         env.hostContext.sendBroadcast(Intent("${env.packageName}.garb.GARB_CHANGE").apply {
             putExtra("key_broadcast_data_type", 1)
             putExtra("key_garb_data", garb)
+            putExtra(EXTRA_SELF_APPLIED, true)
             putExtra("key_theme_change_sync_garb", false)
             putExtra("key_theme_change_should_report", false)
             putExtra("key_theme_change_sync_from_main_process", false)
         })
+    }
+
+    private fun resolveTarget(env: RoamingEnv, raw: String): SkinTarget? = runCatching {
+        val root = JSONObject(raw)
+        val skin = root.optJSONObject("user_equip") ?: root
+        val id = skin.optLong("id")
+        require(id > 0) { "Invalid skin JSON: id missing" }
+        val version = skin.optLong("ver")
+        val uid = HostAccountResolver.resolve(env.hostContext, env.classLoader).uid.ifBlank { "0" }
+        val garbDir = File(env.hostContext.filesDir, "garb/$uid")
+        SkinTarget(id, version, skin, garbDir, File(garbDir, "$id/$version"))
+    }.getOrElse {
+        env.log("Custom skin target is invalid", it)
+        null
+    }
+
+    private fun assetsReady(target: SkinTarget): Boolean =
+        target.assetsDir.isDirectory && !target.assetsDir.listFiles().isNullOrEmpty()
+
+    private fun isTargetApplied(target: SkinTarget): Boolean {
+        if (!assetsReady(target)) return false
+        val config = File(target.garbDir, "garb.conf")
+        val current = runCatching { JSONObject(config.readText()) }.getOrNull() ?: return false
+        return current.optLong("id", -1L) == target.id && current.optLong("ver", -1L) == target.version
+    }
+
+    private fun writeTarget(env: RoamingEnv, target: SkinTarget) {
+        val garb = toGarb(target.skin, target.assetsDir).toString()
+        File(target.garbDir, "garb.conf").apply {
+            parentFile?.mkdirs()
+            writeText(garb)
+        }
+        notifyGarbChanged(env, garb)
+    }
+
+    private fun reserveReapplySlot(env: RoamingEnv): Boolean = synchronized(reapplyLock) {
+        val now = System.currentTimeMillis()
+        val last = lastReapplyAt.get()
+        if (now - last < REAPPLY_MIN_INTERVAL_MS) {
+            env.log("Custom skin reapply skipped: cooldown")
+            return@synchronized false
+        }
+        if (now - reapplyWindowStartedAt >= REAPPLY_WINDOW_MS) {
+            reapplyWindowStartedAt = now
+            reapplyCountInWindow = 0
+        }
+        if (reapplyCountInWindow >= MAX_REAPPLIES_PER_WINDOW) {
+            env.log("Custom skin reapply skipped: retry limit reached")
+            return@synchronized false
+        }
+        reapplyCountInWindow++
+        lastReapplyAt.set(now)
+        true
     }
 
     private fun customSkinId(raw: String): Long = runCatching {
@@ -192,5 +260,17 @@ internal object CustomSkinApplier {
         Color.parseColor(data?.optString(name).orEmpty())
     }.getOrDefault(0)
 
+    private data class SkinTarget(
+        val id: Long,
+        val version: Long,
+        val skin: JSONObject,
+        val garbDir: File,
+        val assetsDir: File,
+    )
+
     private const val REAPPLY_DELAY_MS = 500L
+    private const val REAPPLY_MIN_INTERVAL_MS = 3_000L
+    private const val REAPPLY_WINDOW_MS = 30_000L
+    private const val MAX_REAPPLIES_PER_WINDOW = 3
+    private const val EXTRA_SELF_APPLIED = "io.github.bbzq.extra.SELF_APPLIED_GARB"
 }
