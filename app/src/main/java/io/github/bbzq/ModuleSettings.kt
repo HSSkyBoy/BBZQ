@@ -27,6 +27,7 @@ object ModuleSettings {
     const val KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED = "player_transparent_status_bar_enabled"
     const val KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED = "hide_player_portrait_control_enabled"
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
+    const val KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED = "player_long_press_speed_lock_enabled"
     const val KEY_FIX_LIVE_QUALITY_URL_ENABLED = "fix_live_quality_url_enabled"
     const val KEY_CUSTOM_CDN_ENABLED = "custom_cdn_enabled"
     const val KEY_CUSTOM_CDN_HOST = "custom_cdn_host"
@@ -367,6 +368,9 @@ object ModuleSettings {
 
     fun isPlayerTripleSpeedEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_PLAYER_TRIPLE_SPEED_ENABLED, false)
+
+    fun isPlayerLongPressSpeedLockEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED, false)
 
     fun isSkipVideoAdEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SKIP_VIDEO_AD_ENABLED, false)
