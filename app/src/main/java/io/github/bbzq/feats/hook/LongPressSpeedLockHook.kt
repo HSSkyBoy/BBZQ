@@ -81,10 +81,17 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val down = args?.getOrNull(0) as? MotionEvent ?: return@InvocationHandler false
             val move = args.getOrNull(1) as? MotionEvent ?: return@InvocationHandler false
             val vertical = kotlin.math.abs(move.y - down.y) >= kotlin.math.abs(move.x - down.x)
-            if (!isLandscape() || !vertical || move.y < lockBoundary()) return@InvocationHandler false
+            if (!isLandscape() || !vertical) return@InvocationHandler false
+            val boundary = lockBoundary()
+            if (state.handledDownPress === down) {
+                if (state.locked && move.y < boundary) state.locked = false
+                return@InvocationHandler false
+            }
+            if (move.y < boundary) return@InvocationHandler false
+            state.handledDownPress = down
             if (!state.locked) {
                 state.locked = true
-                Toast.makeText(env.hostContext, "鬆手鎖定倍速", Toast.LENGTH_SHORT).show()
+                Toast.makeText(env.hostContext, "松手锁定倍速", Toast.LENGTH_SHORT).show()
                 true
             } else {
                 state.locked = false
@@ -153,7 +160,11 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun logSkip(missing: String) = log("startHook: LongPressSpeedLock skipped because $missing is unavailable")
 
-    private class LockState(var locked: Boolean = false, var installed: Boolean = false)
+    private class LockState(
+        var locked: Boolean = false,
+        var installed: Boolean = false,
+        var handledDownPress: MotionEvent? = null,
+    )
 
     private class ScrollRegistrar(
         val listenerType: Class<*>,
