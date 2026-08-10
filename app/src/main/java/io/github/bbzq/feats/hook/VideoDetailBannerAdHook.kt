@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats.hook
+package io.github.bbzq.feats.hook
 
 import android.content.Context
 import android.view.View
@@ -218,7 +218,8 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                     proxy === args?.firstOrNull()
                                 method.name in BLOCKED_METHODS -> {
                                     logBlocked(method.name)
-                                    null
+                                    val result = invokeOriginal(original, method, args) ?: return@runCatching null
+                                    createAdCallbackProxy(result)
                                 }
                                 else ->
                                     invokeOriginal(original, method, args)
@@ -252,7 +253,8 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                 proxy === args?.firstOrNull()
                             method.hasSameSignatureAs(requestPausedPage) -> {
                                 logBlocked(method.name)
-                                null
+                                val result = invokeOriginal(original, method, args) ?: return@runCatching null
+                                createAdCallbackProxy(result)
                             }
                             else ->
                                 invokeOriginal(original, method, args)
@@ -288,7 +290,8 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             method.hasSameSignatureAs(getPausedPagePanel) ||
                                 method.hasSameSignatureAs(getBrandPausedPagePanel) -> {
                                 logBlocked(method.name)
-                                null
+                                val result = invokeOriginal(original, method, args) ?: return@runCatching null
+                                createAdCallbackProxy(result)
                             }
                             else ->
                                 invokeOriginal(original, method, args)
@@ -319,7 +322,8 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                     proxy === args?.firstOrNull()
                                 method.name == "getAdRelateView" -> {
                                     logBlocked(method.name)
-                                    null
+                                    val result = invokeOriginal(original, method, args) ?: return@runCatching null
+                                    createAdCallbackProxy(result)
                                 }
                                 else ->
                                     invokeOriginal(original, method, args)
@@ -350,7 +354,8 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                     proxy === args?.firstOrNull()
                                 method.name == "getAdMerchandiseView" -> {
                                     logBlocked(method.name)
-                                    null
+                                    val result = invokeOriginal(original, method, args) ?: return@runCatching null
+                                    createAdCallbackProxy(result)
                                 }
                                 else ->
                                     invokeOriginal(original, method, args)
@@ -395,6 +400,36 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return runCatching {
             entryConstructor.newInstance(view)
         }.getOrNull()
+    }
+
+    private fun createAdCallbackProxy(originalCallback: Any): Any {
+        val callbackClass = originalCallback.javaClass
+        val interfaces = buildSet {
+            var currentClass: Class<*>? = callbackClass
+            while (currentClass != null) {
+                currentClass.interfaces.forEach { add(it) }
+                currentClass = currentClass.superclass
+            }
+        }.toTypedArray()
+
+        if (interfaces.isEmpty()) return originalCallback
+
+        return Proxy.newProxyInstance(
+            callbackClass.classLoader ?: classLoader,
+            interfaces,
+            InvocationHandler { proxy, method, args ->
+                if ((method.name == "getRootView" || method.name == "getAdView") && method.parameterCount == 0) {
+                    val realView = invokeOriginal(originalCallback, method, args) as? View
+                    realView?.apply {
+                        visibility = View.GONE
+                        layoutParams = ViewGroup.LayoutParams(0, 0)
+                        setPadding(0, 0, 0, 0)
+                    }
+                    return@InvocationHandler realView
+                }
+                invokeOriginal(originalCallback, method, args)
+            }
+        )
     }
 
     private fun logBlocked(methodName: String) {
