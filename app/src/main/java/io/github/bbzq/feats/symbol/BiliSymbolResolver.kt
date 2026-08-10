@@ -3990,36 +3990,12 @@ object BiliSymbolResolver {
     private const val STORY_RIGHT_MODULE = "com.bilibili.video.story.module.StoryRightModule"
     private const val STORY_BOTTOM_MODULE = "com.bilibili.video.story.module.StoryBottomModule"
     private const val STORY_DETAIL = "com.bilibili.video.story.StoryDetail"
-    private val STORY_COMMENT_CONTAINER_INTERFACE_CLASSES = arrayOf(
-        "com.bilibili.video.story.action.StoryCommentHelper\$b",
-        "com.bilibili.video.story.action.C\$b",
-        "com.bilibili.video.story.action.B\$b",
-    )
-    private val STORY_COMMENT_VERTICAL_CONTAINER_CLASSES = arrayOf(
-        "com.bilibili.video.story.action.StoryCommentHelper\$VerticalContainerV2",
-        "com.bilibili.video.story.action.C\$f",
-        "com.bilibili.video.story.action.B\$f",
-    )
-    private val STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES = arrayOf(
-        "com.bilibili.video.story.action.StoryCommentHelper\$d",
-        "com.bilibili.video.story.action.C\$d",
-        "com.bilibili.video.story.action.B\$d",
-    )
-    private val STORY_COMMENT_CALLBACK_CLASSES = arrayOf(
-        "com.bilibili.video.story.action.StoryCommentHelper\$c",
-        "com.bilibili.video.story.action.C\$c",
-        "com.bilibili.video.story.action.B\$c",
-    )
-    private val STORY_COMMENT_OFFSET_CALLBACK_CLASSES = arrayOf(
-        "com.bilibili.video.story.action.StoryCommentHelper\$e",
-        "com.bilibili.video.story.action.C\$e",
-        "com.bilibili.video.story.action.B\$e",
-    )
-    private val STORY_COMMENT_PLAYER_CALLBACK_CLASSES = arrayOf(
-        "com.bilibili.video.story.action.StoryCommentHelper\$a",
-        "com.bilibili.video.story.action.C\$a",
-        "com.bilibili.video.story.action.B\$a",
-    )
+    private val STORY_COMMENT_CONTAINER_INTERFACE_CLASSES = (listOf("StoryCommentHelper\$b", "C\$b", "B\$b") + ('D'..'Z').map { "$it\$b" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
+    private val STORY_COMMENT_VERTICAL_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$VerticalContainerV2", "C\$f", "B\$f") + ('D'..'Z').map { "$it\$f" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
+    private val STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$d", "C\$d", "B\$d") + ('D'..'Z').map { "$it\$d" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
+    private val STORY_COMMENT_CALLBACK_CLASSES = (listOf("StoryCommentHelper\$c", "C\$c", "B\$c") + ('D'..'Z').map { "$it\$c" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
+    private val STORY_COMMENT_OFFSET_CALLBACK_CLASSES = (listOf("StoryCommentHelper\$e", "C\$e", "B\$e") + ('D'..'Z').map { "$it\$e" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
+    private val STORY_COMMENT_PLAYER_CALLBACK_CLASSES = (listOf("StoryCommentHelper\$a", "C\$a", "B\$a") + ('D'..'Z').map { "$it\$a" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
     private const val STORY_INTRO_COMMENT_SERVICE = "com.bilibili.video.story.action.widget.comment.p"
     private const val STORY_TAB_PACKAGE_PREFIX = "com.bilibili.video.story.tab."
     private const val KOTLIN_UNIT = "kotlin.Unit"
@@ -4097,14 +4073,16 @@ object BiliSymbolResolver {
         "Kj.c",
     )
     private const val QUICK_REPLY_SHOW_PUBLISH_DIALOG_STRING = "ShowPublishDialog(args="
-    private val QUICK_REPLY_DIALOG_COLLECTOR_CLASSES = arrayOf(
-        "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$5",
-        "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$5",
-        "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$5\$C636262",
-        "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$5\$C636262",
-        "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$5\$2",
-        "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$5\$2",
-    )
+    private val QUICK_REPLY_DIALOG_COLLECTOR_CLASSES = (4..40).flatMap { i ->
+        listOf(
+            "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$$i",
+            "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$$i",
+            "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$$i\$C636262",
+            "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$$i\$C636262",
+            "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$$i\$2",
+            "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$$i\$2",
+        )
+    }.toTypedArray()
     private val CMT_VOTE_WIDGET_CLASSES = arrayOf(
         "com.bilibili.app.comment.ext.widgets.CmtVoteWidget",
         "com.bilibili.p4439app.comment.p4511ext.widgets.CmtVoteWidget",
