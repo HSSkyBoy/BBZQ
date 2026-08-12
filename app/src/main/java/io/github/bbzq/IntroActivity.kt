@@ -1,4 +1,4 @@
-﻿package io.github.bbzq
+package io.github.bbzq
 
 import android.app.Activity
 import android.content.Intent
@@ -32,12 +32,7 @@ class IntroActivity : Activity() {
                     getString(R.string.intro_desc_body),
                 ),
             )
-            addView(
-                createCard(
-                    getString(R.string.intro_entry_title),
-                    getString(R.string.intro_entry_body),
-                ),
-            )
+
             addView(
                 createCard(
                     "功能开关",

@@ -404,6 +404,12 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun createAdCallbackProxy(originalCallback: Any): Any {
         val callbackClass = originalCallback.javaClass
+        
+        if (callbackClass.name.startsWith("kotlinx.coroutines.") || 
+            callbackClass.name.startsWith("kotlin.coroutines.")) {
+            return originalCallback
+        }
+
         val interfaces = buildSet {
             var currentClass: Class<*>? = callbackClass
             while (currentClass != null) {
@@ -413,6 +419,10 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }.toTypedArray()
 
         if (interfaces.isEmpty()) return originalCallback
+
+        if (interfaces.any { it.name.startsWith("kotlinx.coroutines.") || it.name.startsWith("kotlin.coroutines.") }) {
+            return originalCallback
+        }
 
         return Proxy.newProxyInstance(
             callbackClass.classLoader ?: classLoader,
