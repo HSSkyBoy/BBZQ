@@ -1,8 +1,7 @@
-﻿package io.github.bbzq
+package io.github.bbzq
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup

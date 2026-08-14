@@ -1,7 +1,6 @@
 package io.github.bbzq
 
 import android.app.Activity
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup

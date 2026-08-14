@@ -13,4 +13,5 @@
     <color name="accent_pink">#FB7299</color>
     <color name="disable_confirm">#F6B000</color>
     <color name="cancel_action">#00B8E6</color>
+    <color name="watermark">#2AFB7299</color>
 </resources>
