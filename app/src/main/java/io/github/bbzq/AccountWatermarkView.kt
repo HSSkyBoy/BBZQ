@@ -2,7 +2,6 @@ package io.github.bbzq
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.view.View
 
@@ -11,7 +10,7 @@ internal class AccountWatermarkView(
     private val watermark: String,
 ) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(42, 180, 30, 65)
+        color = context.getColor(R.color.watermark)
         textSize = 13f * resources.displayMetrics.density
         textAlign = Paint.Align.CENTER
     }

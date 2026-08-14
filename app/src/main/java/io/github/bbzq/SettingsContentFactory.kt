@@ -45,6 +45,14 @@ class SettingsContentFactory(
     private val onImportClick: () -> Unit,
     private val onCustomSkinImportClick: () -> Unit,
 ) {
+    private val pageBackgroundColor: Int by lazy { context.getColor(R.color.page_background) }
+    private val titleTextColor: Int by lazy { context.getColor(R.color.title_text) }
+    private val summaryTextColor: Int by lazy { context.getColor(R.color.summary_text) }
+    private val sectionLabelColor: Int by lazy { context.getColor(R.color.section_label) }
+    private val cardBackgroundColor: Int by lazy { context.getColor(R.color.card_background) }
+    private val dividerColor: Int by lazy { context.getColor(R.color.divider) }
+    private val disableConfirmColor: Int by lazy { context.getColor(R.color.disable_confirm) }
+    private val cancelActionColor: Int by lazy { context.getColor(R.color.cancel_action) }
     private val tagCheckBoxes = mutableMapOf<String, CheckBox>()
     private val bottomBarItemCheckBoxes = mutableMapOf<String, CheckBox>()
     private val homeRecommendItemCheckBoxes = mutableMapOf<String, CheckBox>()
@@ -102,7 +110,7 @@ class SettingsContentFactory(
     fun createScrollView(): ScrollView {
         val pageRoot = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(PAGE_BACKGROUND)
+            setBackgroundColor(pageBackgroundColor)
             setPadding(dp(12), dp(12), dp(12), dp(24))
         }
 
@@ -187,7 +195,7 @@ class SettingsContentFactory(
         }
 
         return ScrollView(context).apply {
-            setBackgroundColor(PAGE_BACKGROUND)
+            setBackgroundColor(pageBackgroundColor)
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             addView(
                 pageRoot,
@@ -918,7 +926,7 @@ class SettingsContentFactory(
         val summaryView = TextView(context).apply {
             text = context.getString(R.string.about_check_update_summary)
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         updateCheckSummaryView = summaryView
@@ -931,7 +939,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.about_check_update_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(summaryView)
         }
@@ -1018,18 +1026,18 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = header
                 textSize = 14f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(TextView(context).apply {
                 text = context.getString(R.string.check_update_notes_label)
                 textSize = 12f
-                setTextColor(SUMMARY_COLOR)
+                setTextColor(summaryTextColor)
                 setPadding(0, dp(12), 0, dp(4))
             })
             addView(TextView(context).apply {
                 text = notesSpanned
                 textSize = 13f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
                 movementMethod = LinkMovementMethod.getInstance()
             })
         }
@@ -1078,7 +1086,7 @@ class SettingsContentFactory(
             text = key
             textSize = 16f
             typeface = Typeface.MONOSPACE
-            setTextColor(TITLE_COLOR)
+            setTextColor(titleTextColor)
             setTextIsSelectable(true)
             gravity = Gravity.CENTER
             setPadding(dp(18), dp(24), dp(18), dp(24))
@@ -1101,7 +1109,7 @@ class SettingsContentFactory(
         symbolScanStatusSummary = TextView(context).apply {
             text = symbolScanSummary()
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         return LinearLayout(context).apply {
@@ -1113,7 +1121,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.symbol_cache_refresh_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(symbolScanStatusSummary)
         }
@@ -1214,7 +1222,7 @@ class SettingsContentFactory(
             this.text = text
             textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#8C8C91"))
+            setTextColor(sectionLabelColor)
             setPadding(dp(4), dp(14), dp(4), dp(8))
         }
     }
@@ -1224,7 +1232,7 @@ class SettingsContentFactory(
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
-                setColor(Color.WHITE)
+                setColor(cardBackgroundColor)
             }
             clipToOutline = true
             rows.forEachIndexed { index, row ->
@@ -1238,7 +1246,7 @@ class SettingsContentFactory(
 
     private fun createDivider(): View {
         return View(context).apply {
-            setBackgroundColor(Color.parseColor("#F1F2F3"))
+            setBackgroundColor(dividerColor)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(1),
@@ -1255,13 +1263,13 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = title
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             if (summary.isNotBlank()) {
                 addView(TextView(context).apply {
                     text = summary
                     textSize = 12f
-                    setTextColor(SUMMARY_COLOR)
+                    setTextColor(summaryTextColor)
                     setPadding(0, dp(4), 0, 0)
                 })
             }
@@ -1279,7 +1287,7 @@ class SettingsContentFactory(
     private fun createHomeRecommendTitleKeywordRow(): View {
         homeRecommendTitleKeywordSummaryView = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         return LinearLayout(context).apply {
@@ -1291,7 +1299,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.home_recommend_title_keyword_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(homeRecommendTitleKeywordSummaryView)
         }.also {
@@ -1332,7 +1340,7 @@ class SettingsContentFactory(
     private fun createCommentKeywordRow(): View {
         commentKeywordSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         return LinearLayout(context).apply {
@@ -1344,7 +1352,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.comment_keyword_row_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(commentKeywordSummary)
         }.also {
@@ -1432,7 +1440,7 @@ class SettingsContentFactory(
     private fun createCustomThemeColorRow(): View {
         customThemeColorSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         customThemeColorSwatch = View(context).apply {
@@ -1454,7 +1462,7 @@ class SettingsContentFactory(
                     addView(TextView(context).apply {
                         text = context.getString(R.string.custom_theme_color_title)
                         textSize = 15f
-                        setTextColor(TITLE_COLOR)
+                        setTextColor(titleTextColor)
                     })
                     addView(customThemeColorSummary)
                 },
@@ -1494,7 +1502,7 @@ class SettingsContentFactory(
     private fun createCustomSkinConfigRow(): View {
         customSkinConfigSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         return LinearLayout(context).apply {
@@ -1506,7 +1514,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.custom_skin_config_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(customSkinConfigSummary)
         }.also { customSkinConfigRow = it }
@@ -1515,7 +1523,7 @@ class SettingsContentFactory(
     private fun createCustomCdnHostRow(): View {
         customCdnHostSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         return LinearLayout(context).apply {
@@ -1527,7 +1535,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.custom_cdn_host_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(customCdnHostSummary)
         }
@@ -1630,7 +1638,7 @@ class SettingsContentFactory(
     private fun createBlockedCountRow(): View {
         blockedCountView = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
         }
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -1638,7 +1646,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.story_filter_blocked_count_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(blockedCountView.apply {
                 setPadding(0, dp(4), 0, 0)
@@ -1649,7 +1657,7 @@ class SettingsContentFactory(
     private fun createStoryVideoComponentAlphaRow(): View {
         storyVideoComponentAlphaSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
         }
         storyVideoComponentAlphaSeekBar = SeekBar(context).apply {
             max = 100
@@ -1677,7 +1685,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.story_video_component_alpha_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(storyVideoComponentAlphaSummary.apply {
                 setPadding(0, dp(4), 0, dp(8))
@@ -1694,7 +1702,7 @@ class SettingsContentFactory(
                 addView(CheckBox(context).apply {
                     text = tag.label
                     textSize = 14f
-                    setTextColor(TITLE_COLOR)
+                    setTextColor(titleTextColor)
                     setPadding(dp(6), dp(2), dp(6), dp(2))
                     setOnCheckedChangeListener { _, _ ->
                         if (!refreshing) saveSelectedTags()
@@ -1787,7 +1795,7 @@ class SettingsContentFactory(
                 addView(CheckBox(context).apply {
                     text = item.name
                     textSize = 14f
-                    setTextColor(TITLE_COLOR)
+                    setTextColor(titleTextColor)
                     setPadding(dp(6), dp(2), dp(6), dp(2))
                     setOnCheckedChangeListener { _, _ ->
                         if (!refreshing) saveHiddenBottomBarItems()
@@ -1806,7 +1814,7 @@ class SettingsContentFactory(
                 addView(CheckBox(context).apply {
                     text = "${item.title}\n${item.summary}"
                     textSize = 14f
-                    setTextColor(TITLE_COLOR)
+                    setTextColor(titleTextColor)
                     setPadding(dp(6), dp(2), dp(6), dp(2))
                     setOnCheckedChangeListener { _, _ ->
                         if (!refreshing) saveHiddenHomeRecommendItems()
@@ -1825,7 +1833,7 @@ class SettingsContentFactory(
                 addView(CheckBox(context).apply {
                     text = item.displayText()
                     textSize = 14f
-                    setTextColor(TITLE_COLOR)
+                    setTextColor(titleTextColor)
                     setPadding(dp(6), dp(2), dp(6), dp(2))
                     setOnCheckedChangeListener { _, _ ->
                         if (!refreshing) saveHiddenHomeRecommendTabs()
@@ -1844,7 +1852,7 @@ class SettingsContentFactory(
                 addView(CheckBox(context).apply {
                     text = "${item.name}\n${item.className}"
                     textSize = 14f
-                    setTextColor(TITLE_COLOR)
+                    setTextColor(titleTextColor)
                     setPadding(dp(6), dp(2), dp(6), dp(2))
                     setOnCheckedChangeListener { _, _ ->
                         if (!refreshing) saveHiddenHomeComponents()
@@ -1858,7 +1866,7 @@ class SettingsContentFactory(
     private fun createMineComponentPickerRow(items: List<MineComponentItem>): View {
         mineComponentPickerSummary = TextView(context).apply {
             textSize = 12f
-            setTextColor(SUMMARY_COLOR)
+            setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
         return LinearLayout(context).apply {
@@ -1870,7 +1878,7 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = context.getString(R.string.mine_component_picker_title)
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(mineComponentPickerSummary)
         }.also { mineComponentPickerRow = it }
@@ -1978,12 +1986,12 @@ class SettingsContentFactory(
             addView(TextView(context).apply {
                 text = title
                 textSize = 15f
-                setTextColor(TITLE_COLOR)
+                setTextColor(titleTextColor)
             })
             addView(TextView(context).apply {
                 text = summary
                 textSize = 12f
-                setTextColor(SUMMARY_COLOR)
+                setTextColor(summaryTextColor)
                 setPadding(0, dp(4), 0, 0)
             })
         }
@@ -2001,8 +2009,8 @@ class SettingsContentFactory(
                 restoreSkipVideoAdAutoLikeEnabled()
             }
             .show()
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(DISABLE_CONFIRM_COLOR)
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(CANCEL_ACTION_COLOR)
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(disableConfirmColor)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(cancelActionColor)
     }
 
     private fun restoreSkipVideoAdAutoLikeEnabled() {
@@ -2301,7 +2309,7 @@ class SettingsContentFactory(
             text = RuntimeEnvironmentInfo.runtimeEnvironmentJson(context, prefs)
             textSize = 12f
             typeface = Typeface.MONOSPACE
-            setTextColor(TITLE_COLOR)
+            setTextColor(titleTextColor)
             setTextIsSelectable(true)
             setPadding(dp(18), dp(14), dp(18), dp(14))
         }
@@ -2484,11 +2492,6 @@ class SettingsContentFactory(
     private companion object {
         private const val PROJECT_REPOSITORY_URL = "https://github.com/HSSkyBoy/BBZQ"
         private const val TELEGRAM_CHANNEL_URL = "https://t.me/bbx_show"
-        private val PAGE_BACKGROUND = Color.parseColor("#F6F7F8")
-        private val TITLE_COLOR = Color.parseColor("#18191C")
-        private val SUMMARY_COLOR = Color.parseColor("#9499A0")
-        private val DISABLE_CONFIRM_COLOR = Color.parseColor("#F6B000")
-        private val CANCEL_ACTION_COLOR = Color.parseColor("#00A1D6")
         private const val VERSION_TAP_WINDOW_MS = 1500L
         private const val TITLE_KEYWORD_SUMMARY_MAX_ITEMS = 4
         private const val UNKNOWN_RUNTIME_VALUE = "unknown"

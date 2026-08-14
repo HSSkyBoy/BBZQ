@@ -2,7 +2,6 @@ package io.github.bbzq
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -22,7 +21,7 @@ class IntroActivity : Activity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F6F7F8"))
+            setBackgroundColor(getColor(R.color.page_background))
             setPadding(dp(20), dp(24), dp(20), dp(24))
             addView(createTitle())
             addView(createCard(getString(R.string.intro_module_title), getString(R.string.intro_module_body, versionName)))
@@ -73,7 +72,7 @@ class IntroActivity : Activity() {
 
         setContentView(
             ScrollView(this).apply {
-                setBackgroundColor(Color.parseColor("#F6F7F8"))
+                setBackgroundColor(getColor(R.color.page_background))
                 addView(
                     content,
                     ViewGroup.LayoutParams(
@@ -89,7 +88,7 @@ class IntroActivity : Activity() {
         return TextView(this).apply {
             text = getString(R.string.app_name)
             textSize = 28f
-            setTextColor(Color.parseColor("#111111"))
+            setTextColor(getColor(R.color.title_text_alt))
             setPadding(0, 0, 0, dp(16))
         }
     }
@@ -98,7 +97,7 @@ class IntroActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(getColor(R.color.card_background))
             setPadding(dp(16), dp(16), dp(16), dp(16))
             if (onClick != null) {
                 isClickable = true
@@ -115,12 +114,12 @@ class IntroActivity : Activity() {
             addView(TextView(this@IntroActivity).apply {
                 text = title
                 textSize = 15f
-                setTextColor(Color.parseColor("#FB7299"))
+                setTextColor(getColor(R.color.accent_pink))
             })
             addView(TextView(this@IntroActivity).apply {
                 text = body
                 textSize = 16f
-                setTextColor(Color.parseColor("#222222"))
+                setTextColor(getColor(R.color.body_text))
                 setPadding(0, dp(8), 0, 0)
             })
         }

@@ -1,7 +1,6 @@
 package io.github.bbzq
 
 import android.app.Activity
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -17,7 +16,7 @@ class ReadEraIntroActivity : Activity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F6F7F8"))
+            setBackgroundColor(getColor(R.color.page_background))
             setPadding(dp(20), dp(24), dp(20), dp(24))
             addView(createTitle())
             addView(
@@ -36,7 +35,7 @@ class ReadEraIntroActivity : Activity() {
 
         setContentView(
             ScrollView(this).apply {
-                setBackgroundColor(Color.parseColor("#F6F7F8"))
+                setBackgroundColor(getColor(R.color.page_background))
                 addView(
                     content,
                     ViewGroup.LayoutParams(
@@ -52,7 +51,7 @@ class ReadEraIntroActivity : Activity() {
         return TextView(this).apply {
             text = "ReadEra 解锁"
             textSize = 28f
-            setTextColor(Color.parseColor("#111111"))
+            setTextColor(getColor(R.color.title_text_alt))
             setPadding(0, 0, 0, dp(16))
         }
     }
@@ -61,7 +60,7 @@ class ReadEraIntroActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(getColor(R.color.card_background))
             setPadding(dp(16), dp(16), dp(16), dp(16))
             if (onClick != null) {
                 isClickable = true
@@ -78,12 +77,12 @@ class ReadEraIntroActivity : Activity() {
             addView(TextView(this@ReadEraIntroActivity).apply {
                 text = title
                 textSize = 15f
-                setTextColor(Color.parseColor("#FB7299"))
+                setTextColor(getColor(R.color.accent_pink))
             })
             addView(TextView(this@ReadEraIntroActivity).apply {
                 text = body
                 textSize = 16f
-                setTextColor(Color.parseColor("#222222"))
+                setTextColor(getColor(R.color.body_text))
                 setPadding(0, dp(8), 0, 0)
             })
         }
