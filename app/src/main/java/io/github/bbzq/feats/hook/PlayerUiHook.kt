@@ -13,7 +13,7 @@ import android.widget.TextView
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
-import io.github.bbzq.feats.hookAfter
+import io.github.bbzq.feats.hookBefore
 import java.util.Collections
 import java.util.WeakHashMap
 
@@ -32,9 +32,12 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
             override fun onActivityStarted(activity: Activity) = Unit
             override fun onActivityResumed(activity: Activity) {
-                if (!isVideoDetailActivity(activity)) return
-                if (transparentStatusBar) applyTransparentStatusBar(activity)
-                if (hidePortraitControl) schedulePortraitControlScan(activity.window.decorView)
+                if (transparentStatusBar && isVideoDetailActivity(activity)) {
+                    applyTransparentStatusBar(activity)
+                }
+                if (hidePortraitControl && isPotentialPlayerActivity(activity)) {
+                    schedulePortraitControlScan(activity.window.decorView)
+                }
             }
             override fun onActivityPaused(activity: Activity) = Unit
             override fun onActivityStopped(activity: Activity) = Unit
@@ -63,22 +66,32 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun installVisibilityGuard() {
-        val method = View::class.java.getDeclaredMethod("setVisibility", Int::class.javaPrimitiveType)
-        env.hookAfter(method) { param ->
-            val view = param.thisObject as? View ?: return@hookAfter
-            if (view.visibility == View.GONE || !isPortraitControl(view)) return@hookAfter
-            hiddenPortraitControls.add(view)
-            view.post { if (view.isAttachedToWindow) view.visibility = View.GONE }
+        runCatching {
+            val setVisibilityMethod = View::class.java.getDeclaredMethod("setVisibility", Int::class.javaPrimitiveType)
+            env.hookBefore(setVisibilityMethod) { param ->
+                val view = param.thisObject as? View ?: return@hookBefore
+                val visibility = param.args.firstOrNull() as? Int ?: return@hookBefore
+                if (visibility != View.GONE && isPortraitControl(view)) {
+                    hiddenPortraitControls.add(view)
+                    param.args[0] = View.GONE
+                }
+            }
         }
     }
 
     private fun revealPortraitControls(view: View) {
         if (isPortraitControl(view)) {
             hiddenPortraitControls.add(view)
-            view.visibility = View.GONE
+            if (view.visibility != View.GONE) {
+                view.visibility = View.GONE
+            }
+            return
         }
         if (view is ViewGroup) {
-            for (index in 0 until view.childCount) revealPortraitControls(view.getChildAt(index))
+            for (index in 0 until view.childCount) {
+                val child = view.getChildAt(index) ?: continue
+                revealPortraitControls(child)
+            }
         }
     }
 
@@ -86,22 +99,58 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         revealPortraitControls(decor)
         CONTROL_RECHECK_DELAYS_MS.forEach { delay ->
             decor.postDelayed({
-                if (decor.isAttachedToWindow) revealPortraitControls(decor)
-                hiddenPortraitControls.toList().forEach {
-                    if (it.isAttachedToWindow) it.visibility = View.GONE
+                if (decor.isAttachedToWindow) {
+                    revealPortraitControls(decor)
+                    hiddenPortraitControls.toList().forEach {
+                        if (it.isAttachedToWindow && it.visibility != View.GONE) {
+                            it.visibility = View.GONE
+                        }
+                    }
                 }
             }, delay)
         }
     }
 
     private fun isPortraitControl(view: View): Boolean {
+        // Exclude root/container layouts so we never hide player frames or controller groups
+        if (view is ViewGroup && view::class.java.name.startsWith("android.view.")) {
+            return false
+        }
+
+        val className = view.javaClass.name
+        if (PORTRAIT_CLASS_MARKERS.any { className.contains(it, ignoreCase = true) }) {
+            return true
+        }
+
         val description = view.contentDescription?.toString().orEmpty()
+        if (description.isNotBlank() && PORTRAIT_DESCRIPTION_MARKERS.any { description.contains(it, ignoreCase = true) }) {
+            return true
+        }
+
         val text = (view as? TextView)?.text?.toString().orEmpty()
-        if (description.contains("竖屏") || text.trim() == "竖屏") return true
-        if (view.id == View.NO_ID) return false
-        val entry = runCatching { view.resources.getResourceEntryName(view.id) }
-            .getOrNull()?.lowercase() ?: return false
-        return PORTRAIT_ID_MARKERS.any(entry::contains) && CONTROL_ID_MARKERS.any(entry::contains)
+        if (text.isNotBlank() && PORTRAIT_DESCRIPTION_MARKERS.any { text.contains(it, ignoreCase = true) }) {
+            return true
+        }
+
+        if (view.id != View.NO_ID) {
+            val entry = runCatching { view.resources.getResourceEntryName(view.id) }
+                .getOrNull()?.lowercase() ?: return false
+
+            if (EXCLUDED_ID_MARKERS.any { entry.contains(it) }) {
+                return false
+            }
+
+            if (EXACT_PORTRAIT_IDS.contains(entry) || entry.contains("halfscreen_story")) {
+                return true
+            }
+
+            val hasPortraitTarget = PORTRAIT_ID_MARKERS.any { entry.contains(it) }
+            val hasControlTarget = CONTROL_ID_MARKERS.any { entry.contains(it) }
+            if (hasPortraitTarget && hasControlTarget) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun isVideoDetailActivity(activity: Activity): Boolean {
@@ -111,9 +160,75 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             name.contains("UnitedBizDetailsActivity", ignoreCase = true)
     }
 
+    private fun isPotentialPlayerActivity(activity: Activity): Boolean {
+        val name = activity.javaClass.name
+        return isVideoDetailActivity(activity) ||
+            name.contains("Player", ignoreCase = true) ||
+            name.contains("Bangumi", ignoreCase = true) ||
+            name.contains("Story", ignoreCase = true)
+    }
+
     private companion object {
-        private val CONTROL_RECHECK_DELAYS_MS = longArrayOf(250L, 1_000L)
+        private val CONTROL_RECHECK_DELAYS_MS = longArrayOf(50L, 200L, 500L, 1_000L, 2_000L, 3_500L)
+        private val PORTRAIT_CLASS_MARKERS = listOf(
+            "FullStoryWidget",
+            "GeminiPlayerFullStoryWidget",
+            "PlayerFullStory",
+        )
+        private val PORTRAIT_DESCRIPTION_MARKERS = listOf(
+            "竖屏",
+            "进入看一看",
+            "看一看",
+            "竖屏模式",
+            "展开竖屏",
+            "切换竖屏",
+            "切为竖屏",
+            "竖屏全屏",
+            "竖屏播放",
+        )
+        private val EXACT_PORTRAIT_IDS = setOf(
+            "bbplayer_halfscreen_story",
+            "gemini_halfscreen_story",
+            "preloading_landscape_portrait_toggle",
+            "story_ctrl_screen",
+            "story_fullscreen",
+            "bbplayer_portrait_fullscreen",
+            "outside_portrait",
+        )
         private val PORTRAIT_ID_MARKERS = listOf("portrait", "vertical")
-        private val CONTROL_ID_MARKERS = listOf("screen", "fullscreen", "orientation", "control", "button")
+        private val CONTROL_ID_MARKERS = listOf(
+            "halfscreen",
+            "screen",
+            "fullscreen",
+            "orientation",
+            "control",
+            "button",
+            "btn",
+            "toggle",
+            "switch",
+        )
+        private val EXCLUDED_ID_MARKERS = listOf(
+            "guideline",
+            "divider",
+            "line",
+            "assist",
+            "layout",
+            "container",
+            "controller",
+            "recycler",
+            "scroll",
+            "panel",
+            "view",
+            "title",
+            "group",
+            "coupon",
+            "invalid",
+            "remind",
+            "gift",
+            "paywall",
+            "history",
+            "live",
+            "ad",
+        )
     }
 }
