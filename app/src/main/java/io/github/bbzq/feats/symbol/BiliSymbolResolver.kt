@@ -3061,7 +3061,7 @@ object BiliSymbolResolver {
             addMethods(
                 CHRONOS_METHOD_GEMINI_OPERATION_RENDER,
                 widget.allMethods().filter {
-                    it.name == "i" &&
+                    it.name in GEMINI_OPERATION_RENDER_METHOD_NAMES &&
                         it.parameterCount == 0 &&
                         it.returnType == java.lang.Void.TYPE
                 },
@@ -3510,8 +3510,6 @@ object BiliSymbolResolver {
         val stringCandidates = runCatching {
             currentBridge.findClass(
                 FindClass.create()
-                    // 9.4.0 moves ShowPublishDialog to p2477hk.z\$k.
-                    .searchPackages("com.bilibili", "Kj", "Dj", "p2477hk", "hk")
                     .matcher(ClassMatcher.create().usingStrings(QUICK_REPLY_SHOW_PUBLISH_DIALOG_STRING)),
             ).map { it.name }.toList()
         }.getOrElse { throwable ->
@@ -4209,6 +4207,7 @@ object BiliSymbolResolver {
         "tv.danmaku.biliplayerv2.service.interact.biz.InteractLayerService"
     private const val GEMINI_OPERATION_WIDGET =
         "com.bilibili.app.gemini.player.widget.operation.a"
+    private val GEMINI_OPERATION_RENDER_METHOD_NAMES = setOf("i", "j", "h", "k")
     private const val GEMINI_OPERATION_OBSERVER =
         "com.bilibili.app.gemini.player.widget.operation.a\$d"
     private const val VIEW_PROGRESS_DETAIL =
