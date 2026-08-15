@@ -404,9 +404,10 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun createAdCallbackProxy(originalCallback: Any): Any {
         val callbackClass = originalCallback.javaClass
-        
-        if (callbackClass.name.startsWith("kotlinx.coroutines.") || 
-            callbackClass.name.startsWith("kotlin.coroutines.")) {
+
+        if (callbackClass.name.startsWith("kotlinx.coroutines.") ||
+            callbackClass.name.startsWith("kotlin.coroutines.")
+        ) {
             return originalCallback
         }
 
@@ -424,21 +425,43 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return originalCallback
         }
 
+        val falseStateFlow = runCatching {
+            val stateFlowKt = callbackClass.classLoader?.loadClass("kotlinx.coroutines.flow.StateFlowKt")
+                ?: Class.forName("kotlinx.coroutines.flow.StateFlowKt")
+            val method = stateFlowKt.getDeclaredMethod("MutableStateFlow", Any::class.java)
+            method.invoke(null, java.lang.Boolean.FALSE)
+        }.getOrNull()
+
         return Proxy.newProxyInstance(
             callbackClass.classLoader ?: classLoader,
             interfaces,
             InvocationHandler { proxy, method, args ->
-                if ((method.name == "getRootView" || method.name == "getAdView") && method.parameterCount == 0) {
-                    val realView = invokeOriginal(originalCallback, method, args) as? View
-                    realView?.apply {
-                        visibility = View.GONE
-                        layoutParams = ViewGroup.LayoutParams(0, 0)
-                        setPadding(0, 0, 0, 0)
+                when {
+                    method.isObjectMethod("toString", 0) ->
+                        "BBZQAdCallbackProxy(${originalCallback.javaClass.name})"
+                    method.isObjectMethod("hashCode", 0) ->
+                        System.identityHashCode(proxy)
+                    method.isObjectMethod("equals", 1) ->
+                        proxy === args?.firstOrNull()
+                    method.name == "isBlankView" && method.parameterCount == 0 -> true
+                    method.name == "defaultContainerVisible" && method.parameterCount == 0 -> false
+                    method.name == "getViewHeight" && method.parameterCount == 0 -> 0
+                    method.name == "isSupportAnimIn" && method.parameterCount == 0 -> false
+                    method.name == "getVisibleFlow" && method.parameterCount == 0 && falseStateFlow != null -> {
+                        falseStateFlow
                     }
-                    return@InvocationHandler realView
+                    (method.name == "getRootView" || method.name == "getAdView" || method.name == "getAdRoot") && method.parameterCount == 0 -> {
+                        val realView = invokeOriginal(originalCallback, method, args) as? View
+                        realView?.apply {
+                            visibility = View.GONE
+                            layoutParams = ViewGroup.LayoutParams(0, 0)
+                            setPadding(0, 0, 0, 0)
+                        }
+                        realView
+                    }
+                    else -> invokeOriginal(originalCallback, method, args)
                 }
-                invokeOriginal(originalCallback, method, args)
-            }
+            },
         )
     }
 
