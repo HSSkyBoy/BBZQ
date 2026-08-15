@@ -216,6 +216,10 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                     System.identityHashCode(proxy)
                                 method.isObjectMethod("equals", 1) ->
                                     proxy === args?.firstOrNull()
+                                method.name == "getUpperAdView" -> {
+                                    logBlocked(method.name)
+                                    null
+                                }
                                 method.name in BLOCKED_METHODS -> {
                                     logBlocked(method.name)
                                     val result = invokeOriginal(original, method, args) ?: return@runCatching null
@@ -322,8 +326,7 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                     proxy === args?.firstOrNull()
                                 method.name == "getAdRelateView" -> {
                                     logBlocked(method.name)
-                                    val result = invokeOriginal(original, method, args) ?: return@runCatching null
-                                    createAdCallbackProxy(result)
+                                    null
                                 }
                                 else ->
                                     invokeOriginal(original, method, args)
@@ -354,8 +357,7 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                     proxy === args?.firstOrNull()
                                 method.name == "getAdMerchandiseView" -> {
                                     logBlocked(method.name)
-                                    val result = invokeOriginal(original, method, args) ?: return@runCatching null
-                                    createAdCallbackProxy(result)
+                                    null
                                 }
                                 else ->
                                     invokeOriginal(original, method, args)
