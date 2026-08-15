@@ -255,10 +255,21 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                 System.identityHashCode(proxy)
                             method.isObjectMethod("equals", 1) ->
                                 proxy === args?.firstOrNull()
-                            method.hasSameSignatureAs(requestPausedPage) -> {
+                            method.name == "requestPausedPage" || method.hasSameSignatureAs(requestPausedPage) -> {
                                 logBlocked(method.name)
-                                val result = invokeOriginal(original, method, args) ?: return@runCatching null
-                                createAdCallbackProxy(result)
+                                null
+                            }
+                            method.name == "getCountDownView" -> {
+                                logBlocked(method.name)
+                                val context = args?.getOrNull(0) as? Context
+                                if (context != null) {
+                                    Space(context).apply {
+                                        visibility = View.GONE
+                                        layoutParams = ViewGroup.LayoutParams(0, 0)
+                                    }
+                                } else {
+                                    null
+                                }
                             }
                             else ->
                                 invokeOriginal(original, method, args)
