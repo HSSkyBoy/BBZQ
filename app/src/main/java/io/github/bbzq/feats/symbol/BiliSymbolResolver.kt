@@ -1970,7 +1970,7 @@ object BiliSymbolResolver {
                 it.parameterCount == 2
         }
 
-        val baseComponent = classLoader.loadClassOrNull(GEMINI_BINDING_COMPONENT)
+        val baseComponent = findGeminiBindingComponentClass(classLoader)
         val viewBindingClass = classLoader.loadClassOrNull(ANDROIDX_VIEW_BINDING)
         val relateGameComponent = if (baseComponent != null && viewBindingClass != null) {
             findRelateGameComponentClass(classLoader, bridge, baseComponent, viewBindingClass)
@@ -2087,15 +2087,28 @@ object BiliSymbolResolver {
             parameterTypes.last().isKotlinContinuationTypeName() &&
             returnType == Any::class.java
 
+    private fun findGeminiBindingComponentClass(classLoader: ClassLoader): Class<*>? {
+        for (className in GEMINI_BINDING_COMPONENT_CLASSES) {
+            val clazz = classLoader.loadClassOrNull(className) ?: continue
+            if (Modifier.isAbstract(clazz.modifiers) &&
+                clazz.allMethods().any { it.name == "createViewEntry" && it.parameterCount == 2 } &&
+                clazz.allMethods().any { it.name == "bindToView" && it.parameterCount == 2 }
+            ) {
+                return clazz
+            }
+        }
+        return GEMINI_BINDING_COMPONENT_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
+    }
+
     private fun findRelateGameComponentClass(
         classLoader: ClassLoader,
         bridge: () -> DexKitBridge?,
         baseComponent: Class<*>,
         viewBindingClass: Class<*>,
     ): RelateGameComponentScan {
-        val names = findClassNamesByNameContains(bridge, listOf(RELATE_GAME_COMPONENT_PACKAGE))
+        val searched = findClassNamesByNameContains(bridge, listOf(RELATE_GAME_COMPONENT_PACKAGE))
             .filter { it.startsWith("$RELATE_GAME_COMPONENT_PACKAGE.") }
-            .distinct()
+        val names = (searched + RELATE_GAME_COMPONENT_CANDIDATE_NAMES).distinct()
         if (names.isEmpty()) {
             return RelateGameComponentScan(null, "candidates=0")
         }
@@ -4007,7 +4020,21 @@ object BiliSymbolResolver {
     private const val I_AD_MERCHANDISE = "com.bilibili.gripper.api.ad.biz.videodetail.merchandise.IAdMerchandise"
     private const val RELATE_GAME_COMPONENT_PACKAGE =
         "com.bilibili.ship.theseus.united.page.intro.module.relate.game"
-    private const val GEMINI_BINDING_COMPONENT = "com.bilibili.app.gemini.ui.m"
+    private val RELATE_GAME_COMPONENT_CANDIDATE_NAMES = listOf(
+        "com.bilibili.ship.theseus.united.page.intro.module.relate.game.e",
+        "com.bilibili.ship.theseus.united.page.intro.module.relate.game.d",
+        "com.bilibili.ship.theseus.united.page.intro.module.relate.game.f",
+        "com.bilibili.ship.theseus.united.page.intro.module.relate.game.RelateGameComponent",
+    )
+    private val GEMINI_BINDING_COMPONENT_CLASSES = arrayOf(
+        "com.bilibili.app.gemini.ui.l",
+        "com.bilibili.app.gemini.ui.m",
+        "com.bilibili.app.gemini.ui.k",
+        "com.bilibili.app.gemini.ui.n",
+        "com.bilibili.app.gemini.ui.o",
+        "com.bilibili.app.gemini.ui.d",
+        "com.bilibili.app.gemini.ui.e",
+    )
     private const val GEMINI_SIMPLE_VIEW_ENTRY = "com.bilibili.app.gemini.ui.UIComponent\$b"
     private const val HOME_MENU_ITEM_CLASS = "com.bilibili.lib.homepage.startdust.menu.a"
     private const val HOME_BASE_MAIN_FRAME_FRAGMENT = "tv.danmaku.bili.ui.main2.basic.BaseMainFrameFragment"
