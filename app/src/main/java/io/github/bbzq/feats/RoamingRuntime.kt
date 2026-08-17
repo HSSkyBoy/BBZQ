@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats
+package io.github.bbzq.feats
 
 import android.content.Context
 import android.content.ContextWrapper
@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.content.res.AssetManager
 import android.content.res.Resources
 import io.github.bbzq.ModuleSettingsBridge
+import io.github.bbzq.RuntimeEnvironmentInfo
 import kotlin.LazyThreadSafetyMode
 import io.github.bbzq.feats.hook.BottomBarHook
 import io.github.bbzq.feats.hook.AutoLikeHook
@@ -75,6 +76,14 @@ object RoamingRuntime {
         if (packageName == WO_MIC_PACKAGE) {
             env.log("BBZQ runtime starting for $packageName (WO Mic mode)")
             ModuleSettingsBridge.attach(env.hostContext, xposed)
+            runCatching {
+                RuntimeEnvironmentInfo.recordRuntimeSnapshot(
+                    hostContext = env.hostContext,
+                    processName = env.processName,
+                    xposed = xposed,
+                    prefs = env.prefs,
+                )
+            }
             val woMicHook = WoMicHook(env)
             runCatching { woMicHook.startHook() }
                 .onFailure { env.log("WoMicHook failed", it) }
@@ -85,6 +94,14 @@ object RoamingRuntime {
         if (packageName == READERA_PACKAGE) {
             env.log("BBZQ runtime starting for $packageName (ReadEra mode)")
             ModuleSettingsBridge.attach(env.hostContext, xposed)
+            runCatching {
+                RuntimeEnvironmentInfo.recordRuntimeSnapshot(
+                    hostContext = env.hostContext,
+                    processName = env.processName,
+                    xposed = xposed,
+                    prefs = env.prefs,
+                )
+            }
             val readEraHook = ReadEraHook(env)
             runCatching { readEraHook.startHook() }
                 .onFailure { env.log("ReadEraHook failed", it) }
@@ -102,6 +119,14 @@ object RoamingRuntime {
 
         ModuleSettingsBridge.attach(env.hostContext, xposed)
         if (processScope == ProcessScope.MAIN) {
+            runCatching {
+                RuntimeEnvironmentInfo.recordRuntimeSnapshot(
+                    hostContext = env.hostContext,
+                    processName = env.processName,
+                    xposed = xposed,
+                    prefs = env.prefs,
+                )
+            }
             HookUpdateChecker.check(env)
         }
         val symbols = if (processScope != ProcessScope.UNSUPPORTED) {

@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
+import io.github.libxposed.api.XposedInterface
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,25 +39,73 @@ object RuntimeEnvironmentInfo {
     fun runtimeEnvironmentJson(context: Context, prefs: SharedPreferences): String {
         val host = resolveHostVersion(context, prefs)
         val module = moduleVersion(context)
+        val serviceInfo = ModuleRemotePreferences.getFrameworkInfo()
+
+        val xposedApiVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION)
+            .takeUnless { it == UNKNOWN }
+            ?: serviceInfo?.apiVersion
+            ?: UNKNOWN
+
+        val xposedFrameworkName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME)
+            .takeUnless { it == UNKNOWN }
+            ?: serviceInfo?.frameworkName?.takeIf { it.isNotBlank() }
+            ?: UNKNOWN
+
+        val xposedFrameworkVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION)
+            .takeUnless { it == UNKNOWN }
+            ?: serviceInfo?.frameworkVersion?.takeIf { it.isNotBlank() }
+            ?: UNKNOWN
+
+        val xposedFrameworkVersionCode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE)
+            .takeUnless { it == UNKNOWN }
+            ?: serviceInfo?.frameworkVersionCode?.takeIf { it.isNotBlank() }
+            ?: UNKNOWN
+
+        val xposedFrameworkProperties = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES)
+            .takeUnless { it == UNKNOWN }
+            ?: serviceInfo?.frameworkProperties?.takeIf { it.isNotBlank() }
+            ?: UNKNOWN
+
+        val runtimeKind = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_KIND)
+            .takeUnless { it == UNKNOWN }
+            ?: classifyRuntimeKind(xposedFrameworkName)
+
+        val hostSourceKind = resolveHostSourceKind(context, prefs, host.packageName)
+
+        val patchMode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PATCH_MODE)
+            .takeUnless { it == UNKNOWN }
+            ?: classifyPatchMode(context, hostSourceKind)
+
+        val processName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PROCESS_NAME)
+            .takeUnless { it == UNKNOWN }
+            ?: (context.applicationInfo?.processName ?: context.packageName)
+
+        val lastUpdateTimeRaw = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_LAST_UPDATE_TIME)
+        val lastRuntimeUpdateTime = if (lastUpdateTimeRaw != UNKNOWN) {
+            formatRuntimeUpdateTime(lastUpdateTimeRaw)
+        } else {
+            UNKNOWN
+        }
+
         return JSONObject()
             .put("hostPackageName", host.packageName)
             .put("hostVersionName", host.versionName)
             .put("hostVersionCode", host.versionCode)
-            .put("hostSourceKind", resolveHostSourceKind(context, prefs, host.packageName))
+            .put("hostSourceKind", hostSourceKind)
             .put("modulePackageName", context.packageName)
             .put("moduleVersionName", module.versionName)
             .put("moduleVersionCode", module.versionCode)
             .put("moduleDebug", isDebuggable(context))
             .put("androidSdk", Build.VERSION.SDK_INT)
-            .put("xposedApiVersion", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION))
-            .put("xposedFrameworkName", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME))
-            .put("xposedFrameworkVersion", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION))
-            .put("xposedFrameworkVersionCode", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE))
-            .put("xposedFrameworkProperties", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES))
-            .put("runtimeKind", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_KIND))
-            .put("patchMode", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PATCH_MODE))
-            .put("processName", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PROCESS_NAME))
-            .put("lastRuntimeUpdateTime", readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_LAST_UPDATE_TIME))
+            .put("xposedApiVersion", xposedApiVersion)
+            .put("xposedFrameworkName", xposedFrameworkName)
+            .put("xposedFrameworkVersion", xposedFrameworkVersion)
+            .put("xposedFrameworkVersionCode", xposedFrameworkVersionCode)
+            .put("xposedFrameworkProperties", xposedFrameworkProperties)
+            .put("runtimeKind", runtimeKind)
+            .put("patchMode", patchMode)
+            .put("processName", processName)
+            .put("lastRuntimeUpdateTime", lastRuntimeUpdateTime)
             .toString(2)
     }
 
@@ -81,6 +130,33 @@ object RuntimeEnvironmentInfo {
             appendLine("runtimeSnapshot=")
             appendLine(runtimeEnvironmentJson(context, prefs))
         }
+    }
+
+    fun recordRuntimeSnapshot(
+        hostContext: Context,
+        processName: String,
+        xposed: XposedInterface,
+        prefs: SharedPreferences,
+    ) {
+        val editor = prefs.edit()
+        val values = runtimeSnapshotValues(
+            hostContext = hostContext,
+            processName = processName,
+            xposedApiVersion = runCatching { xposed.apiVersion.toString() }.getOrDefault(UNKNOWN),
+            xposedFrameworkName = runCatching { xposed.frameworkName }.getOrDefault(UNKNOWN),
+            xposedFrameworkVersion = runCatching { xposed.frameworkVersion }.getOrDefault(UNKNOWN),
+            xposedFrameworkVersionCode = runCatching { xposed.frameworkVersionCode.toString() }.getOrDefault(UNKNOWN),
+            xposedFrameworkProperties = runCatching { xposed.frameworkProperties.toString() }.getOrDefault(UNKNOWN),
+        )
+        values.forEach { (key, value) ->
+            editor.putString(key, value)
+        }
+        runtimeObservedStringSets(prefs).forEach { (key, items) ->
+            if (items.isNotEmpty()) {
+                putObservedStringSet(editor, prefs, key, items)
+            }
+        }
+        editor.commit()
     }
 
     fun runtimeSnapshotBundle(
@@ -259,6 +335,11 @@ object RuntimeEnvironmentInfo {
         return prefs.getString(key, null)?.takeIf { it.isNotBlank() && it != UNKNOWN } ?: UNKNOWN
     }
 
+    private fun formatRuntimeUpdateTime(raw: String): String {
+        val millis = raw.toLongOrNull() ?: return raw
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
+    }
+
     private fun isDebuggable(context: Context): Boolean =
         (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
@@ -284,13 +365,17 @@ object RuntimeEnvironmentInfo {
         return classifyHostSource(info.sourceDir)
     }
 
-    private fun classifyRuntimeKind(frameworkName: String): String {
+    fun classifyRuntimeKind(frameworkName: String): String {
         val lowerName = frameworkName.lowercase(Locale.ROOT)
         return when {
+            lowerName.contains("npatch") -> "npatch"
             lowerName.contains("lsposed") -> "lsposed"
+            lowerName.contains("lspatch") -> "lspatch"
             lowerName.contains("edxposed") -> "edxposed"
-            lowerName.contains("xposed") -> "xposed"
+            lowerName.contains("sandhook") -> "sandhook"
+            lowerName.contains("yahfa") -> "yahfa"
             lowerName.contains("vector") -> "vector"
+            lowerName.contains("xposed") -> "xposed"
             frameworkName.isBlank() || frameworkName == UNKNOWN -> UNKNOWN
             else -> "xposed-compatible"
         }

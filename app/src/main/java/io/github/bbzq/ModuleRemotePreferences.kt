@@ -19,8 +19,32 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
     @Volatile private var service: XposedService? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    data class FrameworkInfo(
+        val apiVersion: String,
+        val frameworkName: String,
+        val frameworkVersion: String,
+        val frameworkVersionCode: String,
+        val frameworkProperties: String,
+    )
+
+    fun getFrameworkInfo(): FrameworkInfo? {
+        val currentService = service ?: return null
+        return runCatching {
+            val name = currentService.frameworkName.orEmpty()
+            if (name.isBlank()) return@runCatching null
+            FrameworkInfo(
+                apiVersion = currentService.apiVersion.toString(),
+                frameworkName = name,
+                frameworkVersion = currentService.frameworkVersion.orEmpty(),
+                frameworkVersionCode = currentService.frameworkVersionCode.toString(),
+                frameworkProperties = currentService.frameworkProperties.toString(),
+            )
+        }.getOrNull()
+    }
+
     fun init(context: Context) {
-        appContext = context.applicationContext ?: context
+        val app = context.applicationContext ?: context
+        appContext = app
         if (registered.compareAndSet(false, true)) {
             XposedServiceHelper.registerListener(this)
         }
@@ -28,13 +52,15 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
 
     fun attach(context: Context, prefs: SharedPreferences) {
         init(context)
-        syncLocalToRemote(prefs)
+        service?.let { currentService ->
+            syncWithRemote(context, currentService)
+        }
     }
 
     override fun onServiceBind(service: XposedService) {
         this.service = service
         appContext?.let { context ->
-            syncLocalToRemote(context.moduleSettingsPreferences())
+            syncWithRemote(context, service)
         }
     }
 
@@ -42,13 +68,70 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         if (this.service === service) this.service = null
     }
 
-    private fun syncLocalToRemote(prefs: SharedPreferences) {
-        val values = prefs.all
-        withRemoteEditor { editor ->
-            // Runtime-discovered component catalogs are written by the host process only.
-            // Clearing here when the module app binds would erase them before the settings
-            // activity can import its host snapshot, which is especially visible in APKS builds.
-            values.forEach { (key, value) -> editor.putValue(key, value) }
+    private fun syncWithRemote(context: Context, service: XposedService) {
+        runCatching {
+            val localPrefs = context.moduleSettingsPreferences()
+            val remotePrefs = service.remoteSettingsPreferences()
+
+            val localValues = localPrefs.all
+            val remoteValues = remotePrefs.all
+
+            val localEditor = localPrefs.edit()
+            val remoteEditor = remotePrefs.edit()
+            var localChanged = false
+            var remoteChanged = false
+
+            // 1. Sync remote values to local (especially runtime environment keys and catalogs from host)
+            remoteValues.forEach { (key, value) ->
+                if (value != null && !localValues.containsKey(key)) {
+                    localEditor.putValue(key, value)
+                    localChanged = true
+                } else if (key.startsWith("runtime_") || key.startsWith("known_") || key.startsWith("symbol_scan_")) {
+                    if (value != null && localValues[key] != value) {
+                        localEditor.putValue(key, value)
+                        localChanged = true
+                    }
+                }
+            }
+
+            // 2. Sync local user preferences to remote if remote does not have them yet
+            localValues.forEach { (key, value) ->
+                if (value != null && !remoteValues.containsKey(key)) {
+                    remoteEditor.putValue(key, value)
+                    remoteChanged = true
+                }
+            }
+
+            // 3. Record framework info if available
+            val fwName = runCatching { service.frameworkName }.getOrNull()?.takeIf { it.isNotBlank() }
+            if (fwName != null) {
+                val apiVer = runCatching { service.apiVersion.toString() }.getOrDefault("")
+                val fwVer = runCatching { service.frameworkVersion.orEmpty() }.getOrDefault("")
+                val fwCode = runCatching { service.frameworkVersionCode.toString() }.getOrDefault("")
+                val fwProps = runCatching { service.frameworkProperties.toString() }.getOrDefault("")
+                val runtimeKind = RuntimeEnvironmentInfo.classifyRuntimeKind(fwName)
+
+                localEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION, apiVer)
+                localEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME, fwName)
+                localEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION, fwVer)
+                localEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE, fwCode)
+                localEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES, fwProps)
+                localEditor.putString(ModuleSettings.KEY_RUNTIME_KIND, runtimeKind)
+                localChanged = true
+
+                remoteEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION, apiVer)
+                remoteEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME, fwName)
+                remoteEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION, fwVer)
+                remoteEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE, fwCode)
+                remoteEditor.putString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES, fwProps)
+                remoteEditor.putString(ModuleSettings.KEY_RUNTIME_KIND, runtimeKind)
+                remoteChanged = true
+            }
+
+            if (localChanged) localEditor.apply()
+            if (remoteChanged) remoteEditor.apply()
+        }.onFailure {
+            Log.w(TAG, "syncWithRemote failed: ${it.javaClass.simpleName}: ${it.message}")
         }
     }
 
