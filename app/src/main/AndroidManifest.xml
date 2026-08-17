@@ -12,6 +12,8 @@
         <package android:name="com.bilibili.app.blue" />
         <package android:name="com.wo.voice2" />
         <package android:name="org.readera" />
+        <package android:name="top.nkbe.npatch" />
+        <provider android:authorities="top.nkbe.npatch.remote" />
     </queries>
 
     <application

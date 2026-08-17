@@ -38,6 +38,14 @@ BBZQ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采�
 
 ---
 
+## 免 Root 支援
+
+本模组已集成 [NPatch-Remote-API](https://github.com/7723mod/NPatch-Remote-API)：
+- 免 Root 环境下**推荐使用 NPatch**（v1.0.7 或更高版本）。
+- 支持直接在桌面打开 BBZQ 独立应用修改各项设置，配置将通过 NPatch 管理器的 Remote Store 自动双向同步至目标应用，无需重新打包或每次进入宿主应用设置。
+
+---
+
 ## 功能
 
 ### 分享与链接

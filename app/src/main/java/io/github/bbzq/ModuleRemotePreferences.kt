@@ -48,6 +48,9 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         if (registered.compareAndSet(false, true)) {
             XposedServiceHelper.registerListener(this)
         }
+        if (service == null) {
+            NPatchRemoteClient.tryConnectBackground(app)
+        }
     }
 
     fun attach(context: Context, prefs: SharedPreferences) {
