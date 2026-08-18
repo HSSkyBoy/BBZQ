@@ -44,6 +44,7 @@ import io.github.bbzq.feats.hook.PlayerUiHook
 import io.github.bbzq.feats.hook.TripleSpeedHook
 import io.github.bbzq.feats.hook.LongPressSpeedLockHook
 import io.github.bbzq.feats.hook.ReadEraHook
+import io.github.bbzq.feats.hook.BlockActivityMetaStickerHook
 import io.github.bbzq.feats.hook.WoMicHook
 import io.github.bbzq.feats.symbol.BiliHookSymbols
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
@@ -193,6 +194,7 @@ object RoamingRuntime {
                 ::FullNumberFormatHook,
                 ::MineProfileHook,
                 ::CustomThemeHook,
+                ::BlockActivityMetaStickerHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }

@@ -480,6 +480,12 @@ class SettingsContentFactory(
             false,
         )
         rows += createSwitchRow(
+            context.getString(R.string.playback_block_activity_meta_sticker_title),
+            context.getString(R.string.playback_block_activity_meta_sticker_summary),
+            ModuleSettings.KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.playback_skip_reward_title),
             context.getString(R.string.playback_skip_reward_summary),
             ModuleSettings.KEY_SKIP_REWARD_AD_ENABLED,

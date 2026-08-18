@@ -1,4 +1,4 @@
-﻿package io.github.bbzq
+package io.github.bbzq
 
 import android.content.SharedPreferences
 
@@ -68,6 +68,7 @@ object ModuleSettings {
     const val KEY_CUSTOM_THEME_COLOR = "custom_theme_color"
     const val KEY_CUSTOM_SKIN_ENABLED = "custom_skin_enabled"
     const val KEY_CUSTOM_SKIN_JSON = "custom_skin_json"
+    const val KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED = "block_activity_meta_sticker_enabled"
     const val DEFAULT_CUSTOM_THEME_COLOR = 0xFFFB7299.toInt()
     const val KEY_HIDDEN_BOTTOM_BAR_ITEMS = "hidden_bottom_bar_items"
     const val KEY_KNOWN_BOTTOM_BAR_ITEMS = "known_bottom_bar_items"
@@ -267,6 +268,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_CUSTOM_BOTTOM_BAR_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_BOTTOM_BAR_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_THEME_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_THEME_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_SKIN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false) },
+        ExportableConfigSpec(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
@@ -620,6 +622,9 @@ object ModuleSettings {
 
     fun isCustomSkinEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false)
+
+    fun isBlockActivityMetaStickerEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, false)
 
     fun getCustomSkinJson(prefs: SharedPreferences): String =
         prefs.getString(KEY_CUSTOM_SKIN_JSON, "").orEmpty().trim()
