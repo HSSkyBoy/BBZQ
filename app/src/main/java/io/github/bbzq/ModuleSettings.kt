@@ -1,5 +1,6 @@
 package io.github.bbzq
 
+import android.content.Context
 import android.content.SharedPreferences
 
 object ModuleSettings {
@@ -45,6 +46,10 @@ object ModuleSettings {
     const val KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED = "custom_home_recommend_tab_filter_enabled"
     const val KEY_HIDDEN_HOME_RECOMMEND_TABS = "hidden_home_recommend_tabs"
     const val KEY_KNOWN_HOME_RECOMMEND_TABS = "known_home_recommend_tabs"
+    const val KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED = "custom_video_detail_relate_filter_enabled"
+    const val KEY_HIDDEN_VIDEO_DETAIL_RELATE_TYPES = "hidden_video_detail_relate_types"
+    const val KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES = "known_video_detail_relate_types"
+    const val KEY_VIDEO_DETAIL_RELATE_TITLE_KEYWORDS = "video_detail_relate_title_keywords"
     const val KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED = "hide_all_home_components_enabled"
     const val KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED = "custom_home_component_hide_enabled"
     const val KEY_HIDDEN_HOME_COMPONENTS = "hidden_home_components"
@@ -184,6 +189,8 @@ object ModuleSettings {
     private var knownHomeComponentsCache: Set<String>? = null
     @Volatile
     private var knownMineComponentsCache: Set<String>? = null
+    @Volatile
+    private var knownVideoDetailRelateTypesCache: Set<String>? = null
 
     enum class ExportableValueType {
         BOOLEAN,
@@ -247,6 +254,7 @@ object ModuleSettings {
         },
         ExportableConfigSpec(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED, false) },
+        ExportableConfigSpec(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_STORY_VIDEO_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_STORY_VIDEO_AD_ENABLED, false) },
@@ -328,6 +336,12 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_HIDDEN_BOTTOM_BAR_ITEMS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_HIDDEN_BOTTOM_BAR_ITEMS, emptySet<String>())?.toSet() ?: emptySet<String>()
+        })
+        add(ExportableConfigSpec(KEY_HIDDEN_VIDEO_DETAIL_RELATE_TYPES, ExportableValueType.STRING_SET) {
+            it.getStringSet(KEY_HIDDEN_VIDEO_DETAIL_RELATE_TYPES, emptySet<String>())?.toSet() ?: emptySet<String>()
+        })
+        add(ExportableConfigSpec(KEY_VIDEO_DETAIL_RELATE_TITLE_KEYWORDS, ExportableValueType.STRING) { prefs ->
+            getVideoDetailRelateTitleKeywordsText(prefs)
         })
         skipVideoAdCategories.forEach { category ->
             add(ExportableConfigSpec("$KEY_SKIP_VIDEO_AD_MODE_PREFIX${category.key}", ExportableValueType.INT) { prefs ->
@@ -585,6 +599,58 @@ object ModuleSettings {
 
     fun cacheKnownMineComponents(items: Set<String>) {
         knownMineComponentsCache = items.toSet()
+    }
+
+    fun isCustomVideoDetailRelateFilterEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, false)
+
+    fun getHiddenVideoDetailRelateTypes(prefs: SharedPreferences): Set<String> =
+        prefs.getStringSet(KEY_HIDDEN_VIDEO_DETAIL_RELATE_TYPES, emptySet()) ?: emptySet()
+
+    fun getKnownVideoDetailRelateTypes(prefs: SharedPreferences): Set<String> =
+        knownVideoDetailRelateTypesCache
+            ?: prefs.getStringSet(KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES, emptySet())
+            ?: emptySet()
+
+    fun cacheKnownVideoDetailRelateTypes(items: Set<String>) {
+        knownVideoDetailRelateTypesCache = items.toSet()
+    }
+
+    fun refreshKnownVideoDetailRelateTypesCache(prefs: SharedPreferences) {
+        knownVideoDetailRelateTypesCache = prefs.getStringSet(KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES, emptySet())?.toSet()
+    }
+
+    fun getVideoDetailRelateTitleKeywordsText(prefs: SharedPreferences): String =
+        prefs.getString(KEY_VIDEO_DETAIL_RELATE_TITLE_KEYWORDS, "")?.trim().orEmpty()
+
+    fun parseVideoDetailRelateTitleKeywords(raw: String): List<String> =
+        raw.split('\n', ',', '，')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+    fun getRelateTypeDisplayName(type: String, context: Context): String {
+        val upper = type.trim().uppercase()
+        return when (upper) {
+            "AV" -> context.getString(R.string.video_detail_relate_type_av)
+            "BANGUMI" -> context.getString(R.string.video_detail_relate_type_bangumi)
+            "RESOURCE" -> context.getString(R.string.video_detail_relate_type_resource)
+            "GAME" -> context.getString(R.string.video_detail_relate_type_game)
+            "CM" -> context.getString(R.string.video_detail_relate_type_cm)
+            "LIVE" -> context.getString(R.string.video_detail_relate_type_live)
+            "SPECIAL" -> context.getString(R.string.video_detail_relate_type_special)
+            "SPECIAL_S" -> context.getString(R.string.video_detail_relate_type_special_s)
+            "COURSE" -> context.getString(R.string.video_detail_relate_type_course)
+            "MINI_PROGRAM" -> context.getString(R.string.video_detail_relate_type_mini_program)
+            "AI_CARD", "AI_RECOMMEND" -> context.getString(R.string.video_detail_relate_type_ai_card)
+            "BANGUMI_AV" -> context.getString(R.string.video_detail_relate_type_bangumi_av)
+            "BANGUMI_SEASON" -> context.getString(R.string.video_detail_relate_type_bangumi_season)
+            "ACTIVITY" -> context.getString(R.string.video_detail_relate_type_activity)
+            "COUPON" -> context.getString(R.string.video_detail_relate_type_coupon)
+            "COMMUNITY" -> context.getString(R.string.video_detail_relate_type_community)
+            "HISTORY_AV" -> context.getString(R.string.video_detail_relate_type_history_av)
+            else -> context.getString(R.string.video_detail_relate_type_unknown, type)
+        }
     }
 
     fun isPurifyStoryVideoAdEnabled(prefs: SharedPreferences): Boolean =

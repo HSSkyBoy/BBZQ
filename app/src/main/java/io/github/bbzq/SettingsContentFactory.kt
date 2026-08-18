@@ -58,7 +58,11 @@ class SettingsContentFactory(
     private val homeRecommendItemCheckBoxes = mutableMapOf<String, CheckBox>()
     private val homeRecommendTabCheckBoxes = mutableMapOf<String, CheckBox>()
     private val homeComponentCheckBoxes = mutableMapOf<String, CheckBox>()
+    private val videoDetailRelateTypeCheckBoxes = mutableMapOf<String, CheckBox>()
     private val sponsorBlockCategoryButtons = mutableMapOf<String, Button>()
+    private lateinit var videoDetailRelateFilterSwitch: Switch
+    private lateinit var videoDetailRelateTitleKeywordRow: View
+    private lateinit var videoDetailRelateTitleKeywordSummaryView: TextView
     private lateinit var disableLongPressCopySwitch: Switch
     private lateinit var enhanceLongPressCopySwitch: Switch
     private lateinit var downloadThreadSwitch: Switch
@@ -473,6 +477,28 @@ class SettingsContentFactory(
             ModuleSettings.KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.video_detail_relate_custom_filter_title),
+            context.getString(R.string.video_detail_relate_custom_filter_summary),
+            ModuleSettings.KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED,
+            false,
+        ) {
+            videoDetailRelateFilterSwitch = it
+        }
+        rows += createVideoDetailRelateTitleKeywordRow()
+        val relateTypes = videoDetailRelateTypes()
+        if (relateTypes.isEmpty()) {
+            rows += createInfoRow(
+                context.getString(R.string.video_detail_relate_custom_filter_item_title),
+                context.getString(R.string.video_detail_relate_unavailable_summary),
+            )
+        } else {
+            rows += createInfoRow(
+                context.getString(R.string.video_detail_relate_custom_filter_item_title),
+                context.getString(R.string.video_detail_relate_custom_filter_info_summary),
+            )
+            rows += createVideoDetailRelateTypeGroup(relateTypes)
+        }
         rows += createSwitchRow(
             context.getString(R.string.playback_block_chronos_promotion_title),
             context.getString(R.string.playback_block_chronos_promotion_summary),
@@ -1343,6 +1369,59 @@ class SettingsContentFactory(
             .show()
     }
 
+    private fun createVideoDetailRelateTitleKeywordRow(): View {
+        videoDetailRelateTitleKeywordSummaryView = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showVideoDetailRelateTitleKeywordDialog() }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.video_detail_relate_title_keyword_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(videoDetailRelateTitleKeywordSummaryView)
+        }.also {
+            videoDetailRelateTitleKeywordRow = it
+        }
+    }
+
+    private fun showVideoDetailRelateTitleKeywordDialog() {
+        val input = EditText(context).apply {
+            setText(ModuleSettings.getVideoDetailRelateTitleKeywordsText(prefs))
+            minLines = 4
+            maxLines = 8
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setSingleLine(false)
+            setSelectAllOnFocus(false)
+            setHint(R.string.home_recommend_title_keyword_hint)
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.video_detail_relate_title_keyword_dialog_title)
+            .setView(content)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                prefs.edit()
+                    .putString(ModuleSettings.KEY_VIDEO_DETAIL_RELATE_TITLE_KEYWORDS, input.text?.toString()?.trim().orEmpty())
+                    .apply()
+                refresh()
+            }
+            .show()
+    }
+
     private fun createCommentKeywordRow(): View {
         commentKeywordSummary = TextView(context).apply {
             textSize = 12f
@@ -1850,6 +1929,25 @@ class SettingsContentFactory(
         }
     }
 
+    private fun createVideoDetailRelateTypeGroup(types: List<String>): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            types.forEach { type ->
+                addView(CheckBox(context).apply {
+                    text = ModuleSettings.getRelateTypeDisplayName(type, context)
+                    textSize = 14f
+                    setTextColor(titleTextColor)
+                    setPadding(dp(6), dp(2), dp(6), dp(2))
+                    setOnCheckedChangeListener { _, _ ->
+                        if (!refreshing) saveHiddenVideoDetailRelateTypes()
+                    }
+                    videoDetailRelateTypeCheckBoxes[type] = this
+                })
+            }
+        }
+    }
+
     private fun createHomeComponentGroup(items: List<HomeComponentItem>): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -2174,6 +2272,22 @@ class SettingsContentFactory(
             checkBox.isEnabled = homeRecommendTabFilterEnabled
             checkBox.isChecked = key in hiddenHomeRecommendTabs
         }
+        val videoDetailRelateFilterEnabled = ModuleSettings.isCustomVideoDetailRelateFilterEnabled(prefs)
+        val hiddenVideoDetailRelateTypes = ModuleSettings.getHiddenVideoDetailRelateTypes(prefs)
+        if (::videoDetailRelateFilterSwitch.isInitialized) {
+            videoDetailRelateFilterSwitch.isChecked = videoDetailRelateFilterEnabled
+        }
+        if (::videoDetailRelateTitleKeywordSummaryView.isInitialized) {
+            videoDetailRelateTitleKeywordSummaryView.text = videoDetailRelateTitleKeywordSummary()
+        }
+        if (::videoDetailRelateTitleKeywordRow.isInitialized) {
+            videoDetailRelateTitleKeywordRow.isEnabled = videoDetailRelateFilterEnabled
+            videoDetailRelateTitleKeywordRow.alpha = if (videoDetailRelateFilterEnabled) 1f else 0.45f
+        }
+        videoDetailRelateTypeCheckBoxes.forEach { (type, checkBox) ->
+            checkBox.isEnabled = videoDetailRelateFilterEnabled
+            checkBox.isChecked = type in hiddenVideoDetailRelateTypes
+        }
         if (::hideAllHomeComponentsSwitch.isInitialized) {
             hideAllHomeComponentsSwitch.isChecked = hideAllHomeComponentsEnabled
         }
@@ -2278,6 +2392,15 @@ class SettingsContentFactory(
             .apply()
     }
 
+    private fun saveHiddenVideoDetailRelateTypes() {
+        prefs.edit()
+            .putStringSet(
+                ModuleSettings.KEY_HIDDEN_VIDEO_DETAIL_RELATE_TYPES,
+                hiddenVideoDetailRelateTypeKeys().toMutableSet(),
+            )
+            .apply()
+    }
+
     private fun selectedTagKeys(): Set<String> =
         tagCheckBoxes.filterValues { it.isChecked }.keys.toSet()
 
@@ -2293,8 +2416,32 @@ class SettingsContentFactory(
     private fun hiddenHomeComponentClassNames(): Set<String> =
         homeComponentCheckBoxes.filterValues { !it.isChecked }.keys.toSet()
 
+    private fun hiddenVideoDetailRelateTypeKeys(): Set<String> =
+        videoDetailRelateTypeCheckBoxes.filterValues { it.isChecked }.keys.toSet()
+
     private fun storyVideoComponentAlphaSummary(percent: Int): String =
         context.getString(R.string.story_video_component_alpha_summary, percent.coerceIn(0, 100))
+
+    private fun videoDetailRelateTitleKeywordSummary(): String {
+        val keywords = ModuleSettings.parseVideoDetailRelateTitleKeywords(
+            ModuleSettings.getVideoDetailRelateTitleKeywordsText(prefs),
+        )
+        if (keywords.isEmpty()) {
+            return context.getString(R.string.video_detail_relate_title_keyword_empty_summary)
+        }
+        return context.getString(
+            R.string.video_detail_relate_title_keyword_enabled_summary,
+            keywords.size,
+            keywords.take(TITLE_KEYWORD_SUMMARY_MAX_ITEMS).joinToString(context.getString(R.string.list_separator)),
+        )
+    }
+
+    private fun videoDetailRelateTypes(): List<String> =
+        ModuleSettings.getKnownVideoDetailRelateTypes(prefs)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
 
     private fun homeRecommendTitleKeywordSummary(): String {
         val keywords = ModuleSettings.parseHomeRecommendTitleKeywords(

@@ -38,6 +38,7 @@ import io.github.bbzq.feats.hook.StoryPlayerAdHook
 import io.github.bbzq.feats.hook.BlockUpdateHook
 import io.github.bbzq.feats.hook.VideoCommentHook
 import io.github.bbzq.feats.hook.VideoDetailBannerAdHook
+import io.github.bbzq.feats.hook.VideoDetailRelateFilterHook
 import io.github.bbzq.feats.hook.FullNumberFormatHook
 import io.github.bbzq.feats.hook.MineProfileHook
 import io.github.bbzq.feats.hook.PlayerUiHook
@@ -177,6 +178,7 @@ object RoamingRuntime {
                 ::StoryDanmakuHook,
                 ::StoryComponentAlphaHook,
                 ::VideoDetailBannerAdHook,
+                ::VideoDetailRelateFilterHook,
                 ::PlayerUiHook,
                 ::TripleSpeedHook,
                 ::LongPressSpeedLockHook,

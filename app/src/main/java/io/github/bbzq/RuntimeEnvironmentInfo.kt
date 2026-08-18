@@ -273,6 +273,9 @@ object RuntimeEnvironmentInfo {
             ModuleSettings.getKnownMineComponents(prefs)
                 .takeIf { it.isNotEmpty() }
                 ?.let { put(ModuleSettings.KEY_KNOWN_MINE_COMPONENTS, it) }
+            ModuleSettings.getKnownVideoDetailRelateTypes(prefs)
+                .takeIf { it.isNotEmpty() }
+                ?.let { put(ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES, it) }
         }
     }
 
@@ -290,6 +293,7 @@ object RuntimeEnvironmentInfo {
             ModuleSettings.KEY_KNOWN_HOME_RECOMMEND_TABS -> ModuleSettings.cacheKnownHomeRecommendTabs(updated)
             ModuleSettings.KEY_KNOWN_HOME_COMPONENTS -> ModuleSettings.cacheKnownHomeComponents(updated)
             ModuleSettings.KEY_KNOWN_MINE_COMPONENTS -> ModuleSettings.cacheKnownMineComponents(updated)
+            ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES -> ModuleSettings.cacheKnownVideoDetailRelateTypes(updated)
         }
     }
 
@@ -410,6 +414,7 @@ object RuntimeEnvironmentInfo {
         ModuleSettings.KEY_KNOWN_HOME_RECOMMEND_TABS,
         ModuleSettings.KEY_KNOWN_HOME_COMPONENTS,
         ModuleSettings.KEY_KNOWN_MINE_COMPONENTS,
+        ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES,
     )
 
     private data class VersionInfo(

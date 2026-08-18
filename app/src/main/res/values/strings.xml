@@ -374,4 +374,34 @@
     <string name="custom_skin_config_copied">主题配置已复制</string>
     <string name="custom_skin_config_import_file">从文件导入</string>
     <string name="custom_skin_config_imported">自制主题配置已导入，重启 B 站后套用。</string>
+
+    <!-- 播放页下方推荐信息流过滤 -->
+    <string name="video_detail_relate_custom_filter_title">下方推荐过滤</string>
+    <string name="video_detail_relate_custom_filter_summary">屏蔽播放页下方信息流中的指定类型卡片及标题关键词。</string>
+    <string name="video_detail_relate_title_keyword_title">推荐标题关键词屏蔽</string>
+    <string name="video_detail_relate_title_keyword_empty_summary">未设置关键词。点击添加后可按视频标题过滤推荐内容。</string>
+    <string name="video_detail_relate_title_keyword_enabled_summary">已设置 %1$d 个关键词：%2$s</string>
+    <string name="video_detail_relate_title_keyword_dialog_title">推荐标题关键词屏蔽</string>
+    <string name="video_detail_relate_title_keyword_dialog_message">输入要屏蔽的推荐标题关键词。多个关键词之间可以用回车换行或半角逗号隔开。</string>
+    <string name="video_detail_relate_custom_filter_item_title">下方推荐分类屏蔽</string>
+    <string name="video_detail_relate_custom_filter_info_summary">勾选代表屏蔽该类型卡片。前往播放页刷新后将在此显示发现的卡片类型。</string>
+    <string name="video_detail_relate_unavailable_summary">暂无卡片分类数据。开启开关并进入一次视频播放详情页后，将在此显示发现的卡片类型。</string>
+    <string name="video_detail_relate_type_av">普通视频 (AV)</string>
+    <string name="video_detail_relate_type_bangumi">番剧/影视 (Bangumi)</string>
+    <string name="video_detail_relate_type_resource">会员购/商品 (Resource)</string>
+    <string name="video_detail_relate_type_game">热门游戏 (Game)</string>
+    <string name="video_detail_relate_type_cm">商业广告 (CM)</string>
+    <string name="video_detail_relate_type_live">直播推荐 (Live)</string>
+    <string name="video_detail_relate_type_special">特殊与专题 (Special)</string>
+    <string name="video_detail_relate_type_special_s">特殊卡片 (Special S)</string>
+    <string name="video_detail_relate_type_course">课堂与课程 (Course)</string>
+    <string name="video_detail_relate_type_mini_program">小程序 (Mini Program)</string>
+    <string name="video_detail_relate_type_ai_card">AI 推荐 (AI Card)</string>
+    <string name="video_detail_relate_type_bangumi_av">番剧相关视频 (Bangumi AV)</string>
+    <string name="video_detail_relate_type_bangumi_season">番剧季推荐 (Bangumi Season)</string>
+    <string name="video_detail_relate_type_activity">活动推广 (Activity)</string>
+    <string name="video_detail_relate_type_coupon">优惠券 (Coupon)</string>
+    <string name="video_detail_relate_type_community">社区推荐 (Community)</string>
+    <string name="video_detail_relate_type_history_av">历史相关视频 (History AV)</string>
+    <string name="video_detail_relate_type_unknown">未知分类 (%1$s)</string>
 </resources>

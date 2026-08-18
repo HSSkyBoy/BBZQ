@@ -31,6 +31,7 @@ data class BiliHookSymbols(
     val storyDanmaku: StoryDanmakuSymbols? = null,
     val storyComponentAlpha: StoryComponentAlphaSymbols? = null,
     val videoDetailBannerAd: VideoDetailBannerAdSymbols? = null,
+    val videoDetailRelateFeed: VideoDetailRelateFeedSymbols? = null,
     val homeTopBar: HomeTopBarSymbols? = null,
     val bottomBar: BottomBarSymbols? = null,
     val homeRecommendFeed: HomeRecommendFeedSymbols? = null,
@@ -72,6 +73,7 @@ data class BiliHookSymbols(
         .putOpt("storyDanmaku", storyDanmaku?.toJson())
         .putOpt("storyComponentAlpha", storyComponentAlpha?.toJson())
         .putOpt("videoDetailBannerAd", videoDetailBannerAd?.toJson())
+        .putOpt("videoDetailRelateFeed", videoDetailRelateFeed?.toJson())
         .putOpt("homeTopBar", homeTopBar?.toJson())
         .putOpt("bottomBar", bottomBar?.toJson())
         .putOpt("homeRecommendFeed", homeRecommendFeed?.toJson())
@@ -88,7 +90,7 @@ data class BiliHookSymbols(
         .putOpt("customSkin", customSkin?.toJson())
 
     companion object {
-        const val CACHE_SCHEMA_VERSION = 34
+        const val CACHE_SCHEMA_VERSION = 35
 
         fun fromJson(raw: String?): BiliHookSymbols? {
             if (raw.isNullOrBlank()) return null
@@ -117,6 +119,8 @@ data class BiliHookSymbols(
                         ?.let(StoryComponentAlphaSymbols::fromJson),
                     videoDetailBannerAd = obj.optJSONObject("videoDetailBannerAd")
                         ?.let(VideoDetailBannerAdSymbols::fromJson),
+                    videoDetailRelateFeed = obj.optJSONObject("videoDetailRelateFeed")
+                        ?.let(VideoDetailRelateFeedSymbols::fromJson),
                     homeTopBar = obj.optJSONObject("homeTopBar")?.let(HomeTopBarSymbols::fromJson),
                     bottomBar = obj.optJSONObject("bottomBar")?.let(BottomBarSymbols::fromJson),
                     homeRecommendFeed = obj.optJSONObject("homeRecommendFeed")?.let(HomeRecommendFeedSymbols::fromJson),
@@ -140,7 +144,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 53
+    const val CURRENT = 54
 }
 
 data class HookPointStatus(
@@ -1258,6 +1262,73 @@ data class RestoredBottomBarSymbols(
     val tabHostSetTabsMethods: List<Method>,
     val tabHostGetTabsMethods: List<Method>,
     val baseOnViewCreatedMethods: List<Method>,
+)
+
+data class VideoDetailRelateFeedSymbols(
+    val responseGetItems: List<RelateResponseGetItemsSymbols>,
+    val detailRelateServiceMethod: MethodDescriptor?,
+    val evidence: String,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("responseGetItems", responseGetItems.toJsonArray { it.toJson() })
+        .putOpt("detailRelateServiceMethod", detailRelateServiceMethod?.toJson())
+        .put("evidence", evidence)
+
+    fun restore(classLoader: ClassLoader): RestoredVideoDetailRelateFeedSymbols {
+        val responses = responseGetItems.mapNotNull { it.restore(classLoader) }
+        val detailServiceMethod = detailRelateServiceMethod?.let { descriptor ->
+            val owner = classLoader.loadClassOrNull(descriptor.declaringClassName) ?: return@let null
+            descriptor.restore(owner)
+        }
+        return RestoredVideoDetailRelateFeedSymbols(
+            responseGetItems = responses,
+            detailRelateServiceMethod = detailServiceMethod,
+        )
+    }
+
+    companion object {
+        fun fromJson(obj: JSONObject): VideoDetailRelateFeedSymbols = VideoDetailRelateFeedSymbols(
+            responseGetItems = obj.optJSONArray("responseGetItems").toList {
+                RelateResponseGetItemsSymbols.fromJson(it)
+            },
+            detailRelateServiceMethod = obj.optJSONObject("detailRelateServiceMethod")?.let(MethodDescriptor::fromJson),
+            evidence = obj.optString("evidence", "-"),
+        )
+    }
+}
+
+data class RelateResponseGetItemsSymbols(
+    val getItems: MethodDescriptor,
+    val itemsField: FieldDescriptor?,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("getItems", getItems.toJson())
+        .putOpt("itemsField", itemsField?.toJson())
+
+    fun restore(classLoader: ClassLoader): RestoredRelateResponseGetItemsSymbols? {
+        val owner = classLoader.loadClassOrNull(getItems.declaringClassName) ?: return null
+        return RestoredRelateResponseGetItemsSymbols(
+            getItems = getItems.restore(owner) ?: return null,
+            itemsField = itemsField.restoreOptional(classLoader),
+        )
+    }
+
+    companion object {
+        fun fromJson(obj: JSONObject): RelateResponseGetItemsSymbols = RelateResponseGetItemsSymbols(
+            getItems = MethodDescriptor.fromJson(obj.getJSONObject("getItems")),
+            itemsField = obj.optJSONObject("itemsField")?.let(FieldDescriptor::fromJson),
+        )
+    }
+}
+
+data class RestoredVideoDetailRelateFeedSymbols(
+    val responseGetItems: List<RestoredRelateResponseGetItemsSymbols>,
+    val detailRelateServiceMethod: Method?,
+)
+
+data class RestoredRelateResponseGetItemsSymbols(
+    val getItems: Method,
+    val itemsField: Field?,
 )
 
 data class HomeRecommendTabSymbols(

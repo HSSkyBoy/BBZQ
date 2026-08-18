@@ -87,6 +87,7 @@ object BiliSymbolResolver {
     private const val HP_VIDEO_DETAIL_BANNER_PAUSED_PAGE_REQUEST = "VideoDetailBannerAdHook.PausedPageRequest"
     private const val HP_VIDEO_DETAIL_BANNER_PAUSED_PAGE_PANEL = "VideoDetailBannerAdHook.PausedPagePanel"
     private const val HP_VIDEO_DETAIL_BANNER_RELATE_GAME = "VideoDetailBannerAdHook.RelateGame"
+    private const val HP_VIDEO_DETAIL_RELATE_FEED = "VideoDetailRelateFilterHook.InstallPoints"
     private const val HP_HOME_TOP_BAR = "HomeTopBarPurifyHook.InstallPoints"
     private const val HP_HOME_TOP_BAR_GAME = "HomeTopBarPurifyHook.GameMenu"
     private const val HP_HOME_TOP_BAR_VIEW_CREATED = "HomeTopBarPurifyHook.OnViewCreated"
@@ -295,6 +296,9 @@ object BiliSymbolResolver {
         val videoDetailBannerAd = scanHookPoint(HP_VIDEO_DETAIL_BANNER_AD, hookPoints, scanErrors, log) {
             scanVideoDetailBannerAd(classLoader, ::bridge)
         }
+        val videoDetailRelateFeed = scanHookPoint(HP_VIDEO_DETAIL_RELATE_FEED, hookPoints, scanErrors, log) {
+            scanVideoDetailRelateFeed(classLoader)
+        }
         val homeTopBar = scanHookPoint(HP_HOME_TOP_BAR, hookPoints, scanErrors, log) {
             scanHomeTopBar(classLoader)
         }
@@ -360,6 +364,7 @@ object BiliSymbolResolver {
             storyDanmaku = storyDanmaku,
             storyComponentAlpha = storyComponentAlpha,
             videoDetailBannerAd = videoDetailBannerAd,
+            videoDetailRelateFeed = videoDetailRelateFeed,
             homeTopBar = homeTopBar,
             bottomBar = bottomBar,
             homeRecommendFeed = homeRecommendFeed,
@@ -2334,6 +2339,48 @@ object BiliSymbolResolver {
         return SymbolScanResult.Found(symbols, responseGetItems.joinToString("|") { it.getItems.declaringClassName }, symbols.evidence)
     }
 
+    private fun scanVideoDetailRelateFeed(
+        classLoader: ClassLoader,
+    ): SymbolScanResult<VideoDetailRelateFeedSymbols> {
+        val responseClasses = VIDEO_DETAIL_RELATE_RESPONSE_CLASSES.mapNotNull { classLoader.loadClassOrNull(it) }
+        val responseGetItems = responseClasses.mapNotNull { responseClass ->
+            val getItems = responseClass.allMethods().firstOrNull {
+                (it.name == "getCardsList" || it.name == "getRelatesList") &&
+                    it.parameterCount == 0 &&
+                    List::class.java.isAssignableFrom(it.returnType) &&
+                    !Modifier.isStatic(it.modifiers) &&
+                    !Modifier.isAbstract(it.modifiers)
+            } ?: return@mapNotNull null
+            val itemsField = responseClass.allFields()
+                .filter { List::class.java.isAssignableFrom(it.type) }
+                .singleOrNull()
+            RelateResponseGetItemsSymbols(MethodDescriptor.of(getItems), itemsField?.let(FieldDescriptor::of))
+        }.distinctBy { it.getItems.declaringClassName + "#" + it.getItems.name }
+
+        val detailRelateServiceClass = classLoader.loadClassOrNull(DETAIL_RELATE_SERVICE_CLASS)
+        val detailRelateServiceMethod = detailRelateServiceClass?.allMethods()?.firstOrNull { method ->
+            !Modifier.isStatic(method.modifiers) &&
+                !Modifier.isAbstract(method.modifiers) &&
+                method.parameterCount == 1 &&
+                (method.name == "d" || method.parameterTypes[0].name.endsWith("D0") || method.returnType.name.contains("RunningUIComponent"))
+        }
+
+        if (responseGetItems.isEmpty() && detailRelateServiceMethod == null) {
+            return SymbolScanResult.Missing("VideoDetailRelate response and service methods not found")
+        }
+
+        val symbols = VideoDetailRelateFeedSymbols(
+            responseGetItems = responseGetItems,
+            detailRelateServiceMethod = detailRelateServiceMethod?.let(MethodDescriptor::of),
+            evidence = "responses=${responseGetItems.size},service=${detailRelateServiceMethod != null}",
+        )
+        val target = buildList {
+            addAll(responseGetItems.map { it.getItems.declaringClassName })
+            detailRelateServiceMethod?.let { add(it.declaringClass.name) }
+        }.joinToString("|")
+        return SymbolScanResult.Found(symbols, target, symbols.evidence)
+    }
+
     private fun scanHomeRecommendTabs(
         classLoader: ClassLoader,
     ): SymbolScanResult<HomeRecommendTabSymbols> {
@@ -4280,6 +4327,15 @@ object BiliSymbolResolver {
         "getVoteState",
         "getActivityState",
     )
+    private val VIDEO_DETAIL_RELATE_RESPONSE_CLASSES = arrayOf(
+        "com.bapis.bilibili.app.viewunite.v1.Relates",
+        "com.bapis.bilibili.app.viewunite.v1.RelatesFeedReply",
+        "com.bapis.bilibili.app.view.v1.RelatesFeedReply",
+        "com.bapis.bilibili.app.view.v1.ViewReply",
+        "com.bapis.bilibili.app.view.v1.PlayerRelatesReply",
+    )
+    private const val DETAIL_RELATE_SERVICE_CLASS =
+        "com.bilibili.ship.theseus.united.page.intro.module.relate.DetailRelateService"
 }
 
 private data class ControllerClassScan(
