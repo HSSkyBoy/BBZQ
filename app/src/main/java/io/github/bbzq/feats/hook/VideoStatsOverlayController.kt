@@ -153,6 +153,7 @@ internal class VideoStatsOverlayController(
                         } else {
                             statusText.text = "状态：就绪 (BVID: $bvid)"
                             
+                            val qualityButtons = mutableListOf<android.widget.Button>()
                             // Add a button for each available quality
                             list.forEach { quality ->
                                 val btn = android.widget.Button(activity).apply {
@@ -160,15 +161,16 @@ internal class VideoStatsOverlayController(
                                     setBackgroundColor(Color.rgb(251, 114, 153))
                                     setTextColor(Color.WHITE)
                                     setOnClickListener {
-                                        isEnabled = false
+                                        qualityButtons.forEach { it.isEnabled = false }
                                         io.github.bbzq.feats.download.VideoDownloadManager.downloadAndMux(activity, bvid, quality.videoUrl, quality.audioUrl) { msg, pct ->
-                                            statusText.text = if (pct >= 0 && pct < 100) "状态：$msg ($pct%)" else "状态：$msg"
-                                            if (msg.contains("成功") || msg.contains("失败")) {
-                                                isEnabled = true
+                                            statusText.text = if (pct in 0..99) "状态：$msg ($pct%)" else "状态：$msg"
+                                            if (pct == 100 || pct == -1 || msg.contains("成功") || msg.contains("失败")) {
+                                                qualityButtons.forEach { it.isEnabled = true }
                                             }
                                         }
                                     }
                                 }
+                                qualityButtons.add(btn)
                                 buttonContainer.addView(btn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
                             }
                         }

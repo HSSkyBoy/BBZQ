@@ -171,6 +171,8 @@ object VideoDownloadManager {
         }
     }
 
+    private val isDownloading = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun downloadAndMux(
         activity: Activity, 
         bvid: String, 
@@ -178,37 +180,82 @@ object VideoDownloadManager {
         audioUrl: String, 
         onProgress: (String, Int) -> Unit
     ) {
-        Thread {
-            try {
-                val tempDir = File(activity.cacheDir, "bbzq_dl").apply { mkdirs() }
-                val videoFile = File(tempDir, "$bvid-video.m4s")
-                val audioFile = File(tempDir, "$bvid-audio.m4s")
-                val publicDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "BBZQ").apply { mkdirs() }
-                val outFile = File(publicDir, "$bvid.mp4")
+        if (!isDownloading.compareAndSet(false, true)) {
+            postProgress(activity, onProgress, "已有下载任务正在进行中，请稍候...", -1)
+            return
+        }
 
-                postProgress(activity, onProgress, "正在下载视频...", 0)
-                downloadFile(videoUrl, videoFile) { p ->
-                    postProgress(activity, onProgress, "正在下载视频... $p%", p)
+        Thread {
+            val taskId = System.currentTimeMillis()
+            val tempDir = File(activity.cacheDir, "bbzq_dl").apply { mkdirs() }
+            val videoFile = File(tempDir, "${bvid}_video_$taskId.m4s")
+            val audioFile = File(tempDir, "${bvid}_audio_$taskId.m4s")
+            val publicDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "BBZQ").apply { mkdirs() }
+            val outFile = File(publicDir, "$bvid.mp4")
+
+            try {
+                postProgress(activity, onProgress, "正在并行下载视频与音频...", 0)
+
+                var videoError: Throwable? = null
+                var audioError: Throwable? = null
+                var videoPercent = 0
+                var audioPercent = 0
+
+                val videoThread = Thread {
+                    try {
+                        downloadFile(videoUrl, videoFile) { p ->
+                            videoPercent = p
+                            postProgress(activity, onProgress, "下载中: 视频 $p% / 音频 $audioPercent%", (videoPercent + audioPercent) / 2)
+                        }
+                    } catch (t: Throwable) {
+                        videoError = t
+                    }
                 }
-                
-                postProgress(activity, onProgress, "正在下载音频...", 0)
-                downloadFile(audioUrl, audioFile) { p ->
-                    postProgress(activity, onProgress, "正在下载音频... $p%", p)
+
+                val audioThread = Thread {
+                    try {
+                        if (audioUrl.isNotBlank()) {
+                            downloadFile(audioUrl, audioFile) { p ->
+                                audioPercent = p
+                                postProgress(activity, onProgress, "下载中: 视频 $videoPercent% / 音频 $p%", (videoPercent + audioPercent) / 2)
+                            }
+                        } else {
+                            audioPercent = 100
+                        }
+                    } catch (t: Throwable) {
+                        audioError = t
+                    }
                 }
-                
-                postProgress(activity, onProgress, "正在合并 MP4...", 0)
-                val success = MediaMuxerUtil.mux(videoFile.absolutePath, audioFile.absolutePath, outFile.absolutePath)
+
+                videoThread.start()
+                audioThread.start()
+
+                videoThread.join()
+                audioThread.join()
+
+                if (videoError != null) throw videoError!!
+                if (audioError != null) throw audioError!!
+
+                postProgress(activity, onProgress, "正在合并 MP4 音视频轨道...", 95)
+                val success = if (audioFile.exists() && audioFile.length() > 0) {
+                    MediaMuxerUtil.mux(videoFile.absolutePath, audioFile.absolutePath, outFile.absolutePath)
+                } else {
+                    videoFile.renameTo(outFile)
+                }
                 
                 if (success) {
-                    videoFile.delete()
-                    audioFile.delete()
-                    postProgress(activity, onProgress, "下载成功: ${outFile.absolutePath}", 100)
+                    postProgress(activity, onProgress, "下载成功: ${outFile.name}", 100)
                 } else {
-                    postProgress(activity, onProgress, "合并失败", -1)
+                    postProgress(activity, onProgress, "合并失败 (请查看日志)", -1)
                 }
             } catch (e: Exception) {
+                android.util.Log.e("BBZQ", "downloadAndMux failed", e)
                 e.printStackTrace()
                 postProgress(activity, onProgress, "下载失败: ${e.message}", -1)
+            } finally {
+                runCatching { if (videoFile.exists()) videoFile.delete() }
+                runCatching { if (audioFile.exists()) audioFile.delete() }
+                isDownloading.set(false)
             }
         }.start()
     }
@@ -235,9 +282,9 @@ object VideoDownloadManager {
             val body = response.body ?: throw IOException("Empty response body")
             val contentLength = body.contentLength()
             
-            body.byteStream().use { input ->
-                FileOutputStream(dest).use { output ->
-                    val buffer = ByteArray(8192)
+            body.byteStream().buffered(128 * 1024).use { input ->
+                FileOutputStream(dest).buffered(128 * 1024).use { output ->
+                    val buffer = ByteArray(128 * 1024)
                     var totalBytesRead = 0L
                     var lastPercent = 0
                     
