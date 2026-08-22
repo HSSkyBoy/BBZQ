@@ -1696,35 +1696,41 @@ object BiliSymbolResolver {
             ?: return SymbolScanResult.Missing("story detail class not found")
         val storyPagerPlayer = classLoader.loadClassOrNull(STORY_PAGER_PLAYER)
             ?: return SymbolScanResult.Missing("story pager player class not found")
-        val commentContainerInterface = STORY_COMMENT_CONTAINER_INTERFACE_CLASSES
-            .firstNotNullOfOrNull(classLoader::loadClassOrNull)
-            ?: return SymbolScanResult.Missing("story comment container interface not found")
-        val commentCallback = STORY_COMMENT_CALLBACK_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
-            ?: return SymbolScanResult.Missing("story comment callback class not found")
-        val commentOffsetCallback = STORY_COMMENT_OFFSET_CALLBACK_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
-            ?: return SymbolScanResult.Missing("story comment offset callback class not found")
-        val commentPlayerCallback = STORY_COMMENT_PLAYER_CALLBACK_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
-            ?: return SymbolScanResult.Missing("story comment player callback class not found")
-        val verticalContainer = STORY_COMMENT_VERTICAL_CONTAINER_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
-            ?: return SymbolScanResult.Missing("story vertical comment container class not found")
-        val landscapeContainer = STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES
-            .firstNotNullOfOrNull(classLoader::loadClassOrNull)
         val interactLayerService = classLoader.loadClassOrNull(INTERACT_LAYER_SERVICE)
             ?: return SymbolScanResult.Missing("interact layer service class not found")
         val introCommentService = classLoader.loadClassOrNull(STORY_INTRO_COMMENT_SERVICE)
 
-        val showSignature = commentContainerInterface.allMethods().firstOrNull { method ->
-            method.name == "a" &&
-                method.returnType == Void.TYPE &&
-                method.parameterCount == 8 &&
-                method.parameterTypes[0] == storyDetail &&
-                method.parameterTypes[2] == Long::class.javaPrimitiveType &&
-                method.parameterTypes[3] == Long::class.javaPrimitiveType &&
-                method.parameterTypes[4] == String::class.java &&
-                method.parameterTypes[5] == commentCallback &&
-                method.parameterTypes[6] == commentOffsetCallback &&
-                method.parameterTypes[7] == commentPlayerCallback
-        }?.parameterTypes ?: return SymbolScanResult.Missing("story comment show signature not found")
+        var matchedSignature: Array<Class<*>>? = null
+        var matchedVerticalContainer: Class<*>? = null
+        var matchedLandscapeContainer: Class<*>? = null
+
+        for (name in STORY_COMMENT_OUTER_CANDIDATES) {
+            val prefix = "com.bilibili.video.story.action.$name"
+            val containerInterface = classLoader.loadClassOrNull("$prefix\$b") ?: continue
+            val sig = containerInterface.allMethods().firstOrNull { method ->
+                method.name == "a" &&
+                    method.returnType == Void.TYPE &&
+                    method.parameterCount == 8 &&
+                    method.parameterTypes[0] == storyDetail &&
+                    method.parameterTypes[2] == Long::class.javaPrimitiveType &&
+                    method.parameterTypes[3] == Long::class.javaPrimitiveType &&
+                    method.parameterTypes[4] == String::class.java
+            }?.parameterTypes ?: continue
+
+            matchedSignature = sig
+            matchedVerticalContainer = classLoader.loadClassOrNull("$prefix\$VerticalContainerV2")
+                ?: classLoader.loadClassOrNull("$prefix\$f")
+            matchedLandscapeContainer = classLoader.loadClassOrNull("$prefix\$d")
+            break
+        }
+
+        val showSignature = matchedSignature ?: return SymbolScanResult.Missing("story comment show signature not found")
+        val verticalContainer = matchedVerticalContainer
+            ?: STORY_COMMENT_VERTICAL_CONTAINER_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
+            ?: return SymbolScanResult.Missing("story vertical comment container class not found")
+        val landscapeContainer = matchedLandscapeContainer
+            ?: STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
+
         val showMethods = buildList {
             verticalContainer.findMethod("a", Void.TYPE, *showSignature)
                 ?.apply { isAccessible = true }
@@ -4048,12 +4054,9 @@ object BiliSymbolResolver {
     private const val STORY_RIGHT_MODULE = "com.bilibili.video.story.module.StoryRightModule"
     private const val STORY_BOTTOM_MODULE = "com.bilibili.video.story.module.StoryBottomModule"
     private const val STORY_DETAIL = "com.bilibili.video.story.StoryDetail"
-    private val STORY_COMMENT_CONTAINER_INTERFACE_CLASSES = (listOf("StoryCommentHelper\$b", "C\$b", "B\$b") + ('D'..'Z').map { "$it\$b" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
+    private val STORY_COMMENT_OUTER_CANDIDATES = listOf("StoryCommentHelper", "C", "B") + ('D'..'Z').map { it.toString() }
     private val STORY_COMMENT_VERTICAL_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$VerticalContainerV2", "C\$f", "B\$f") + ('D'..'Z').map { "$it\$f" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
     private val STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$d", "C\$d", "B\$d") + ('D'..'Z').map { "$it\$d" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
-    private val STORY_COMMENT_CALLBACK_CLASSES = (listOf("StoryCommentHelper\$c", "C\$c", "B\$c") + ('D'..'Z').map { "$it\$c" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
-    private val STORY_COMMENT_OFFSET_CALLBACK_CLASSES = (listOf("StoryCommentHelper\$e", "C\$e", "B\$e") + ('D'..'Z').map { "$it\$e" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
-    private val STORY_COMMENT_PLAYER_CALLBACK_CLASSES = (listOf("StoryCommentHelper\$a", "C\$a", "B\$a") + ('D'..'Z').map { "$it\$a" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
     private const val STORY_INTRO_COMMENT_SERVICE = "com.bilibili.video.story.action.widget.comment.p"
     private const val STORY_TAB_PACKAGE_PREFIX = "com.bilibili.video.story.tab."
     private const val KOTLIN_UNIT = "kotlin.Unit"
