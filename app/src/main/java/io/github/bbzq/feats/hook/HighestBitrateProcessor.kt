@@ -18,6 +18,17 @@ internal class HighestBitrateProcessor(
         }.onFailure { reportFailure("request preparation failed at ${request.javaClass.name}", it) }
     }
 
+    fun readStats(response: Any?): VideoStreamStats? {
+        if (response == null) return null
+        return runCatching {
+            val videoInfo = response.callMethod("getVideoInfo")
+            val vodInfo = response.callMethod("getVodInfo")
+            readSelectedStats(vodInfo) ?: readSelectedStats(videoInfo)
+        }.onFailure {
+            reportFailure("response stats read failed at ${response.javaClass.name}", it)
+        }.getOrNull()
+    }
+
     fun preferHighestBitrate(response: Any?): VideoStreamStats? {
         if (response == null) return null
         return runCatching {

@@ -24,6 +24,7 @@ object ModuleSettings {
     const val KEY_UNLOCK_VIDEO_FEATURES_UI_ENABLED = "unlock_video_features_ui_enabled"
     const val KEY_UNLOCK_HIGHEST_BITRATE_ENABLED = "unlock_highest_bitrate_enabled"
     const val KEY_AVOID_HDR_DOLBY_ENABLED = "avoid_hdr_dolby_enabled"
+    const val KEY_VIDEO_DOWNLOAD_ENABLED = "video_download_enabled"
     const val KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED = "auto_like_video_detail_enabled"
     const val KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED = "player_transparent_status_bar_enabled"
     const val KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED = "hide_player_portrait_control_enabled"
@@ -233,6 +234,12 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED, false)
         },
+        ExportableConfigSpec(KEY_AVOID_HDR_DOLBY_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_AVOID_HDR_DOLBY_ENABLED, false)
+        },
+        ExportableConfigSpec(KEY_VIDEO_DOWNLOAD_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_VIDEO_DOWNLOAD_ENABLED, false)
+        },
         ExportableConfigSpec(KEY_PLAYER_TRIPLE_SPEED_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_PLAYER_TRIPLE_SPEED_ENABLED, false)
         },
@@ -375,6 +382,9 @@ object ModuleSettings {
     fun isAvoidHdrDolbyEnabled(prefs: SharedPreferences): Boolean =
         isUnlockHighestBitrateEnabled(prefs) &&
             prefs.getBoolean(KEY_AVOID_HDR_DOLBY_ENABLED, false)
+
+    fun isVideoDownloadEnabled(prefs: SharedPreferences): Boolean =
+        isTryFreeQualitySettingsVisible(prefs) && prefs.getBoolean(KEY_VIDEO_DOWNLOAD_ENABLED, false)
 
     fun isPlayerTransparentStatusBarEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED, false)

@@ -897,6 +897,12 @@ class SettingsContentFactory(
                 ModuleSettings.KEY_AVOID_HDR_DOLBY_ENABLED,
                 false,
             )
+            rows += createSwitchRow(
+                context.getString(R.string.video_download_title),
+                context.getString(R.string.video_download_summary),
+                ModuleSettings.KEY_VIDEO_DOWNLOAD_ENABLED,
+                false,
+            )
         }
         return rows
     }

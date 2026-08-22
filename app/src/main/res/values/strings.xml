@@ -38,6 +38,8 @@
     <string name="unlock_highest_bitrate_summary">自动强制请求 QN 127 最高画质，按 8K＞杜比视界＞HDR＞4K 的优先级选择服务端返回的最高档与最高码率候选，并在播放器控制栏提供带账号水印的视频统计信息。</string>
     <string name="avoid_hdr_dolby_title">避免 HDR / 杜比视界</string>
     <string name="avoid_hdr_dolby_summary">需先开启“解锁最高码率”。跳过 HDR 与杜比视界档位，改选同级最高的 SDR 画质（适合非 HDR 屏幕），8K 不受影响。</string>
+    <string name="video_download_title">视频下载</string>
+    <string name="video_download_summary">在视频简介中提供下载入口，支持解锁最高 8K 等画质并自动合并导出为 MP4。</string>
     <string name="auto_like_video_detail_title">视频详情页自动点赞</string>
     <string name="auto_like_video_detail_summary">进入视频详情页时自动触发点赞。</string>
     <string name="fix_live_quality_url_title">直播画质 URL 修复</string>

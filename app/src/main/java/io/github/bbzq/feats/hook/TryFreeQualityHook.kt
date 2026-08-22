@@ -18,29 +18,116 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
     private val highestBitrate = HighestBitrateProcessor { message, throwable ->
         log("HighestBitrate $message", throwable)
     }
-    private var statsOverlay: VideoStatsOverlayController? = null
 
     override fun startHook() {
         if (env.processName != env.packageName) return
         trialQualityEnabled = ModuleSettings.isUnlockVideoFeaturesEnabled(prefs)
         highestBitrateEnabled = ModuleSettings.isUnlockHighestBitrateEnabled(prefs)
-        if (!trialQualityEnabled && !highestBitrateEnabled) {
-            log("startHook: PlayView quality pipeline disabled")
+        val videoDownloadEnabled = ModuleSettings.isVideoDownloadEnabled(prefs)
+
+        if (!trialQualityEnabled && !highestBitrateEnabled && !videoDownloadEnabled) {
+            log("startHook: PlayView quality pipeline and video download disabled")
             return
         }
+        
+        if (highestBitrateEnabled) {
+            highestBitrate.avoidHdrDolby = ModuleSettings.isAvoidHdrDolbyEnabled(prefs)
+        }
+        env.hostContext?.let { context ->
+            VideoStatsOverlayController.getOrCreate(context)
+        }
+
+        // Hook TextView to append Download Link to description when enabled
+        if (videoDownloadEnabled) {
+            runCatching {
+                val setTextMethod = android.widget.TextView::class.java.getMethod("setText", CharSequence::class.java, android.widget.TextView.BufferType::class.java)
+                env.hookBefore(setTextMethod) { param ->
+                    val tv = param.thisObject as? android.widget.TextView ?: return@hookBefore
+                    if (tv.id == android.view.View.NO_ID) return@hookBefore
+                    val resName = runCatching { tv.resources.getResourceEntryName(tv.id) }.getOrNull()?.lowercase() ?: return@hookBefore
+                    if (resName == "desc" || resName == "tv_desc" || resName == "expandable_desc" ||
+                        resName == "video_desc" || resName == "tv_description" || resName.contains("desc")
+                    ) {
+                        val text = param.args[0] as? CharSequence ?: return@hookBefore
+                        val textStr = text.toString()
+                        if (textStr.isNotBlank() && !textStr.contains("下载视频")) {
+                            tv.isFocusable = true
+                            tv.isClickable = true
+                            tv.isEnabled = true
+                            tv.setTextIsSelectable(true)
+                            tv.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+
+                            val spannable = android.text.SpannableStringBuilder(text)
+                            spannable.append("\n\n")
+                            
+                            // Stats Span
+                            val statsText = "视频数据"
+                            val statsSpan = android.text.SpannableString(statsText)
+                            statsSpan.setSpan(object : android.text.style.ClickableSpan() {
+                                override fun onClick(widget: android.view.View) {
+                                    val ctx = widget.context
+                                    var activity: android.app.Activity? = null
+                                    var current = ctx
+                                    while (current is android.content.ContextWrapper) {
+                                        if (current is android.app.Activity) {
+                                            activity = current
+                                            break
+                                        }
+                                        current = current.baseContext
+                                    }
+                                    activity?.let { VideoStatsOverlayController.getOrCreate(it).showStats(it) }
+                                }
+                                override fun updateDrawState(ds: android.text.TextPaint) {
+                                    super.updateDrawState(ds)
+                                    ds.color = android.graphics.Color.parseColor("#FB7299")
+                                    ds.isUnderlineText = false
+                                }
+                            }, 0, statsSpan.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            
+                            // Download Span
+                            val dlText = "下载视频"
+                            val dlSpan = android.text.SpannableString(dlText)
+                            dlSpan.setSpan(object : android.text.style.ClickableSpan() {
+                                override fun onClick(widget: android.view.View) {
+                                    val ctx = widget.context
+                                    var activity: android.app.Activity? = null
+                                    var current = ctx
+                                    while (current is android.content.ContextWrapper) {
+                                        if (current is android.app.Activity) {
+                                            activity = current
+                                            break
+                                        }
+                                        current = current.baseContext
+                                    }
+                                    activity?.let { VideoStatsOverlayController.getOrCreate(it).showDownload(it) }
+                                }
+                                override fun updateDrawState(ds: android.text.TextPaint) {
+                                    super.updateDrawState(ds)
+                                    ds.color = android.graphics.Color.parseColor("#FB7299")
+                                    ds.isUnderlineText = false
+                                }
+                            }, 0, dlSpan.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+                            spannable.append(" ")
+                            spannable.append(statsSpan)
+                            spannable.append(" | ")
+                            spannable.append(dlSpan)
+                            spannable.append(" ")
+                            param.args[0] = spannable
+                        }
+                    }
+                }
+            }.onFailure { log("Failed to hook TextView.setText for download link", it) }
+        }
+
+        if (!trialQualityEnabled && !highestBitrateEnabled) {
+            log("startHook: PlayView quality pipeline disabled (video download hook active)")
+            return
+        }
+        
         val symbols = env.symbols?.tryFreeQuality?.restore(classLoader) ?: run {
             log("startHook: TryFreeQuality skipped because symbols are unavailable")
             return
-        }
-        if (highestBitrateEnabled) {
-            highestBitrate.avoidHdrDolby = ModuleSettings.isAvoidHdrDolbyEnabled(prefs)
-            (env.hostContext as? Application)?.let { application ->
-                statsOverlay = VideoStatsOverlayController(
-                    application = application,
-                    resolveIdentity = ::resolveWatermarkIdentity,
-                    reportFailure = { message, throwable -> log("VideoStats $message", throwable) },
-                ).also(VideoStatsOverlayController::install)
-            }
         }
 
         var requestHooks = 0
@@ -159,14 +246,26 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
     private fun processPlayViewResponse(target: Any?) {
         if (target == null) return
         runCatching {
+            val videoInfo = target.callMethod("getVideoInfo") ?: target.callMethod("getVodInfo")
+            val bvid = (videoInfo?.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
+                ?: (target.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
+            if (bvid != null && (bvid.startsWith("BV1") || bvid.startsWith("bv1"))) {
+                VideoStatsOverlayController.currentBvid = bvid
+            }
+
             if (trialQualityEnabled) {
                 clearTrialMarkers(target)
                 clearStreamVipMarkers(target.callMethod("getVideoInfo"))
                 clearStreamVipMarkers(target.callMethod("getVodInfo"))
                 clearStreamVipMarkers(target.callMethod("getViewInfo"))
             }
-            if (highestBitrateEnabled) {
-                highestBitrate.preferHighestBitrate(target)?.let { stats -> statsOverlay?.update(stats) }
+            val stats = if (highestBitrateEnabled) {
+                highestBitrate.preferHighestBitrate(target)
+            } else {
+                highestBitrate.readStats(target)
+            }
+            if (stats != null) {
+                VideoStatsOverlayController.instance?.update(stats)
             }
         }.onFailure {
             log("PlayView quality response processing failed at ${target.javaClass.name}", it)
@@ -215,6 +314,16 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
     private fun preparePlayViewRequest(request: Any?) {
         if (request == null) return
         runCatching {
+            val bvid = (request.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
+            val aid = (request.callMethod("getAid") as? Number)?.toLong()?.takeIf { it > 0 }
+            val cid = (request.callMethod("getCid") as? Number)?.toLong()?.takeIf { it > 0 }
+            if (bvid != null && (bvid.startsWith("BV1") || bvid.startsWith("bv1"))) {
+                VideoStatsOverlayController.currentBvid = bvid
+            } else if (aid != null) {
+                VideoStatsOverlayController.currentBvid = SkipVideoAdState.bvidFromAid(aid)
+            }
+            if (cid != null) VideoStatsOverlayController.currentCid = cid
+
             if (trialQualityEnabled) {
                 request.callMethod("setIsNeedTrial", true)
                 request.callMethod("setIsNeedViewInfo", true)
