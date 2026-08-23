@@ -34,9 +34,11 @@ object NPatchRemoteClient {
     fun connect(context: Context, customAuthority: String? = null): Boolean {
         val authority = customAuthority ?: DEFAULT_NPATCH_AUTHORITY
         val targetPackage = context.packageName
+        // Protocol must match NPatch manager RemoteApiProvider:
+        // https://github.com/7723mod/NPatch/blob/miuix/manager/src/main/java/top/nkbe/npatch/manager/RemoteApiProvider.kt
+        // (extras key "modulePackageName", see official SDK NPatchRemoteClient.requestBinder)
         val extras = Bundle().apply {
-            putString("module_package", targetPackage)
-            putInt("calling_uid", android.os.Process.myUid())
+            putString("modulePackageName", targetPackage)
         }
 
         val binder = queryProviderBinder(context, authority, targetPackage, extras)
@@ -78,7 +80,11 @@ object NPatchRemoteClient {
         extras: Bundle,
     ): IBinder? {
         val uri = Uri.parse("content://$authority")
-        val methods = listOf("connect", "getXposedService", "SendBinder", "getBinder")
+        // Manager RemoteApiProvider only accepts "getRemoteService" (writable, for module
+        // apps) and "getInjectedRemoteService" (read-only, for scoped injected targets).
+        // The settings app needs the writable one; other method names fall through to
+        // ContentProvider.call -> null, which broke all rootless config sync before.
+        val methods = listOf("getRemoteService")
 
         for (method in methods) {
             try {

@@ -87,19 +87,38 @@ jobs:
             printf '%s' "$BBZQ_KEYSTORE_BASE64" | base64 -d > signing/bbzq-release.jks
           fi
 
+      - name: Generate local keystore (fork builds have no upstream secrets)
+        run: |
+          if [ ! -f signing/bbzq-release.jks ]; then
+            mkdir -p signing
+            keytool -genkeypair -v -keystore signing/bbzq-release.jks \
+              -storepass forkbuild2026 -alias bbzq -keypass forkbuild2026 \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=BBZQ fork, OU=BBZQ, O=BBZQ, L=City, ST=State, C=CN" >/dev/null 2>&1
+          fi
+
       - name: Export signing env
         env:
-          RELEASE_STORE_FILE: signing/bbzq-release.jks
           RELEASE_STORE_PASSWORD: ${{ secrets.BBZQ_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.BBZQ_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.BBZQ_KEY_PASSWORD }}
         run: |
-          {
-            echo "RELEASE_STORE_FILE=$RELEASE_STORE_FILE"
-            echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
-            echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
-            echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+          echo "RELEASE_STORE_FILE=signing/bbzq-release.jks" >> "$GITHUB_ENV"
+          if [ -n "$RELEASE_STORE_PASSWORD" ]; then
+            echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_STORE_PASSWORD=forkbuild2026" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$RELEASE_KEY_ALIAS" ]; then
+            echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_KEY_ALIAS=bbzq" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$RELEASE_KEY_PASSWORD" ]; then
+            echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_KEY_PASSWORD=forkbuild2026" >> "$GITHUB_ENV"
+          fi
 
       - name: Restore linker guard source
         env:
