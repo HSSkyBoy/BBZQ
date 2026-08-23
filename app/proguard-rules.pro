@@ -27,3 +27,10 @@
     void onModuleLoaded(io.github.libxposed.api.XposedModuleInterface$ModuleLoadedParam);
     void onPackageLoaded(io.github.libxposed.api.XposedModuleInterface$PackageLoadedParam);
 }
+
+# NPatchRemoteClient feeds the manager binder to XposedServiceHelper via reflection.
+# R8 class merging/renaming removes io.github.libxposed.service.XposedServiceHelper in
+# release builds, which silently breaks rootless Remote Store connection
+# ("Xposed 服务尚未连接" in a release APK while debug works). Keep the whole class.
+-keep class io.github.libxposed.service.XposedServiceHelper { *; }
+-keep class io.github.libxposed.service.XposedService { *; }
