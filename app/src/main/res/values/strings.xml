@@ -62,6 +62,8 @@
     <string name="block_live_reservation_summary">移除视频详情页内的直播预约悬浮卡片。</string>
     <string name="block_live_room_qoe_popup_title">屏蔽直播间效果弹窗</string>
     <string name="block_live_room_qoe_popup_summary">移除直播间内的体验调研或效果打分弹窗。</string>
+    <string name="remove_live_room_blur_mask_title">移除直播间模糊遮罩</string>
+    <string name="remove_live_room_blur_mask_summary">移除部分分区（如我的世界、PUBG）直播间在客户端本地生成的画面遮罩。</string>
     <string name="disable_long_press_copy_title">去除长按复制</string>
     <string name="disable_long_press_copy_summary">禁用评论、动态及简介的长按直接复制行为，防止误触。</string>
     <string name="enhance_long_press_copy_title">长按自由复制</string>

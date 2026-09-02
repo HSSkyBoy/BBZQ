@@ -487,6 +487,24 @@ class SettingsContentFactory(
         ) {
             videoDetailRelateFilterSwitch = it
         }
+        rows += createSwitchRow(
+            context.getString(R.string.block_live_reservation_title),
+            context.getString(R.string.block_live_reservation_summary),
+            ModuleSettings.KEY_BLOCK_LIVE_RESERVATION_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.block_live_room_qoe_popup_title),
+            context.getString(R.string.block_live_room_qoe_popup_summary),
+            ModuleSettings.KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.remove_live_room_blur_mask_title),
+            context.getString(R.string.remove_live_room_blur_mask_summary),
+            ModuleSettings.KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED,
+            false,
+        )
         rows += createVideoDetailRelateTitleKeywordRow()
         val relateTypes = videoDetailRelateTypes()
         if (relateTypes.isEmpty()) {

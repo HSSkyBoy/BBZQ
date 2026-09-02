@@ -48,6 +48,7 @@ import io.github.bbzq.feats.hook.LongPressSpeedLockHook
 import io.github.bbzq.feats.hook.ReadEraHook
 import io.github.bbzq.feats.hook.BlockActivityMetaStickerHook
 import io.github.bbzq.feats.hook.WoMicHook
+import io.github.bbzq.feats.hook.LiveRoomBlurMaskHook
 import io.github.bbzq.feats.symbol.BiliHookSymbols
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
 import io.github.libxposed.api.XposedInterface
@@ -199,6 +200,7 @@ object RoamingRuntime {
                 ::MineProfileHook,
                 ::CustomThemeHook,
                 ::BlockActivityMetaStickerHook,
+                ::LiveRoomBlurMaskHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }
