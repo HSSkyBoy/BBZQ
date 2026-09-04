@@ -214,6 +214,9 @@ object RoamingRuntime {
         if (processScope == ProcessScope.WEB) {
             runCatching { CustomThemeHook(env).insertColorForWebProcess() }
                 .onFailure { env.log("CustomTheme web process hook failed", it) }
+            // web 进程渲染列表/评论区,下拉动画配置也要在这里写入
+            runCatching { CustomThemeHook(env).insertLoadEquipForWebProcess() }
+                .onFailure { env.log("CustomTheme web load equip hook failed", it) }
         }
 
         env.log("BBZQ runtime installed ${hooks.size} hook(s)")

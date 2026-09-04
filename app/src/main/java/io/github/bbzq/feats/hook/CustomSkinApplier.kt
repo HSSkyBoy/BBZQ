@@ -33,7 +33,20 @@ internal object CustomSkinApplier {
         if (config.isBlank()) return
         registerThemeChangeObserver(env)
         val target = resolveTarget(env, config) ?: return
-        if (isTargetApplied(target)) return
+        if (isTargetApplied(target)) {
+            // 已应用过:load_equip 仍要幂等确保,放后台线程避免主线程下载
+            if (!applyPending.compareAndSet(false, true)) return
+            Thread {
+                try {
+                    ensureLoadEquipApplied(env, config, target)
+                } catch (error: Throwable) {
+                    env.log("Custom skin load equip ensure failed", error)
+                } finally {
+                    applyPending.set(false)
+                }
+            }.apply { name = "BBZQ-CustomSkinLoadEquip" }.start()
+            return
+        }
         if (!applyPending.compareAndSet(false, true)) return
         Thread {
             try {
@@ -69,7 +82,7 @@ internal object CustomSkinApplier {
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // API 33+ 注册非系统广播必须显式声明导出标志
+            // Android 13+ 注册非系统广播必须显式声明导出标志
             env.hostContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             env.hostContext.registerReceiver(receiver, filter)
@@ -113,6 +126,13 @@ internal object CustomSkinApplier {
         }
     }
 
+    // 幂等确保:文件已在则跳过下载,总是广播让 web 进程重读
+    private fun ensureLoadEquipApplied(env: RoamingEnv, raw: String, target: SkinTarget) {
+        if (!ModuleSettings.isCustomSkinEnabled(env.prefs)) return
+        val root = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        applyLoadEquip(env, root, target.garbDir)
+    }
+
     private fun apply(env: RoamingEnv, raw: String, target: SkinTarget) {
         val root = JSONObject(raw)
         val skin = root.optJSONObject("user_equip") ?: root
@@ -125,8 +145,28 @@ internal object CustomSkinApplier {
         URL(packageUrl).openStream().use { input -> archive.outputStream().use(input::copyTo) }
         unzipSafely(archive, target.assetsDir)
 
+        applyLoadEquip(env, root, target.garbDir)
         writeTarget(env, target)
         env.log("Custom skin applied: id=${target.id} version=${target.version}")
+    }
+
+    // 下拉动画:loading_url 下载到 garb/load_equip/<base64(url)> 供 web 进程加载,再广播重读
+    private fun applyLoadEquip(env: RoamingEnv, root: JSONObject, garbDir: File) {
+        val loadEquip = root.optJSONObject("load_equip") ?: return
+        val url = loadEquip.optString("loading_url")
+        if (url.isBlank()) return
+        runCatching {
+            val dir = File(garbDir, "load_equip").also { it.mkdirs() }
+            val fileName = android.util.Base64.encodeToString(url.toByteArray(), android.util.Base64.NO_WRAP)
+            val target = File(dir, fileName)
+            if (!target.isFile || target.length() == 0L) {
+                URL(url).openStream().use { input -> target.outputStream().use(input::copyTo) }
+            }
+            env.hostContext.sendBroadcast(Intent("${env.packageName}.garb.LOAD_EQUIP_CHANGE"))
+            env.log("Custom skin load equip applied: $fileName")
+        }.onFailure {
+            env.log("Custom skin load equip failed", it)
+        }
     }
 
     private fun notifyGarbChanged(env: RoamingEnv, garb: String) {
