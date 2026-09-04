@@ -147,7 +147,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 58
+    const val CURRENT = 59
 }
 
 data class HookPointStatus(
@@ -2001,21 +2001,83 @@ data class RestoredTripleSpeedSymbols(
 
 data class CustomSkinSymbols(
     val resolverMethod: MethodDescriptor,
+    // 皮肤响应注入(setUserGarb/setLoadEquip)与解析入口,缺失时降级为广播方案
+    val skinResponseClassName: String? = null,
+    val skinResponseUserGarbSetter: MethodDescriptor? = null,
+    val skinResponseLoadEquipSetter: MethodDescriptor? = null,
+    val skinResolveMethod: MethodDescriptor? = null,
+    // 进度条图标(play_icon)三个 URL getter:左拉/右拉/不拉表现图
+    val videoPlayerIconGetters: List<MethodDescriptor> = emptyList(),
+    // blkv 工厂(写下拉动画配置)与其读取出口 get(String,Object)(读取拦截)
+    val blkvPrefsFactory: MethodDescriptor? = null,
+    val blkvGetMethods: List<MethodDescriptor> = emptyList(),
     val evidence: String,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("resolverMethod", resolverMethod.toJson())
+        .putOpt("skinResponseClassName", skinResponseClassName)
+        .putOpt("skinResponseUserGarbSetter", skinResponseUserGarbSetter?.toJson())
+        .putOpt("skinResponseLoadEquipSetter", skinResponseLoadEquipSetter?.toJson())
+        .putOpt("skinResolveMethod", skinResolveMethod?.toJson())
+        .put("videoPlayerIconGetters", org.json.JSONArray(videoPlayerIconGetters.map { it.toJson() }))
+        .putOpt("blkvPrefsFactory", blkvPrefsFactory?.toJson())
+        .put("blkvGetMethods", org.json.JSONArray(blkvGetMethods.map { it.toJson() }))
         .put("evidence", evidence)
 
-    fun restore(classLoader: ClassLoader): Method? = resolverMethod.restoreOptional(classLoader)
+    fun restore(classLoader: ClassLoader): RestoredCustomSkinSymbols? {
+        val resolver = resolverMethod.restoreOptional(classLoader) ?: return null
+        val skinResponseClass = skinResponseClassName?.let(classLoader::loadClassOrNull)
+        val userGarbSetter = skinResponseUserGarbSetter?.restoreOptional(classLoader)
+        val loadEquipSetter = skinResponseLoadEquipSetter?.restoreOptional(classLoader)
+        val skinResolveMethod = skinResolveMethod?.restoreOptional(classLoader)
+        val videoPlayerIconGetters = videoPlayerIconGetters.mapNotNull { it.restoreOptional(classLoader) }
+        val blkvPrefsFactory = blkvPrefsFactory?.restoreOptional(classLoader)
+        val blkvGetMethods = blkvGetMethods.mapNotNull { it.restoreOptional(classLoader) }
+        return RestoredCustomSkinSymbols(
+            resolverMethod = resolver,
+            skinResponseClass = skinResponseClass,
+            skinResponseUserGarbSetter = userGarbSetter,
+            skinResponseLoadEquipSetter = loadEquipSetter,
+            skinResolveMethod = skinResolveMethod,
+            videoPlayerIconGetters = videoPlayerIconGetters,
+            blkvPrefsFactory = blkvPrefsFactory,
+            blkvGetMethods = blkvGetMethods,
+        )
+    }
 
     companion object {
         fun fromJson(obj: JSONObject): CustomSkinSymbols = CustomSkinSymbols(
             resolverMethod = MethodDescriptor.fromJson(obj.getJSONObject("resolverMethod")),
+            skinResponseClassName = obj.optString("skinResponseClassName").takeIf { it.isNotBlank() },
+            skinResponseUserGarbSetter = obj.optJSONObject("skinResponseUserGarbSetter")?.let(MethodDescriptor::fromJson),
+            skinResponseLoadEquipSetter = obj.optJSONObject("skinResponseLoadEquipSetter")?.let(MethodDescriptor::fromJson),
+            skinResolveMethod = obj.optJSONObject("skinResolveMethod")?.let(MethodDescriptor::fromJson),
+            videoPlayerIconGetters = obj.optJSONArray("videoPlayerIconGetters")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let(MethodDescriptor::fromJson)
+                }
+            } ?: emptyList(),
+            blkvPrefsFactory = obj.optJSONObject("blkvPrefsFactory")?.let(MethodDescriptor::fromJson),
+            blkvGetMethods = obj.optJSONArray("blkvGetMethods")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let(MethodDescriptor::fromJson)
+                }
+            } ?: emptyList(),
             evidence = obj.optString("evidence", "-"),
         )
     }
 }
+
+data class RestoredCustomSkinSymbols(
+    val resolverMethod: Method,
+    val skinResponseClass: Class<*>?,
+    val skinResponseUserGarbSetter: Method?,
+    val skinResponseLoadEquipSetter: Method?,
+    val skinResolveMethod: Method?,
+    val videoPlayerIconGetters: List<Method>,
+    val blkvPrefsFactory: Method?,
+    val blkvGetMethods: List<Method>,
+)
 
 data class CustomThemeSymbols(
     val themeHelperClassName: String,

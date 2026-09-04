@@ -1004,9 +1004,99 @@ object BiliSymbolResolver {
                 }
         }.getOrNull() ?: return SymbolScanResult.Missing("garb resolver method not found")
         resolverMethod.isAccessible = true
+
+        // 皮肤响应模型:含 setUserGarb / setLoadEquip setter,
+        // load_equip(下拉动画)与 user_equip 一起在解析 /x/resource/show/skin 时注入
+        val skinResponseClass = runCatching {
+            currentBridge.findClass(
+                FindClass.create().matcher(ClassMatcher.create().usingStrings("user_equip")),
+            ).mapNotNull { classLoader.loadClassOrNull(it.name) }
+                .firstOrNull { type ->
+                    type.declaredMethods.any { it.name == "setUserGarb" && it.parameterCount == 1 }
+                }
+        }.getOrNull()
+        val skinResponseUserGarbSetter = skinResponseClass?.declaredMethods?.firstOrNull {
+            it.name == "setUserGarb" && it.parameterCount == 1
+        }?.apply { isAccessible = true }
+        val skinResponseLoadEquipSetter = skinResponseClass?.declaredMethods?.firstOrNull {
+            it.name == "setLoadEquip" && it.parameterCount == 1
+        }?.apply { isAccessible = true }
+
+        // 皮肤解析入口方法(宽松匹配,与 scanCustomTheme 的规则一致)
+        val skinResolveMethod = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create().matcher(MethodMatcher.create().usingStrings("shouldApplyForceOpGarb =")),
+            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .firstOrNull { it.parameterCount == 1 && it.returnType != Void.TYPE }
+                ?.apply { isAccessible = true }
+        }.getOrNull()
+
+        // 进度条图标(play_icon)的三个 URL getter:类名限定 PlayerIcon,
+        // 命中 protobuf PlayerIcon 与番剧 JSON 模型,排除 Description 等无关类
+        val videoPlayerIconGetters = runCatching {
+            listOf("getDragLeftPng", "getDragRightPng", "getMiddlePng").flatMap { methodName ->
+                currentBridge.findMethod(
+                    FindMethod.create().matcher(MethodMatcher.create().name(methodName)),
+                ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .filter { method ->
+                        method.parameterCount == 0 &&
+                            !Modifier.isAbstract(method.modifiers) &&
+                            !method.declaringClass.isInterface &&
+                            method.declaringClass.name.contains("PlayerIcon")
+                    }
+            }.distinctBy { "${it.declaringClass.name}.${it.name}" }
+                .map { it.apply { isAccessible = true } }
+        }.getOrDefault(emptyList())
+
+        // blkv 工厂(返回 SharedPrefX,非标准 SharedPreferences):反射调用写入下拉动画配置
+        val blkvPrefsFactory = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create().matcher(MethodMatcher.create().usingStrings(".blkv")),
+            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .firstOrNull { method ->
+                    method.parameterCount == 4 &&
+                        Context::class.java.isAssignableFrom(method.parameterTypes[0]) &&
+                        method.parameterTypes[1] == String::class.java &&
+                        method.parameterTypes[2] == Boolean::class.javaPrimitiveType &&
+                        method.parameterTypes[3] == Int::class.javaPrimitiveType &&
+                        method.returnType.name.contains("Shared")
+                }
+                ?.apply { isAccessible = true }
+        }.getOrNull()
+
+        // SharedPrefX 实现类的 get(String,Object):所有 blkv 读取的出口,
+        // hook 后读 garb_load_equip_conf 强制返回自制配置,摆脱广播/缓存竞态
+        val blkvGetMethods = runCatching {
+            currentBridge.findClass(
+                FindClass.create().matcher(ClassMatcher.create().addInterface("com.bilibili.lib.blkv.SharedPrefX")),
+            ).mapNotNull { runCatching { classLoader.loadClassOrNull(it.name) }.getOrNull() }
+                .flatMap { clazz ->
+                    clazz.declaredMethods.asSequence()
+                        .filter { method ->
+                            method.name == "get" && method.parameterCount == 2 &&
+                                method.parameterTypes[0] == String::class.java &&
+                                !method.parameterTypes[1].isPrimitive
+                        }
+                        .map { it.apply { isAccessible = true } }
+                        .toList()
+                }.distinctBy { "${it.declaringClass.name}.${it.name}" }
+        }.getOrDefault(emptyList())
+
         val symbols = CustomSkinSymbols(
             resolverMethod = MethodDescriptor.of(resolverMethod),
-            evidence = "resolver=${resolverMethod.declaringClass.name}.${resolverMethod.name}",
+            skinResponseClassName = skinResponseClass?.name,
+            skinResponseUserGarbSetter = skinResponseUserGarbSetter?.let(MethodDescriptor::of),
+            skinResponseLoadEquipSetter = skinResponseLoadEquipSetter?.let(MethodDescriptor::of),
+            skinResolveMethod = skinResolveMethod?.let(MethodDescriptor::of),
+            videoPlayerIconGetters = videoPlayerIconGetters.map(MethodDescriptor::of),
+            blkvPrefsFactory = blkvPrefsFactory?.let(MethodDescriptor::of),
+            blkvGetMethods = blkvGetMethods.map(MethodDescriptor::of),
+            evidence = "resolver=${resolverMethod.declaringClass.name}.${resolverMethod.name}" +
+                ",userGarb=${skinResponseUserGarbSetter != null}" +
+                ",loadEquip=${skinResponseLoadEquipSetter != null}" +
+                ",videoPlayerIcon=${videoPlayerIconGetters.size}" +
+                ",blkvFactory=${blkvPrefsFactory != null}" +
+                ",blkvGets=${blkvGetMethods.size}",
         )
         return SymbolScanResult.Found(symbols, resolverMethod.declaringClass.name, symbols.evidence)
     }
