@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.os.Build
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.HostAccountResolver
 import io.github.bbzq.feats.RoamingEnv
@@ -55,7 +56,7 @@ internal object CustomSkinApplier {
         if (!receiverRegistered.compareAndSet(false, true)) return
         val action = "${env.packageName}.garb.GARB_CHANGE"
         val filter = IntentFilter(action).apply { priority = -1000 }
-        env.hostContext.registerReceiver(object : BroadcastReceiver() {
+        val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.getIntExtra("key_broadcast_data_type", 0) != 1) return
                 if (intent.getBooleanExtra(EXTRA_SELF_APPLIED, false)) return
@@ -66,7 +67,13 @@ internal object CustomSkinApplier {
                 if (customId <= 0L || incomingId == customId) return
                 scheduleReapply(env)
             }
-        }, filter)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // API 33+ 注册非系统广播必须显式声明导出标志
+            env.hostContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            env.hostContext.registerReceiver(receiver, filter)
+        }
         env.log("Custom skin observer registered for $action")
     }
 
