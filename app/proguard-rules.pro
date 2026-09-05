@@ -65,3 +65,11 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# 7. Shizuku / Sui 库（ShizukuProvider 由 manifest 引用，须保留）
+-keep class rikka.shizuku.** { *; }
+-keep class rikka.sui.** { *; }
+-keep class moe.shizuku.** { *; }
+-dontwarn rikka.shizuku.**
+-dontwarn rikka.sui.**
+-dontwarn moe.shizuku.**

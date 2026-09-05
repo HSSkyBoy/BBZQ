@@ -6,6 +6,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission
+        android:name="moe.shizuku.manager.permission.API_V23"
+        tools:ignore="ScopedStorage" />
 
     <queries>
         <package android:name="tv.danmaku.bili" />
@@ -13,6 +16,8 @@
         <package android:name="org.readera" />
         <package android:name="top.nkbe.npatch" />
         <provider android:authorities="top.nkbe.npatch.remote" />
+        <package android:name="moe.shizuku.manager" />
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application
@@ -54,6 +59,16 @@
                 <category android:name="android.intent.category.INFO" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:writePermission="android.permission.DUMP"
+            tools:targetApi="31"
+            tools:ignore="ExportedContentProvider" />
 
     </application>
 
