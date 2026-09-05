@@ -416,12 +416,12 @@
     <string name="video_detail_relate_type_unknown">未知分类 (%1$s)</string>
     <string name="toolbar_save_and_restart">保存并重启</string>
     <string name="action_restart_bilibili_title">保存并重启哔哩哔哩</string>
-    <string name="action_restart_bilibili_summary">使用 Root 权限强制停止并重新启动哔哩哔哩，使所有修改立即生效。</string>
+    <string name="action_restart_bilibili_summary">使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，使所有修改立即生效。</string>
     <string name="restart_dialog_title">确认保存并重启哔哩哔哩</string>
-    <string name="restart_dialog_message">将使用 Root 权限强制停止并重新启动哔哩哔哩，以使所有模块设置立即生效。是否继续？</string>
+    <string name="restart_dialog_message">将使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，以使所有模块设置立即生效。是否继续？</string>
     <string name="restart_dialog_confirm">确认重启</string>
     <string name="restart_in_progress">正在重新启动哔哩哔哩…</string>
-    <string name="restart_success">哔哩哔哩已重新启动</string>
-    <string name="restart_failed_root_required">获取 Root 权限失败，请确保设备已 Root 并在授权管理（Magisk / KernelSU / APatch）中允许 BBZQ 的 Root 权限。</string>
+    <string name="restart_success">已通过 %s 重启哔哩哔哩</string>
+    <string name="restart_failed_root_required">获取 Root 权限失败，请确保设备已 Root 并在授权管理（Magisk / KernelSU / APatch）中允许 BBZQ 的 Root 权限。如果您没有 Root 权限，Shizuku 也能提供强行停止应用的能力。</string>
     <string name="restart_failed_pkg_not_found">未找到已安装的哔哩哔哩客户端。</string>
 </resources>

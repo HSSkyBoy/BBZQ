@@ -161,4 +161,6 @@ dependencies {
     implementation(libs.libxposed.service)
     implementation(libs.dexkit)
     implementation(libs.okhttp)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 }
