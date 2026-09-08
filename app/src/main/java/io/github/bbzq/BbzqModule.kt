@@ -126,7 +126,7 @@ class BbzqModule : XposedModule() {
 
     private fun resolveCurrentApplication(): Application? {
         return runCatching {
-            currentApplicationMethod.invoke(null) as? Application
+            ReflectionUtils.safeInvoke(currentApplicationMethod, null) as? Application
         }.getOrNull()
     }
 

@@ -34,7 +34,7 @@ class AccessKeyHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         val account = runCatching {
             val args = if (getMethod.parameterCount == 0) emptyArray() else arrayOf<Any?>(env.hostContext)
-            getMethod.invoke(null, *args)
+            ReflectionUtils.safeInvoke(getMethod, null, *args) as? Any
         }.getOrNull() ?: return null
 
         val accessKeyMethod = accountClass.findAccessKeyMethod() ?: run {
