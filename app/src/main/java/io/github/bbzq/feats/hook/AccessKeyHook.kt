@@ -6,6 +6,7 @@ import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.findClassOrNull
+import io.github.bbzq.utils.ReflectionUtils
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
