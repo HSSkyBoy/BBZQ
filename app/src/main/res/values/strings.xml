@@ -422,6 +422,7 @@
     <string name="restart_dialog_confirm">确认重启</string>
     <string name="restart_in_progress">正在重新启动哔哩哔哩…</string>
     <string name="restart_success">已通过 %s 重启哔哩哔哩</string>
+    <string name="restart_success_fallback">哔哩哔哩已重新启动</string>
     <string name="restart_failed_root_required">获取 Root 权限失败，请确保设备已 Root 并在授权管理（Magisk / KernelSU / APatch）中允许 BBZQ 的 Root 权限。如果您没有 Root 权限，Shizuku 也能提供强行停止应用的能力。</string>
     <string name="restart_failed_pkg_not_found">未找到已安装的哔哩哔哩客户端。</string>
 </resources>

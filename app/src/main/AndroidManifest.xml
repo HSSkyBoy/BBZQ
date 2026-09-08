@@ -6,9 +6,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission
-        android:name="moe.shizuku.manager.permission.API_V23"
-        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <queries>
         <package android:name="tv.danmaku.bili" />
