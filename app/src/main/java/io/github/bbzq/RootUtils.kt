@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import io.github.bbzq.utils.ReflectionUtils
 import java.io.File
 import java.util.concurrent.Executors
 import rikka.shizuku.Shizuku
@@ -99,18 +100,26 @@ object RootUtils {
         return runCommandViaShizuku(arrayOf("am", "force-stop", targetPackage))
     }
 
-    // Shizuku 13.x 将 newProcess 标记为 private（@RestrictTo(LIBRARY)），但运行时仍可用，
-    // 通过反射调用以获得高权限进程。
-    private fun runCommandViaShizuku(command: Array<String>): Boolean {
-        return runCatching {
-            val newProcess = Shizuku::class.java.getDeclaredMethod(
+    private val shizukuNewProcessMethod by lazy {
+        runCatching {
+            Shizuku::class.java.getDeclaredMethod(
                 "newProcess",
                 Array<String>::class.java,
                 Array<String>::class.java,
                 String::class.java
             ).apply { isAccessible = true }
-            val process = newProcess.invoke(null, command, null, null) as? Process
-            process?.waitFor() == 0
+        }.getOrNull()
+    }
+
+    // Shizuku 13.x 将 newProcess 标记为 private（@RestrictTo(LIBRARY)），但运行时仍可用，
+    // 通过反射调用以获得高权限进程。
+    private fun runCommandViaShizuku(command: Array<String>): Boolean {
+        return runCatching {
+            val method = shizukuNewProcessMethod ?: return false
+            val process = ReflectionUtils.safeInvoke(method, null, command, null, null) as? Process
+            val exitCode = process?.waitFor()
+            process?.destroy()
+            exitCode == 0
         }.getOrDefault(false)
     }
 
@@ -149,22 +158,29 @@ object RootUtils {
 
         val shizukuPing = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         val shizukuPerm = runCatching { Shizuku.checkSelfPermission() }.getOrDefault(PackageManager.PERMISSION_DENIED)
-        val shizukuNeedsAuth = shizukuPing && shizukuPerm != PackageManager.PERMISSION_GRANTED
+        val shizukuNeedsAuth = !Sui.isSui() && shizukuPing && shizukuPerm != PackageManager.PERMISSION_GRANTED
 
         if (shizukuNeedsAuth && context is Activity) {
-            runCatching {
-                Shizuku.addRequestPermissionResultListener(object : Shizuku.OnRequestPermissionResultListener {
-                    override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
-                        val granted = grantResult == PackageManager.PERMISSION_GRANTED
-                        // 授权成功优先走 Shizuku/Sui；无论授权与否都兜底 Root (su)
+            val listener = object : Shizuku.OnRequestPermissionResultListener {
+                override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
+                    if (requestCode != SHIZUKU_REQUEST_CODE) return
+                    runCatching { Shizuku.removeRequestPermissionResultListener(this) }
+                    val granted = grantResult == PackageManager.PERMISSION_GRANTED
+                    // 在后台线程执行，避免主线程在 waitFor 或 Root 弹窗授权时发生 ANR
+                    executor.execute {
                         val viaShizuku = granted && forceStopViaShizuku(targetPackage)
                         val effective = if (viaShizuku) true else forceStopViaRoot(targetPackage)
                         val method = if (effective) (if (viaShizuku) "Shizuku/Sui" else "Root") else null
                         finishRestart(context, effective, callback, targetPackage, method)
                     }
-                })
+                }
+            }
+
+            runCatching {
+                Shizuku.addRequestPermissionResultListener(listener)
                 Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
             }.onFailure {
+                runCatching { Shizuku.removeRequestPermissionResultListener(listener) }
                 executor.execute {
                     val ok = forceStopViaRoot(targetPackage)
                     finishRestart(context, ok, callback, targetPackage, if (ok) "Root" else null)
@@ -182,15 +198,7 @@ object RootUtils {
                 isSuccess = forceStopViaRoot(targetPackage)
                 method = if (isSuccess) "Root" else null
             }
-            val success = isSuccess
-            val usedMethod = method
-            mainHandler.post {
-                if (success) {
-                    launchAndCallback(context, targetPackage, callback, usedMethod)
-                } else {
-                    callback(false, "shizuku/sui 与 root 均未能强制停止 $targetPackage", null)
-                }
-            }
+            finishRestart(context, isSuccess, callback, targetPackage, method)
         }
     }
 
@@ -239,18 +247,21 @@ object RootUtils {
                     if (success) {
                         // 成功后会自动拉起哔哩哔哩，设置页被切到后台；
                         // 必须用 applicationContext，否则依附于后台 Activity 的 toast 不显示。
-                        val text = if (method != null)
+                        val text = if (!method.isNullOrBlank()) {
                             String.format(activity.getString(R.string.restart_success), method)
-                        else
-                            activity.getString(R.string.restart_success)
+                        } else {
+                            activity.getString(R.string.restart_success_fallback)
+                        }
                         Toast.makeText(activity.applicationContext, text, Toast.LENGTH_LONG).show()
                         onRestartSuccess?.invoke()
                     } else {
-                        AlertDialog.Builder(activity)
-                            .setTitle(R.string.restart_dialog_title)
-                            .setMessage(R.string.restart_failed_root_required)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show()
+                        if (!activity.isFinishing && !activity.isDestroyed) {
+                            AlertDialog.Builder(activity)
+                                .setTitle(R.string.restart_dialog_title)
+                                .setMessage(R.string.restart_failed_root_required)
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show()
+                        }
                     }
                 }
             }
