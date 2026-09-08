@@ -157,12 +157,15 @@ internal object CustomSkinApplier {
         if (url.isBlank()) return
         runCatching {
             val dir = File(garbDir, "load_equip").also { it.mkdirs() }
-            val fileName = android.util.Base64.encodeToString(url.toByteArray(), android.util.Base64.NO_WRAP)
+            // Use URL-safe Base64 to avoid '/' in filename
+            val fileName = android.util.Base64.encodeToString(url.toByteArray(), android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE)
             val target = File(dir, fileName)
             if (!target.isFile || target.length() == 0L) {
                 URL(url).openStream().use { input -> target.outputStream().use(input::copyTo) }
             }
-            env.hostContext.sendBroadcast(Intent("${env.packageName}.garb.LOAD_EQUIP_CHANGE"))
+            // Explicit package for broadcast (Android 13+)
+            val intent = Intent("${env.packageName}.garb.LOAD_EQUIP_CHANGE").apply { setPackage(env.packageName) }
+            env.hostContext.sendBroadcast(intent)
             env.log("Custom skin load equip applied: $fileName")
         }.onFailure {
             env.log("Custom skin load equip failed", it)

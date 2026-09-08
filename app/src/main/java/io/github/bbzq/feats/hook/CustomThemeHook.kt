@@ -22,6 +22,9 @@ import io.github.bbzq.feats.setObjectField
 import io.github.bbzq.feats.symbol.RestoredCustomSkinSymbols
 import io.github.bbzq.feats.symbol.RestoredCustomThemeSymbols
 import org.json.JSONObject
+import android.content.Context
+import android.os.Build
+import io.github.bbzq.utils.ReflectionUtils
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -183,13 +186,19 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         runCatching {
             // 工厂是静态方法,传 null 接收者
-            val prefs = factory.invoke(null, env.hostContext, LOAD_EQUIP_CONF_PREFS_FILE, false, 0) ?: return@runCatching
+            val prefs = ReflectionUtils.safeInvoke(factory, null, env.hostContext, LOAD_EQUIP_CONF_PREFS_FILE, false, 0) ?: return@runCatching
             if (!writeBlkv(prefs, LOAD_EQUIP_CONF_KEY, loadEquip.toString())) {
                 log("Custom skin load equip conf write failed: no putString api on ${prefs.javaClass.name}")
                 return@runCatching
             }
-            // 先写再广播,web 进程收到广播后重读才能拿到新配置
-            env.hostContext.sendBroadcast(Intent("${env.packageName}.garb.LOAD_EQUIP_CHANGE"))
+            // Write then broadcast; use explicit package flag on Android 13+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                env.hostContext.sendBroadcast(
+                    Intent("${env.packageName}.garb.LOAD_EQUIP_CHANGE").apply { setPackage(env.packageName) }
+                )
+            } else {
+                env.hostContext.sendBroadcast(Intent("${env.packageName}.garb.LOAD_EQUIP_CHANGE"))
+            }
             log("Custom skin load equip conf written: id=${loadEquip.optLong("id")} via ${factory.declaringClass.name}.${factory.name}")
         }.onFailure {
             log("Custom skin load equip conf write failed", it)
@@ -240,8 +249,8 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         skinSymbols.blkvGetMethods.forEach { getter ->
             env.hookAfter(getter) { param ->
-                if (!ModuleSettings.isCustomSkinEnabled(prefs)) return@hookAfter
                 if (param.args.getOrNull(0) != LOAD_EQUIP_CONF_KEY) return@hookAfter
+                if (!ModuleSettings.isCustomSkinEnabled(prefs)) return@hookAfter
                 val root = customSkinConfig() ?: return@hookAfter
                 val loadEquip = root.optJSONObject("load_equip") ?: return@hookAfter
                 if (loadEquip.optString("loading_url").isBlank() || loadEquip.optLong("id") <= 0L) {
