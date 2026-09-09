@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats
+package io.github.bbzq.feats
 
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -50,6 +50,9 @@ fun Class<*>.fieldOrNull(name: String?): Field? {
 
 fun Any.getObjectField(name: String?): Any? =
     javaClass.fieldOrNull(name)?.let { runCatching { it.get(this) }.getOrNull() }
+
+fun Class<*>.getStaticObjectField(name: String?): Any? =
+    fieldOrNull(name)?.let { runCatching { it.get(null) }.getOrNull() }
 
 fun Any.setObjectField(name: String?, value: Any?): Boolean {
     val field = javaClass.fieldOrNull(name) ?: return false

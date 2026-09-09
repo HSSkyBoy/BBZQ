@@ -596,6 +596,7 @@ class SettingsContentFactory(
             false,
         ),
         createCustomCdnHostRow(),
+        createCustomCdnSpeedTestRow(),
     )
 
     private fun commentRows(): List<View> {
@@ -1759,6 +1760,31 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(customCdnHostSummary)
+        }
+    }
+
+    private fun createCustomCdnSpeedTestRow(): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                io.github.bbzq.ui.CdnSpeedTestDialog(context, prefs) {
+                    refresh()
+                }.show()
+            }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.custom_cdn_speed_test_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(TextView(context).apply {
+                text = context.getString(R.string.custom_cdn_speed_test_summary)
+                textSize = 12f
+                setTextColor(summaryTextColor)
+                setPadding(0, dp(4), 0, 0)
+            })
         }
     }
 
