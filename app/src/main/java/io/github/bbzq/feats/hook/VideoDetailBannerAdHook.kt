@@ -5,56 +5,85 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Space
 import io.github.bbzq.ModuleSettings
-import io.github.bbzq.ModuleSettingsBridge
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
+import io.github.bbzq.feats.allMethods
+import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.symbol.RestoredVideoDetailBannerAdSymbols
-import java.lang.reflect.Constructor
-import java.lang.reflect.InvocationHandler
-import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
-import java.lang.reflect.Proxy
-import java.util.IdentityHashMap
-
-import io.github.bbzq.feats.allMethods
 import java.lang.reflect.Modifier
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val hookedDriverClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
-    private val underPlayerProxies = IdentityHashMap<Any, Any>()
-    private val relateProxies = IdentityHashMap<Any, Any>()
-    private val merchandiseProxies = IdentityHashMap<Any, Any>()
-    private val pausedPageProxies = IdentityHashMap<Any, Any>()
-    private val adPanelProxies = IdentityHashMap<Any, Any>()
+    private val hookedUnderPlayerClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedRelateClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedMerchandiseClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedPausedPageClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedAdPanelClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private var blockedCount = 0
 
     override fun startHook() {
         if (env.processName != env.packageName) return
-        val enabled = ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)
-        if (!enabled) {
-            log("startHook: VideoDetailBannerAd disabled, settings=${ModuleSettingsBridge.lastStatus}")
-            return
-        }
-
-        val symbols = env.symbols?.videoDetailBannerAd?.restore(classLoader)
-        if (symbols == null) {
-            log("startHook: VideoDetailBannerAd skipped because symbols are unavailable")
-            return
-        }
 
         var installed = 0
-        if (installGAdVideoDetailProxy(symbols)) installed++
-        installed += installRelateGameComponentBlock(symbols)
-        if (installed == 0) {
+        installed += installVDPausedPageDirectBlock()
+
+        val symbols = env.symbols?.videoDetailBannerAd?.restore(classLoader)
+        if (symbols != null) {
+            if (installGAdVideoDetailHooks(symbols)) {
+                installed++
+            }
+        } else {
+            log("startHook: VideoDetailBannerAd symbols restore returned null, using direct hooks")
+        }
+
+        if (installed > 0) {
+            isInstalled = true
+            log("startHook: VideoDetailBannerAd installed=$installed, initialEnabled=${ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)}")
+        } else {
             log("startHook: VideoDetailBannerAd no hook point found")
         }
     }
 
-    private fun installGAdVideoDetailProxy(symbols: RestoredVideoDetailBannerAdSymbols): Boolean {
+    private fun installVDPausedPageDirectBlock(): Int {
+        val vdPausedPageClass = classLoader.findClassOrNull("com.bilibili.ad.adview.videodetail.pausedpage.VDPausedPage")
+            ?: return 0
+        var count = 0
+        val requestMethod = vdPausedPageClass.declaredMethods.firstOrNull {
+            it.name == "requestPausedPage" && !Modifier.isStatic(it.modifiers)
+        }
+        if (requestMethod != null) {
+            env.hookBefore(requestMethod) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("VDPausedPage.requestPausedPage")
+                param.result = null
+            }
+            count++
+        }
+
+        val countDownMethod = vdPausedPageClass.declaredMethods.firstOrNull {
+            it.name == "getCountDownView" && !Modifier.isStatic(it.modifiers)
+        }
+        if (countDownMethod != null) {
+            env.hookAfter(countDownMethod) { param ->
+                runCatching {
+                    if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@runCatching
+                    logBlocked("VDPausedPage.getCountDownView")
+                    val v = param.result as? View
+                    v?.visibility = View.GONE
+                }
+            }
+            count++
+        }
+        log("startHook: VideoDetailBannerAd VDPausedPage direct hook installed=$count")
+        return count
+    }
+
+    private fun installGAdVideoDetailHooks(symbols: RestoredVideoDetailBannerAdSymbols): Boolean {
         val getVideoDetail = symbols.getVideoDetail ?: return false
         val videoDetailType = symbols.videoDetailType ?: return false
         if (
@@ -69,6 +98,7 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         env.hookAfter(getVideoDetail) { param ->
             runCatching {
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@runCatching
                 val original = param.result ?: return@runCatching
                 if (!videoDetailType.isInstance(original)) return@runCatching
                 val concreteClass = original.javaClass
@@ -88,39 +118,6 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return true
     }
 
-    private fun installRelateGameComponentBlock(symbols: RestoredVideoDetailBannerAdSymbols): Int {
-        val relateGameComponentType = symbols.relateGameComponentType ?: return 0
-        val simpleViewEntryConstructor = symbols.simpleViewEntryConstructor ?: return 0
-        val createViewEntry = symbols.createViewEntry ?: return 0
-        val bindToView = symbols.bindToView ?: return 0
-        val unit = symbols.kotlinUnit ?: return 0
-
-        env.hookBefore(createViewEntry) { param ->
-            runCatching {
-                if (!relateGameComponentType.isInstance(param.thisObject)) return@runCatching
-                val context = param.args.getOrNull(0) as? Context ?: return@runCatching
-                val emptyEntry = createEmptyViewEntry(simpleViewEntryConstructor, context) ?: return@runCatching
-                logBlocked("getRelateGameView")
-                param.result = emptyEntry
-            }.onFailure {
-                log("VideoDetailBannerAd relate createViewEntry failed", it)
-            }
-        }
-        env.hookBefore(bindToView) { param ->
-            runCatching {
-                if (!relateGameComponentType.isInstance(param.thisObject)) return@runCatching
-                param.result = unit
-            }.onFailure {
-                log("VideoDetailBannerAd relate bindToView failed", it)
-            }
-        }
-        log(
-            "startHook: VideoDetailBannerAd relate game ${relateGameComponentType.name} " +
-                "at ${createViewEntry.declaringClass.name}.createViewEntry/bindToView",
-        )
-        return 2
-    }
-
     private fun hookVideoDetailClassMethods(
         targetClass: Class<*>,
         symbols: RestoredVideoDetailBannerAdSymbols,
@@ -138,46 +135,52 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             when (method.name) {
                 "getUnderPlayer" -> if (underPlayerType != null) {
                     env.hookAfter(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
                         val underPlayer = param.result ?: return@hookAfter
                         if (underPlayerType.isInstance(underPlayer)) {
-                            param.result = underPlayerProxy(underPlayer, underPlayerType)
+                            hookUnderPlayerClass(underPlayer.javaClass)
                         }
                     }
                 }
                 "getRelate" -> if (relateType != null) {
                     env.hookAfter(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
                         val relate = param.result ?: return@hookAfter
                         if (relateType.isInstance(relate)) {
-                            param.result = relateProxy(relate, relateType)
+                            hookRelateClass(relate.javaClass)
                         }
                     }
                 }
                 "getMerchandise" -> if (merchandiseType != null) {
                     env.hookAfter(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
                         val merchandise = param.result ?: return@hookAfter
                         if (merchandiseType.isInstance(merchandise)) {
-                            param.result = merchandiseProxy(merchandise, merchandiseType)
+                            hookMerchandiseClass(merchandise.javaClass)
                         }
                     }
                 }
                 "getPausedPage" -> if (pausedPageType != null && requestPausedPage != null) {
                     env.hookAfter(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
                         val pausedPage = param.result ?: return@hookAfter
                         if (pausedPageType.isInstance(pausedPage)) {
-                            param.result = pausedPageProxy(pausedPage, pausedPageType, requestPausedPage)
+                            hookPausedPageClass(pausedPage.javaClass, requestPausedPage)
                         }
                     }
                 }
                 "getPanel" -> if (adPanelType != null && (getPausedPagePanel != null || getBrandPausedPagePanel != null)) {
                     env.hookAfter(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
                         val panel = param.result ?: return@hookAfter
                         if (adPanelType.isInstance(panel)) {
-                            param.result = adPanelProxy(panel, adPanelType, getPausedPagePanel, getBrandPausedPagePanel)
+                            hookAdPanelClass(panel.javaClass, getPausedPagePanel, getBrandPausedPagePanel)
                         }
                     }
                 }
                 "getEndPage" -> {
                     env.hookBefore(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
                         logBlocked("videoDetail.getEndPage")
                         param.result = null
                     }
@@ -187,282 +190,82 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("VideoDetailBannerAd successfully hooked methods on ${targetClass.name}")
     }
 
-    private fun underPlayerProxy(original: Any, underPlayerType: Class<*>): Any =
-        synchronized(underPlayerProxies) {
-            underPlayerProxies.getOrPut(original) {
-                Proxy.newProxyInstance(
-                    original.javaClass.classLoader ?: classLoader,
-                    collectProxyInterfaces(original, underPlayerType),
-                    InvocationHandler { proxy, method, args ->
-                        runCatching {
-                            when {
-                                method.isObjectMethod("toString", 0) ->
-                                    "BBZQUnderPlayerProxy(${original.javaClass.name})"
-                                method.isObjectMethod("hashCode", 0) ->
-                                    System.identityHashCode(proxy)
-                                method.isObjectMethod("equals", 1) ->
-                                    proxy === args?.firstOrNull()
-                                method.name == "getUpperAdView" -> {
-                                    logBlocked(method.name)
-                                    null
-                                }
-                                method.name in BLOCKED_METHODS -> {
-                                    logBlocked(method.name)
-                                    val result = invokeOriginal(original, method, args) ?: return@runCatching null
-                                    createAdCallbackProxy(result)
-                                }
-                                else ->
-                                    invokeOriginal(original, method, args)
-                            }
-                        }.getOrElse {
-                            log("VideoDetailBannerAd underPlayer proxy failed at ${method.declaringClass.name}.${method.name}", it)
-                            invokeOriginal(original, method, args)
-                        }
-                    },
-                )
+    private fun hookUnderPlayerClass(clazz: Class<*>) {
+        if (!hookedUnderPlayerClasses.add(clazz)) return
+        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) && it.name in BLOCKED_METHODS }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("underPlayer.${method.name}")
+                param.result = null
             }
-        }
-
-    private fun pausedPageProxy(
-        original: Any,
-        pausedPageType: Class<*>,
-        requestPausedPage: Method,
-    ): Any = synchronized(pausedPageProxies) {
-        pausedPageProxies.getOrPut(original) {
-            Proxy.newProxyInstance(
-                original.javaClass.classLoader ?: classLoader,
-                collectProxyInterfaces(original, pausedPageType),
-                InvocationHandler { proxy, method, args ->
-                    runCatching {
-                        when {
-                            method.isObjectMethod("toString", 0) ->
-                                "BBZQPausedPageProxy(${original.javaClass.name})"
-                            method.isObjectMethod("hashCode", 0) ->
-                                System.identityHashCode(proxy)
-                            method.isObjectMethod("equals", 1) ->
-                                proxy === args?.firstOrNull()
-                            method.name == "requestPausedPage" || method.hasSameSignatureAs(requestPausedPage) -> {
-                                logBlocked(method.name)
-                                null
-                            }
-                            method.name == "getCountDownView" -> {
-                                logBlocked(method.name)
-                                val context = args?.getOrNull(0) as? Context
-                                if (context != null) {
-                                    Space(context).apply {
-                                        visibility = View.GONE
-                                        layoutParams = ViewGroup.LayoutParams(0, 0)
-                                    }
-                                } else {
-                                    null
-                                }
-                            }
-                            else ->
-                                invokeOriginal(original, method, args)
-                        }
-                    }.getOrElse {
-                        log("VideoDetailBannerAd paused page proxy failed at ${method.declaringClass.name}.${method.name}", it)
-                        invokeOriginal(original, method, args)
-                    }
-                },
-            )
         }
     }
 
-    private fun adPanelProxy(
-        original: Any,
-        adPanelType: Class<*>,
-        getPausedPagePanel: Method?,
-        getBrandPausedPagePanel: Method?,
-    ): Any = synchronized(adPanelProxies) {
-        adPanelProxies.getOrPut(original) {
-            Proxy.newProxyInstance(
-                original.javaClass.classLoader ?: classLoader,
-                collectProxyInterfaces(original, adPanelType),
-                InvocationHandler { proxy, method, args ->
-                    runCatching {
-                        when {
-                            method.isObjectMethod("toString", 0) ->
-                                "BBZQAdPanelProxy(${original.javaClass.name})"
-                            method.isObjectMethod("hashCode", 0) ->
-                                System.identityHashCode(proxy)
-                            method.isObjectMethod("equals", 1) ->
-                                proxy === args?.firstOrNull()
-                            method.hasSameSignatureAs(getPausedPagePanel) ||
-                                method.hasSameSignatureAs(getBrandPausedPagePanel) -> {
-                                logBlocked(method.name)
-                                val result = invokeOriginal(original, method, args) ?: return@runCatching null
-                                createAdCallbackProxy(result)
-                            }
-                            else ->
-                                invokeOriginal(original, method, args)
-                        }
-                    }.getOrElse {
-                        log("VideoDetailBannerAd panel proxy failed at ${method.declaringClass.name}.${method.name}", it)
-                        invokeOriginal(original, method, args)
-                    }
-                },
-            )
+    private fun hookRelateClass(clazz: Class<*>) {
+        if (!hookedRelateClasses.add(clazz)) return
+        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) && it.name == "getAdRelateView" }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("relate.getAdRelateView")
+                param.result = null
+            }
         }
     }
 
-    private fun relateProxy(original: Any, relateType: Class<*>): Any =
-        synchronized(relateProxies) {
-            relateProxies.getOrPut(original) {
-                Proxy.newProxyInstance(
-                    original.javaClass.classLoader ?: classLoader,
-                    collectProxyInterfaces(original, relateType),
-                    InvocationHandler { proxy, method, args ->
-                        runCatching {
-                            when {
-                                method.isObjectMethod("toString", 0) ->
-                                    "BBZQRelateProxy(${original.javaClass.name})"
-                                method.isObjectMethod("hashCode", 0) ->
-                                    System.identityHashCode(proxy)
-                                method.isObjectMethod("equals", 1) ->
-                                    proxy === args?.firstOrNull()
-                                method.name == "getAdRelateView" -> {
-                                    logBlocked(method.name)
-                                    null
-                                }
-                                else ->
-                                    invokeOriginal(original, method, args)
-                            }
-                        }.getOrElse {
-                            log("VideoDetailBannerAd relate proxy failed at ${method.declaringClass.name}.${method.name}", it)
-                            invokeOriginal(original, method, args)
-                        }
-                    },
-                )
+    private fun hookMerchandiseClass(clazz: Class<*>) {
+        if (!hookedMerchandiseClasses.add(clazz)) return
+        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) && it.name == "getAdMerchandiseView" }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("merchandise.getAdMerchandiseView")
+                param.result = null
             }
         }
+    }
 
-    private fun merchandiseProxy(original: Any, merchandiseType: Class<*>): Any =
-        synchronized(merchandiseProxies) {
-            merchandiseProxies.getOrPut(original) {
-                Proxy.newProxyInstance(
-                    original.javaClass.classLoader ?: classLoader,
-                    collectProxyInterfaces(original, merchandiseType),
-                    InvocationHandler { proxy, method, args ->
-                        runCatching {
-                            when {
-                                method.isObjectMethod("toString", 0) ->
-                                    "BBZQMerchandiseProxy(${original.javaClass.name})"
-                                method.isObjectMethod("hashCode", 0) ->
-                                    System.identityHashCode(proxy)
-                                method.isObjectMethod("equals", 1) ->
-                                    proxy === args?.firstOrNull()
-                                method.name == "getAdMerchandiseView" -> {
-                                    logBlocked(method.name)
-                                    null
-                                }
-                                else ->
-                                    invokeOriginal(original, method, args)
-                            }
-                        }.getOrElse {
-                            log("VideoDetailBannerAd merchandise proxy failed at ${method.declaringClass.name}.${method.name}", it)
-                            invokeOriginal(original, method, args)
-                        }
-                    },
-                )
+    private fun hookPausedPageClass(clazz: Class<*>, requestPausedPage: Method) {
+        if (!hookedPausedPageClasses.add(clazz)) return
+        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) }.forEach { method ->
+            if (method.name == "requestPausedPage" || method.hasSameSignatureAs(requestPausedPage)) {
+                env.hookBefore(method) { param ->
+                    if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                    logBlocked("pausedPage.${method.name}")
+                    param.result = null
+                }
+            } else if (method.name == "getCountDownView") {
+                env.hookAfter(method) { param ->
+                    runCatching {
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@runCatching
+                        logBlocked("pausedPage.getCountDownView")
+                        val v = param.result as? View
+                        v?.visibility = View.GONE
+                    }
+                }
             }
         }
+    }
 
-    private fun invokeOriginal(target: Any, method: Method, args: Array<Any?>?): Any? =
-        try {
-            if (args == null) method.invoke(target) else method.invoke(target, *args)
-        } catch (throwable: InvocationTargetException) {
-            throw throwable.targetException ?: throwable
+    private fun hookAdPanelClass(clazz: Class<*>, getPausedPagePanel: Method?, getBrandPausedPagePanel: Method?) {
+        if (!hookedAdPanelClasses.add(clazz)) return
+        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) }.forEach { method ->
+            if (method.hasSameSignatureAs(getPausedPagePanel) ||
+                method.hasSameSignatureAs(getBrandPausedPagePanel) ||
+                method.name == "getDynamicPausedPagePanel"
+            ) {
+                env.hookBefore(method) { param ->
+                    if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                    logBlocked("adPanel.${method.name}")
+                    param.result = null
+                }
+            }
         }
-
-    private fun Method.isObjectMethod(name: String, parameterCount: Int): Boolean =
-        declaringClass == Any::class.java && this.name == name && this.parameterCount == parameterCount
+    }
 
     private fun Method.hasSameSignatureAs(other: Method?): Boolean =
         other != null &&
             name == other.name &&
             returnType == other.returnType &&
             parameterTypes.contentEquals(other.parameterTypes)
-
-    private fun collectProxyInterfaces(original: Any, primaryType: Class<*>): Array<Class<*>> =
-        buildSet {
-            add(primaryType)
-            original.javaClass.interfaces.forEach(::add)
-            original.javaClass.takeIf { it.isInterface }?.let(::add)
-        }.toTypedArray()
-
-    private fun createEmptyViewEntry(entryConstructor: Constructor<*>, context: Context): Any? {
-        val view = Space(context).apply {
-            visibility = View.GONE
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0)
-        }
-        return runCatching {
-            entryConstructor.newInstance(view)
-        }.getOrNull()
-    }
-
-    private fun createAdCallbackProxy(originalCallback: Any): Any {
-        val callbackClass = originalCallback.javaClass
-
-        if (callbackClass.name.startsWith("kotlinx.coroutines.") ||
-            callbackClass.name.startsWith("kotlin.coroutines.")
-        ) {
-            return originalCallback
-        }
-
-        val interfaces = buildSet {
-            var currentClass: Class<*>? = callbackClass
-            while (currentClass != null) {
-                currentClass.interfaces.forEach { add(it) }
-                currentClass = currentClass.superclass
-            }
-        }.toTypedArray()
-
-        if (interfaces.isEmpty()) return originalCallback
-
-        if (interfaces.any { it.name.startsWith("kotlinx.coroutines.") || it.name.startsWith("kotlin.coroutines.") }) {
-            return originalCallback
-        }
-
-        val falseStateFlow = runCatching {
-            val stateFlowKt = callbackClass.classLoader?.loadClass("kotlinx.coroutines.flow.StateFlowKt")
-                ?: Class.forName("kotlinx.coroutines.flow.StateFlowKt")
-            val method = stateFlowKt.getDeclaredMethod("MutableStateFlow", Any::class.java)
-            method.invoke(null, java.lang.Boolean.FALSE)
-        }.getOrNull()
-
-        return Proxy.newProxyInstance(
-            callbackClass.classLoader ?: classLoader,
-            interfaces,
-            InvocationHandler { proxy, method, args ->
-                when {
-                    method.isObjectMethod("toString", 0) ->
-                        "BBZQAdCallbackProxy(${originalCallback.javaClass.name})"
-                    method.isObjectMethod("hashCode", 0) ->
-                        System.identityHashCode(proxy)
-                    method.isObjectMethod("equals", 1) ->
-                        proxy === args?.firstOrNull()
-                    method.name == "isBlankView" && method.parameterCount == 0 -> true
-                    method.name == "defaultContainerVisible" && method.parameterCount == 0 -> false
-                    method.name == "getViewHeight" && method.parameterCount == 0 -> 0
-                    method.name == "isSupportAnimIn" && method.parameterCount == 0 -> false
-                    method.name == "getVisibleFlow" && method.parameterCount == 0 && falseStateFlow != null -> {
-                        falseStateFlow
-                    }
-                    (method.name == "getRootView" || method.name == "getAdView" || method.name == "getAdRoot") && method.parameterCount == 0 -> {
-                        val realView = invokeOriginal(originalCallback, method, args) as? View
-                        realView?.apply {
-                            visibility = View.GONE
-                            layoutParams = ViewGroup.LayoutParams(0, 0)
-                            setPadding(0, 0, 0, 0)
-                        }
-                        realView
-                    }
-                    else -> invokeOriginal(originalCallback, method, args)
-                }
-            },
-        )
-    }
 
     private fun logBlocked(methodName: String) {
         val count = ++blockedCount
@@ -475,4 +278,3 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private val BLOCKED_METHODS = setOf("getUpperAdView", "getUpperHDView", "getUpperNestView")
     }
 }
-

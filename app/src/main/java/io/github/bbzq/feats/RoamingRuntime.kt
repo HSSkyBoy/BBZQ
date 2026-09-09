@@ -9,6 +9,7 @@ import io.github.bbzq.ModuleSettingsBridge
 import io.github.bbzq.RuntimeEnvironmentInfo
 import kotlin.LazyThreadSafetyMode
 import io.github.bbzq.feats.hook.BottomBarHook
+import io.github.bbzq.feats.hook.DaggerCircularDependencyFixHook
 import io.github.bbzq.feats.hook.AutoLikeHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
@@ -133,7 +134,6 @@ object RoamingRuntime {
                     prefs = env.prefs,
                 )
             }
-            HookUpdateChecker.check(env)
         }
         val symbols = if (processScope != ProcessScope.UNSUPPORTED) {
             BiliSymbolResolver.resolve(
@@ -165,6 +165,7 @@ object RoamingRuntime {
             )
 
             ProcessScope.MAIN -> listOf(
+                ::DaggerCircularDependencyFixHook,
                 ::SettingHook,
                 ::SplashAdHook,
                 ::ShareHook,
@@ -209,21 +210,32 @@ object RoamingRuntime {
             ProcessScope.UNSUPPORTED -> emptyList()
         }
 
-        hooks.forEach { factory ->
-            val hook = factory(env)
+        val activeHooks = hooks.map { it(env) }
+        activeHooks.forEach { hook ->
             runCatching { hook.startHook() }
                 .onFailure { env.log("Hook failed: ${hook.javaClass.simpleName}", it) }
+        }
+
+        BiliSymbolResolver.onSymbolsUpdated = { updatedSymbols ->
+            env.symbols = updatedSymbols
+            activeHooks.filter { !it.isInstalled }.forEach { hook ->
+                runCatching {
+                    hook.startHook()
+                    if (hook.isInstalled) {
+                        env.log("Deferred hook installed: ${hook.javaClass.simpleName}")
+                    }
+                }.onFailure { env.log("Deferred hook failed: ${hook.javaClass.simpleName}", it) }
+            }
         }
 
         if (processScope == ProcessScope.WEB) {
             runCatching { CustomThemeHook(env).insertColorForWebProcess() }
                 .onFailure { env.log("CustomTheme web process hook failed", it) }
-            // web 进程渲染列表/评论区,下拉动画配置也要在这里写入
             runCatching { CustomThemeHook(env).insertLoadEquipForWebProcess() }
                 .onFailure { env.log("CustomTheme web load equip hook failed", it) }
         }
 
-        env.log("BBZQ runtime installed ${hooks.size} hook(s)")
+        env.log("BBZQ runtime installed ${activeHooks.size} hook(s)")
     }
 
     private fun resolveProcessScope(packageName: String, processName: String): ProcessScope {
@@ -314,7 +326,7 @@ abstract class BaseRoamingHook(
         env.log(message, throwable)
     }
 
-    protected var isInstalled: Boolean = false
+    var isInstalled: Boolean = false
 
     abstract fun startHook()
 }

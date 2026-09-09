@@ -88,7 +88,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    private fun purifyMineData(mineData: Any) {
+    private fun purifyMineData(mineData: Any) = runCatching {
         val components = linkedSetOf<String>()
         val hidden = if (ModuleSettings.isCustomMineComponentHideEnabled(prefs)) {
             ModuleSettings.getHiddenMineComponents(prefs)
@@ -99,23 +99,41 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         // AccountMineV2 structure: sectionListV2 -> itemList -> title
         val sectionListV2Field = runCatching { mineData.javaClass.getDeclaredField("sectionListV2").apply { isAccessible = true } }.getOrNull()
         if (sectionListV2Field != null) {
-            val sections = runCatching { sectionListV2Field.get(mineData) as? MutableList<*> }.getOrNull()
+            val sections = runCatching { sectionListV2Field.get(mineData) as? List<*> }.getOrNull()
             sections?.forEach { section ->
                 if (section == null) return@forEach
                 val itemListField = runCatching { section.javaClass.getDeclaredField("itemList").apply { isAccessible = true } }.getOrNull()
                 if (itemListField != null) {
-                    val itemList = runCatching { itemListField.get(section) as? MutableList<*> }.getOrNull()
-                    itemList?.removeAll { item ->
-                        if (item == null) return@removeAll false
-                        val titleField = runCatching { item.javaClass.getDeclaredField("title").apply { isAccessible = true } }.getOrNull()
-                        if (titleField != null) {
-                            val title = runCatching { titleField.get(item) as? String }.getOrNull()?.trim()
+                    val rawList = runCatching { itemListField.get(section) as? List<*> }.getOrNull()
+                    if (rawList != null) {
+                        val toKeep = ArrayList<Any?>()
+                        var modified = false
+                        rawList.forEach { item ->
+                            if (item == null) {
+                                toKeep.add(item)
+                                return@forEach
+                            }
+                            val titleField = runCatching { item.javaClass.getDeclaredField("title").apply { isAccessible = true } }.getOrNull()
+                            val title = titleField?.let { runCatching { it.get(item) as? String }.getOrNull() }?.trim()
                             if (!title.isNullOrBlank()) {
                                 components.add(title)
-                                return@removeAll title in hidden
+                                if (title in hidden) {
+                                    modified = true
+                                    return@forEach
+                                }
+                            }
+                            toKeep.add(item)
+                        }
+                        if (modified) {
+                            val success = runCatching {
+                                (rawList as? MutableList<Any?>)?.clear()
+                                (rawList as? MutableList<Any?>)?.addAll(toKeep)
+                                true
+                            }.getOrDefault(false)
+                            if (!success) {
+                                runCatching { itemListField.set(section, toKeep) }
                             }
                         }
-                        false
                     }
                 }
             }
@@ -126,18 +144,36 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         legacyLists.forEach { fieldName ->
             val listField = runCatching { mineData.javaClass.getDeclaredField(fieldName).apply { isAccessible = true } }.getOrNull()
             if (listField != null) {
-                val list = runCatching { listField.get(mineData) as? MutableList<*> }.getOrNull()
-                list?.removeAll { item ->
-                    if (item == null) return@removeAll false
-                    val titleField = runCatching { item.javaClass.getDeclaredField("title").apply { isAccessible = true } }.getOrNull()
-                    if (titleField != null) {
-                        val title = runCatching { titleField.get(item) as? String }.getOrNull()?.trim()
+                val rawList = runCatching { listField.get(mineData) as? List<*> }.getOrNull()
+                if (rawList != null) {
+                    val toKeep = ArrayList<Any?>()
+                    var modified = false
+                    rawList.forEach { item ->
+                        if (item == null) {
+                            toKeep.add(item)
+                            return@forEach
+                        }
+                        val titleField = runCatching { item.javaClass.getDeclaredField("title").apply { isAccessible = true } }.getOrNull()
+                        val title = titleField?.let { runCatching { it.get(item) as? String }.getOrNull() }?.trim()
                         if (!title.isNullOrBlank()) {
                             components.add(title)
-                            return@removeAll title in hidden
+                            if (title in hidden) {
+                                modified = true
+                                return@forEach
+                            }
+                        }
+                        toKeep.add(item)
+                    }
+                    if (modified) {
+                        val success = runCatching {
+                            (rawList as? MutableList<Any?>)?.clear()
+                            (rawList as? MutableList<Any?>)?.addAll(toKeep)
+                            true
+                        }.getOrDefault(false)
+                        if (!success) {
+                            runCatching { listField.set(mineData, toKeep) }
                         }
                     }
-                    false
                 }
             }
         }
@@ -145,6 +181,8 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (components.isNotEmpty()) {
             saveKnownComponents(components)
         }
+    }.onFailure { throwable ->
+        log("purifyMineData error", throwable)
     }
 
     private fun saveKnownComponents(names: Set<String>) {

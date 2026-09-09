@@ -15,20 +15,12 @@ import java.lang.reflect.Proxy
 import java.util.Collections
 import java.util.WeakHashMap
 
-/**
- * Keeps the normal long-press playback speed active after a downward drag.
- *
- * Bilibili 9.0–9.6 keeps the stock listener registration stable, while the scroll-listener
- * API changed: older releases expose addOnLongPressScrollListener directly and newer releases
- * keep its PriorityGestureProcessor private.  Both variants are discovered by method shape.
- */
 class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val states = Collections.synchronizedMap(WeakHashMap<Any, LockState>())
     private val installedListenerClasses = Collections.newSetFromMap(WeakHashMap<Class<*>, Boolean>())
 
     override fun startHook() {
         if (env.processName != env.packageName) return
-        if (!ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs)) return
 
         val gestureServiceClass = classLoader.findClassOrNull(GESTURE_SERVICE_CLASS) ?: return logSkip("GestureService")
         val longPressListenerClass = classLoader.findClassOrNull(LONG_PRESS_LISTENER_CLASS) ?: return logSkip("OnLongPressListener")
@@ -39,6 +31,7 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val scrollRegistrar = findScrollRegistrar(gestureServiceClass)
             ?: return logSkip("GestureService long-press scroll registration")
         env.hookAfter(registerMethod) { param ->
+            if (!ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs)) return@hookAfter
             val service = param.thisObject ?: return@hookAfter
             val listener = param.args.firstOrNull() ?: return@hookAfter
             if (!isSpeedListener(listener)) return@hookAfter
@@ -50,7 +43,8 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 .onFailure { log("LongPressSpeedLock: failed to register scroll listener", it) }
                 .onSuccess { state.installed = true }
         }
-        log("startHook: LongPressSpeedLock installed via ${gestureServiceClass.name}.${registerMethod.name}")
+        isInstalled = true
+        log("startHook: LongPressSpeedLock installed (dynamic switch enabled)")
     }
 
     private fun installListenerHooks(listenerClass: Class<*>) {
@@ -59,50 +53,53 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
             it.name == "onLongPress" && it.parameterTypes.contentEquals(arrayOf(MotionEvent::class.java))
         }?.let { method ->
             env.hookBefore(method) { param ->
-                if (param.thisObject?.let(states::get)?.locked == true) param.result = true
+                if (ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs) && param.thisObject?.let(states::get)?.locked == true) param.result = true
             }
         }
-        // Releases were named onLongPressEnd in 9.0–9.4 and b in later versions.  Find the
-        // non-long-press MotionEvent callback by shape so both generation families work.
         listenerClass.declaredMethods.firstOrNull {
             it.name != "onLongPress" &&
                 it.returnType == Void.TYPE &&
                 it.parameterTypes.contentEquals(arrayOf(MotionEvent::class.java))
         }?.let { method ->
             env.hookBefore(method) { param ->
-                if (param.thisObject?.let(states::get)?.locked == true) param.result = null
+                if (ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs) && param.thisObject?.let(states::get)?.locked == true) param.result = null
             }
         }
     }
 
     private fun createScrollProxy(type: Class<*>, listener: Any, state: LockState): Any =
-        Proxy.newProxyInstance(classLoader, arrayOf(type), InvocationHandler { _, method, args ->
-            if (method.name != "onScroll") return@InvocationHandler defaultValue(method)
-            val down = args?.getOrNull(0) as? MotionEvent ?: return@InvocationHandler false
-            val move = args.getOrNull(1) as? MotionEvent ?: return@InvocationHandler false
-            val vertical = kotlin.math.abs(move.y - down.y) >= kotlin.math.abs(move.x - down.x)
-            if (!isLandscape() || !vertical) return@InvocationHandler false
-            val boundary = lockBoundary()
-            if (state.handledDownPress === down) {
-                if (state.locked && move.y < boundary) state.locked = false
-                return@InvocationHandler false
-            }
-            if (move.y < boundary) return@InvocationHandler false
-            state.handledDownPress = down
-            if (!state.locked) {
-                state.locked = true
-                Toast.makeText(env.hostContext, "松手锁定倍速", Toast.LENGTH_SHORT).show()
-                true
-            } else {
-                state.locked = false
-                listener.javaClass.findLongPressEndMethod()?.invoke(listener, move)
-                true
+        Proxy.newProxyInstance(classLoader, arrayOf(type), InvocationHandler { proxy, method, args ->
+            when (method.name) {
+                "toString" -> "BBZQLongPressScrollListener"
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.getOrNull(0)
+                "onScroll" -> {
+                    val down = args?.getOrNull(0) as? MotionEvent ?: return@InvocationHandler false
+                    val move = args.getOrNull(1) as? MotionEvent ?: return@InvocationHandler false
+                    val vertical = kotlin.math.abs(move.y - down.y) >= kotlin.math.abs(move.x - down.x)
+                    if (!isLandscape() || !vertical) return@InvocationHandler false
+                    val boundary = lockBoundary()
+                    if (state.handledDownPress === down) {
+                        if (state.locked && move.y < boundary) state.locked = false
+                        return@InvocationHandler false
+                    }
+                    if (move.y < boundary) return@InvocationHandler false
+                    state.handledDownPress = down
+                    if (!state.locked) {
+                        state.locked = true
+                        Toast.makeText(env.hostContext, "松手锁定倍速", Toast.LENGTH_SHORT).show()
+                        true
+                    } else {
+                        state.locked = false
+                        listener.javaClass.findLongPressEndMethod()?.invoke(listener, move)
+                        true
+                    }
+                }
+                else -> defaultValue(method)
             }
         })
 
     private fun findScrollRegistrar(gestureServiceClass: Class<*>): ScrollRegistrar? {
-        // 9.0–9.4 and the 9.6 APK fixture expose the registration method directly.  The
-        // listener interface is obfuscated between versions, so its first argument is used.
         gestureServiceClass.declaredMethods.firstOrNull { method ->
             method.returnType == Void.TYPE &&
                 method.parameterTypes.size == 2 &&
@@ -115,8 +112,6 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
-        // 9.5 stores the processor privately. Its generic field signature still carries the
-        // listener interface name, which is enough to create and insert a dynamic proxy.
         val listenerType = classLoader.findClassOrNull(LONG_PRESS_SCROLL_LISTENER_CLASS) ?: return null
         val processorField = gestureServiceClass.declaredFields.firstOrNull {
             it.genericType.typeName.contains(LONG_PRESS_SCROLL_LISTENER_CLASS)
@@ -155,6 +150,12 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun defaultValue(method: Method): Any? = when (method.returnType) {
         Boolean::class.javaPrimitiveType -> false
         Int::class.javaPrimitiveType -> 0
+        Long::class.javaPrimitiveType -> 0L
+        Float::class.javaPrimitiveType -> 0.0f
+        Double::class.javaPrimitiveType -> 0.0
+        Byte::class.javaPrimitiveType -> 0.toByte()
+        Short::class.javaPrimitiveType -> 0.toShort()
+        Char::class.javaPrimitiveType -> '\u0000'
         else -> null
     }
 

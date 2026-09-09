@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.os.Bundle
+import android.os.Looper
 import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.LayoutInflater
@@ -150,6 +151,9 @@ object BiliSymbolResolver {
     @Volatile
     private var memorySymbols: BiliHookSymbols? = null
 
+    @Volatile
+    var onSymbolsUpdated: ((BiliHookSymbols) -> Unit)? = null
+
     fun resolve(
         hostContext: Context,
         classLoader: ClassLoader,
@@ -172,12 +176,46 @@ object BiliSymbolResolver {
             return diskSymbols
         }
 
+        val isMainThread = Looper.myLooper() == Looper.getMainLooper()
+        if (isMainThread) {
+            log("BiliSymbolResolver: cache miss on main thread, performing fast initial scan to prevent ANR/black screen", null)
+            val fastSymbols = scan(
+                hostContext = appContext,
+                classLoader = classLoader,
+                fingerprint = fingerprint,
+                log = log,
+                allowDexKit = false,
+            )
+            memorySymbols = fastSymbols
+            kotlin.concurrent.thread(name = "BBZQ-AsyncScan", isDaemon = true) {
+                runCatching {
+                    log("BiliSymbolResolver: async full DexKit scan started", null)
+                    val fullSymbols = scan(
+                        hostContext = appContext,
+                        classLoader = classLoader,
+                        fingerprint = fingerprint,
+                        log = log,
+                        allowDexKit = true,
+                    )
+                    writeCache(prefs, fingerprint, fullSymbols, log)
+                    memorySymbols = fullSymbols
+                    log("BiliSymbolResolver: async full DexKit scan completed and cached fp=$fingerprint", null)
+                    publishStatus(prefs, fullSymbols, log)
+                    onSymbolsUpdated?.invoke(fullSymbols)
+                }.onFailure { throwable ->
+                    log("BiliSymbolResolver: async full DexKit scan failed", throwable)
+                }
+            }
+            return fastSymbols
+        }
+
         log("BiliSymbolResolver scan begin fp=$fingerprint", null)
         val scanned = scan(
             hostContext = appContext,
             classLoader = classLoader,
             fingerprint = fingerprint,
             log = log,
+            allowDexKit = true,
         )
         writeCache(prefs, fingerprint, scanned, log)
         memorySymbols = scanned
@@ -203,6 +241,7 @@ object BiliSymbolResolver {
             classLoader = classLoader,
             fingerprint = fingerprint,
             log = log,
+            allowDexKit = true,
         )
         writeCache(prefs, fingerprint, scanned, log)
         memorySymbols = scanned
@@ -217,6 +256,7 @@ object BiliSymbolResolver {
         classLoader: ClassLoader,
         fingerprint: String,
         log: (String, Throwable?) -> Unit,
+        allowDexKit: Boolean = true,
     ): BiliHookSymbols {
         val sourcePaths = sourcePaths(hostContext)
         val scanErrors = ArrayList<String>()
@@ -229,6 +269,7 @@ object BiliSymbolResolver {
         }
 
         fun bridge(): DexKitBridge? {
+            if (!allowDexKit) return null
             bridge?.let { return it }
             val opened = DexKitBridgeProvider.openFirstAvailable(
                 sourcePaths = sourcePaths,
