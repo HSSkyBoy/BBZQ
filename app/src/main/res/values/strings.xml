@@ -211,6 +211,10 @@
     <string name="home_top_bar_promotion_summary">隐藏首页顶部游戏入口。</string>
     <string name="home_search_default_word_title">移除首页推荐搜索词</string>
     <string name="home_search_default_word_summary">清空首页搜索框内的推荐搜索词。</string>
+    <string name="search_hot_clean_title">净化搜索首页</string>
+    <string name="search_hot_clean_summary">移除搜索界面的热搜榜和猜你想搜推荐，仅保留搜索历史记录。</string>
+    <string name="search_suggest_clean_title">隐藏搜索联想词</string>
+    <string name="search_suggest_clean_summary">在搜索框输入文字时不展示搜索联想词和卡片推荐。</string>
 
     <!-- 播放页 -->
     <string name="playback_hide_banner_title">屏蔽视频页广告</string>

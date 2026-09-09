@@ -27,6 +27,7 @@ import io.github.bbzq.feats.hook.HomeRecommendPreloadHook
 import io.github.bbzq.feats.hook.HomeRecommendTabHook
 import io.github.bbzq.feats.hook.HomeComponentHideHook
 import io.github.bbzq.feats.hook.HomeTopBarPurifyHook
+import io.github.bbzq.feats.hook.SearchPurifyHook
 import io.github.bbzq.feats.hook.RewardAdHook
 import io.github.bbzq.feats.hook.SettingHook
 import io.github.bbzq.feats.hook.ShareHook
@@ -178,6 +179,7 @@ object RoamingRuntime {
                 ::HomeRecommendPreloadHook,
                 ::DynamicPageHook,
                 ::HomeTopBarPurifyHook,
+                ::SearchPurifyHook,
                 ::StoryDefaultLaunchHook,
                 ::StoryPlayerAdHook,
                 ::StoryFullscreenHook,

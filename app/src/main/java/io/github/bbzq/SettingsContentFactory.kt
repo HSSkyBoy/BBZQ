@@ -461,6 +461,18 @@ class SettingsContentFactory(
             ModuleSettings.KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.search_hot_clean_title),
+            context.getString(R.string.search_hot_clean_summary),
+            ModuleSettings.KEY_SEARCH_HOT_CLEAN_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.search_suggest_clean_title),
+            context.getString(R.string.search_suggest_clean_summary),
+            ModuleSettings.KEY_SEARCH_SUGGEST_CLEAN_ENABLED,
+            false,
+        )
         return rows
     }
 
