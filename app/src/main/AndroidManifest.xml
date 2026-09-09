@@ -6,27 +6,26 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <queries>
         <package android:name="tv.danmaku.bili" />
         <package android:name="com.wo.voice2" />
         <package android:name="org.readera" />
         <package android:name="top.nkbe.npatch" />
+        <package android:name="io.github.biliz" />
         <provider android:authorities="top.nkbe.npatch.remote" />
-        <package android:name="moe.shizuku.manager" />
-        <package android:name="moe.shizuku.privileged.api" />
+        <provider android:authorities="io.github.biliz.settings.provider" />
     </queries>
 
     <application
-        android:name=".BbzqApplication"
+        android:name=".BilizApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.BBZQ"
+        android:theme="@style/Theme.BILIZ"
         android:supportsRtl="true"
         android:description="@string/xposed_description"
         tools:targetApi="37">
@@ -59,13 +58,9 @@
         </activity>
 
         <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:multiprocess="false"
-            android:enabled="true"
+            android:name=".ModuleSettingsProvider"
+            android:authorities="io.github.biliz.settings.provider"
             android:exported="true"
-            android:writePermission="android.permission.DUMP"
-            tools:targetApi="31"
             tools:ignore="ExportedContentProvider" />
 
     </application>

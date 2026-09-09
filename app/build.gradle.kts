@@ -22,7 +22,8 @@ fun gitOutput(vararg args: String): String? {
     }.getOrNull()
 }
 
-val releaseCode = gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 1
+val releaseCode = providers.gradleProperty("releaseCode").orNull?.toIntOrNull()
+    ?: gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 1
 val releaseName: String by rootProject
 val signingPropertiesFile = rootProject.file("keystore.properties")
 val signingProperties = Properties().apply {
@@ -46,16 +47,16 @@ fun signingValue(name: String): String? {
 }
 
 fun abiFiltersFromProperty(): List<String> {
-    val raw = providers.gradleProperty("bbzqAbiFilters").orNull?.trim().orEmpty()
+    val raw = providers.gradleProperty("bilizAbiFilters").orNull?.trim().orEmpty()
     return raw
         .split(',')
         .map { it.trim() }
         .filter { it.isNotEmpty() }
-        .ifEmpty { listOf("arm64-v8a") }
+        .ifEmpty { listOf("arm64-v8a", "armeabi-v7a") }
 }
 
 fun buildOutputSuffix(): String {
-    return providers.gradleProperty("bbzqOutputSuffix").orNull
+    return providers.gradleProperty("bilizOutputSuffix").orNull
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
         ?.let { "-$it" }
@@ -81,19 +82,19 @@ apksign {
 apktransform {
     copy {
         when (it.buildType) {
-            "release" -> file("${it.name}/bbzq_v${releaseName}-${releaseCode}${buildOutputSuffix()}.apk")
+            "release" -> file("${it.name}/biliz_v${releaseName}-${releaseCode}${buildOutputSuffix()}.apk")
             else -> null
         }
     }
 }
 
 android {
-    namespace = "io.github.bbzq"
+    namespace = "io.github.biliz"
     compileSdk = 37
     buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId = "io.github.bbzq"
+        applicationId = "io.github.biliz"
         minSdk = 24
         targetSdk = 37
         versionCode = releaseCode
@@ -161,6 +162,4 @@ dependencies {
     implementation(libs.libxposed.service)
     implementation(libs.dexkit)
     implementation(libs.okhttp)
-    implementation(libs.shizuku.api)
-    implementation(libs.shizuku.provider)
 }

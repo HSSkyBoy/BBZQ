@@ -1,12 +1,12 @@
 <resources>
     <!-- 基本資訊 -->
-    <string name="app_name">BBZQ</string>
-    <string name="settings_title">BBZQ 设置</string>
-    <string name="xposed_description">基于 libxposed API 102 的 BBZQ 模块，提供空降助手、功能增强与组件净化等功能。</string>
+    <string name="app_name">BILIZ</string>
+    <string name="settings_title">BILIZ 设置</string>
+    <string name="xposed_description">基于 libxposed API 102 的 BILIZ 模块，提供空降助手、功能增强与组件净化等功能。</string>
 
     <!-- 介紹頁 -->
     <string name="intro_module_title">模块信息</string>
-    <string name="intro_module_body">当前版本：BBZQ %1$s</string>
+    <string name="intro_module_body">当前版本：BILIZ %1$s</string>
     <string name="intro_desc_title">模块介绍</string>
     <string name="intro_desc_body">面向哔哩哔哩客户端的轻量级 Xposed 模块，提供空降助手、功能增强及组件净化等常用功能。</string>
     <string name="intro_launcher_title">桌面入口说明</string>
@@ -16,7 +16,7 @@
 
     <!-- 設定入口 -->
     <string name="entry_title">高级设置</string>
-    <string name="entry_summary">BBZQ 模块配置</string>
+    <string name="entry_summary">BILIZ 模块配置</string>
 
     <!-- 分组標題 -->
     <string name="account_tools_section_title">账号工具</string>
@@ -36,6 +36,8 @@
     <string name="unlock_video_features_ui_summary">同步角标、提示和试用展示层，主要影响 UI 可见状态。</string>
     <string name="unlock_highest_bitrate_title">解锁最高码率</string>
     <string name="unlock_highest_bitrate_summary">自动强制请求 QN 127 最高画质，按 8K＞杜比视界＞HDR＞4K 的优先级选择服务端返回的最高档与最高码率候选，并在播放器控制栏提供带账号水印的视频统计信息。</string>
+    <string name="fake_wifi_title">画质解锁增强</string>
+    <string name="fake_wifi_summary">强制解除移动数据/蜂窝流量限制，防止在非 Wi-Fi 环境下高码率与 4K 画质自动回退到 1080P。</string>
     <string name="avoid_hdr_dolby_title">避免 HDR / 杜比视界</string>
     <string name="avoid_hdr_dolby_summary">需先开启“解锁最高码率”。跳过 HDR 与杜比视界档位，改选同级最高的 SDR 画质（适合非 HDR 屏幕），8K 不受影响。</string>
     <string name="half_screen_quality_title">视频半屏清晰度</string>
@@ -62,8 +64,6 @@
     <string name="block_live_reservation_summary">移除视频详情页内的直播预约悬浮卡片。</string>
     <string name="block_live_room_qoe_popup_title">屏蔽直播间效果弹窗</string>
     <string name="block_live_room_qoe_popup_summary">移除直播间内的体验调研或效果打分弹窗。</string>
-    <string name="remove_live_room_blur_mask_title">移除直播间模糊遮罩</string>
-    <string name="remove_live_room_blur_mask_summary">移除部分分区（如我的世界、PUBG）直播间在客户端本地生成的画面遮罩。</string>
     <string name="disable_long_press_copy_title">去除长按复制</string>
     <string name="disable_long_press_copy_summary">禁用评论、动态及简介的长按直接复制行为，防止误触。</string>
     <string name="enhance_long_press_copy_title">长按自由复制</string>
@@ -88,10 +88,6 @@
     <string name="story_video_component_alpha_summary">当前值：%1$d%%。调整视频信息、右侧互动和顶部控件的透明度。</string>
     <string name="purify_story_video_ad_blocked_count">累计拦截：%1$d</string>
 
-    <string name="copy_access_key_title">复制 AccessKey</string>
-    <string name="copy_access_key_summary">获取并复制当前登录账号的 AccessKey。</string>
-    <string name="copy_access_key_not_found">未获取到 AccessKey，请确保已登录并触发过账号相关请求。</string>
-    <string name="copy_access_key_success">AccessKey 已复制到剪贴板。</string>
 
     <!-- 空降助手分組 -->
     <string name="section_skip_video_ad">空降助手</string>
@@ -189,7 +185,7 @@
     <string name="home_recommend_tab_filter_title">首页 Tab 过滤</string>
     <string name="home_recommend_tab_filter_summary">根据已读取的首页 Tab 列表，屏蔽不需要的入口。</string>
     <string name="home_recommend_tab_item_title">Tab</string>
-    <string name="home_recommend_tab_unavailable_summary">暂无 Tab 数据。请先重启 B 站并打开首页推荐，再回到 BBZQ 设置中选择需要屏蔽的项目。</string>
+    <string name="home_recommend_tab_unavailable_summary">暂无 Tab 数据。请先重启 B 站并打开首页推荐，再回到 BILIZ 设置中选择需要屏蔽的项目。</string>
     <string name="home_recommend_tab_info_summary">勾选后对应 Tab 会被移除；至少保留一个 Tab，避免首页无法创建页面。</string>
     <string name="home_recommend_hide_all_title">隐藏整个首页内容</string>
     <string name="home_recommend_hide_all_summary">只要是首页容器下的子页面，就把其中信息流 RecyclerView 隐藏，适合把 B 站当搜索工具使用。</string>
@@ -203,7 +199,7 @@
     <string name="bottom_bar_title">自定义底栏</string>
     <string name="bottom_bar_summary">隐藏不需要的底栏入口；首次使用需重启 B 站并打开首页后加载底栏数据。</string>
     <string name="bottom_bar_item_title">底栏项目</string>
-    <string name="bottom_bar_unavailable_summary">尚未读取到底栏数据。开启后重启 B 站并打开首页，再回到 BBZQ 设置中选择需要隐藏的项目。</string>
+    <string name="bottom_bar_unavailable_summary">尚未读取到底栏数据。开启后重启 B 站并打开首页，再回到 BILIZ 设置中选择需要隐藏的项目。</string>
     <string name="bottom_bar_info_summary">勾选代表保留在底栏；取消勾选后会被隐藏。</string>
     <string name="home_top_bar_promotion_title">移除首页游戏图标</string>
     <string name="home_top_bar_promotion_summary">隐藏首页顶部游戏入口。</string>
@@ -213,6 +209,8 @@
     <!-- 播放页 -->
     <string name="playback_hide_banner_title">屏蔽视频页广告</string>
     <string name="playback_hide_banner_summary">阻止视频详情页播放器下方横幅、推荐列表、应用下载、好物推荐和暂停广告创建。</string>
+    <string name="playback_hide_video_mention_title">隐藏视频提及</string>
+    <string name="playback_hide_video_mention_summary">屏蔽播放页简介下方的视频提及、推荐提及等联动卡片与弹窗。</string>
     <string name="playback_block_chronos_promotion_title">屏蔽播放互动组件</string>
     <string name="playback_block_chronos_promotion_summary">移除播放器里的投票、预约、打卡、关注引导、商业活动卡、广告浮层和商业跳转按钮。</string>
     <string name="playback_block_activity_meta_sticker_title">屏蔽"云视听小电视"贴片</string>
@@ -225,6 +223,8 @@
     <string name="playback_disable_half_end_page_summary">视频播完时仅去除半屏状态下的结束推荐页，保留重播按键；全屏播放时的结束推荐正常展示。</string>
     <string name="playback_disable_all_end_page_title">去除全部结束推荐</string>
     <string name="playback_disable_all_end_page_summary">视频播完时去除半屏、横屏全屏、竖屏全屏的所有结束推荐页，干净定格在视频末尾。</string>
+    <string name="playback_enable_exp_end_page_title">启用实验结束推荐</string>
+    <string name="playback_enable_exp_end_page_summary">强制启用官方 9.9.0 Compose 连播倒计时结束推荐页（含连播倒计时浮层）。</string>
     <string name="playback_fix_media_session_card_title">修复系统媒体卡片与封面</string>
     <string name="playback_fix_media_session_card_summary">修复后台听视频时封面背景模糊变纯色、以及媒体卡片从系统媒体中心消失的问题。</string>
 
@@ -251,7 +251,7 @@
     <string name="about_accept_prerelease_title">接收测试版更新</string>
     <string name="about_accept_prerelease_summary">开启后检查更新将包含预发布（pre-release）版本。</string>
     <string name="check_update_dialog_confirm">前往下载</string>
-    <string name="hook_update_available_toast">BBZQ 发现新版本 %1$s，请前往模块设置下载。</string>
+    <string name="hook_update_available_toast">BILIZ 发现新版本 %1$s，请前往模块设置下载。</string>
     <string name="about_export_config_title">导出配置</string>
     <string name="about_export_config_summary">以 ZIP 打包导出功能开关与手动配置，不包含数据或账户内容。</string>
     <string name="about_import_config_title">导入配置</string>
@@ -264,8 +264,6 @@
     <string name="about_skip_video_ad_switch_summary">进入空降助手的主开关与基础说明页。</string>
     <string name="about_skip_video_ad_category_title">空降助手分类设定</string>
     <string name="about_skip_video_ad_category_summary">进入 SponsorBlock 分类选择页。</string>
-    <string name="about_access_key_title">获取 AccessKey</string>
-    <string name="about_access_key_summary">点击尝试获取当前登录账号的 AccessKey。</string>
     <string name="hidden_features_entry_title">隐藏功能入口</string>
     <string name="symbol_cache_refresh_title">清除缓存数据</string>
     <string name="symbol_cache_refresh_no_status">暂无混淆扫描结果。请先启动 B 站，或点击此项发起重扫。</string>
@@ -287,11 +285,6 @@
     <string name="config_import_failed">导入失败：%1$s</string>
     <string name="config_import_confirm_title">确定导入吗</string>
     <string name="config_import_confirm_message">这会覆盖目前的功能开关和手动配置，但其他数据不会变动，是否继续？</string>
-    <string name="access_key_error_title">获取失败</string>
-    <string name="access_key_error_message">尚未获取到 AccessKey。请确保：\n1. 已在 B 站登录账号\n2. 已在 B 站中正常使用（刷几个视频）\n3. 如果还是没有，请清除应用缓存重试或反馈 Issue</string>
-    <string name="access_key_title">当前 AccessKey</string>
-    <string name="access_key_copy_button">复制</string>
-    <string name="access_key_copied_toast">已复制到剪贴板</string>
     <string name="runtime_environment_ok">确定</string>
     <string name="open_url_failed_toast">无法打开链接</string>
     <string name="skip_mode_dialog_title">%1$s - 跳过</string>
@@ -334,6 +327,8 @@
     <string name="comment_min_level_dialog_title">最低显示等级</string>
 
     <!-- 我的页 -->
+    <string name="mine_list_style_title">服务项改为列表样式</string>
+    <string name="mine_list_style_summary">将个人中心推荐服务、更多服务等服务项从九宫格按钮转为经典纵向列表。</string>
     <string name="mine_remove_vip_title">隐藏大会员入口</string>
     <string name="mine_remove_vip_summary">移除“我的”页面中的大会员卡片展示。</string>
     <string name="mine_keep_vip_space_title">保留大会员占位空间</string>
@@ -437,13 +432,12 @@
     <string name="video_detail_relate_type_unknown">未知分类 (%1$s)</string>
     <string name="toolbar_save_and_restart">保存并重启</string>
     <string name="action_restart_bilibili_title">保存并重启哔哩哔哩</string>
-    <string name="action_restart_bilibili_summary">使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，使所有修改立即生效。</string>
+    <string name="action_restart_bilibili_summary">使用 Root 权限强制停止并重新启动哔哩哔哩，使所有修改立即生效。</string>
     <string name="restart_dialog_title">确认保存并重启哔哩哔哩</string>
-    <string name="restart_dialog_message">将使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，以使所有模块设置立即生效。是否继续？</string>
+    <string name="restart_dialog_message">将使用 Root 权限强制停止并重新启动哔哩哔哩，以使所有模块设置立即生效。是否继续？</string>
     <string name="restart_dialog_confirm">确认重启</string>
     <string name="restart_in_progress">正在重新启动哔哩哔哩…</string>
-    <string name="restart_success">已通过 %s 重启哔哩哔哩</string>
-    <string name="restart_success_fallback">哔哩哔哩已重新启动</string>
-    <string name="restart_failed_root_required">获取 Root 权限失败，请确保设备已 Root 并在授权管理（Magisk / KernelSU / APatch）中允许 BBZQ 的 Root 权限。如果您没有 Root 权限，Shizuku 也能提供强行停止应用的能力。</string>
+    <string name="restart_success">哔哩哔哩已重新启动</string>
+    <string name="restart_failed_root_required">获取 Root 权限失败，请确保设备已 Root 并在授权管理（Magisk / KernelSU / APatch）中允许 BILIZ 的 Root 权限。</string>
     <string name="restart_failed_pkg_not_found">未找到已安装的哔哩哔哩客户端。</string>
 </resources>

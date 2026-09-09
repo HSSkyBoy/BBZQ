@@ -1,4 +1,4 @@
-# BBZQ
+# BILIZ
 > 使用 `libxposed API 102`、由 Kotlin 全量编写的哔哩哔哩增强 Xposed 模组
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)
@@ -8,8 +8,8 @@
 ---
 
 ## 简介
-BBZQ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采用 Kotlin 完整实作，旨在去除不必要内容、优化核心体验，同时提供各类实用功能。	
-模组通过 `META-INF/xposed/java_init.list` 完成入口注册，核心逻辑入口为 `io.github.bbzq.BbzqModule`；配套设置页面内嵌于哔哩哔哩宿主应用外，方便快捷开关各项功能、调整个性化参数，整体架构便于后续迭代维护与功能扩展。
+BILIZ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采用 Kotlin 完整实作，旨在去除不必要内容、优化核心体验，同时提供各类实用功能。	
+模组通过 `META-INF/xposed/java_init.list` 完成入口注册，核心逻辑入口为 `io.github.biliz.BilizModule`；配套设置页面内嵌于哔哩哔哩宿主应用外，方便快捷开关各项功能、调整个性化参数，整体架构便于后续迭代维护与功能扩展。
 
 ---
 
@@ -25,12 +25,12 @@ BBZQ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采�
 2. 在支持 `libxposed API 102` 的 Xposed 框架中启用該模组
 3. 将哔哩哔哩加入作用域
 4. 重启目标应用
-5. 进入 `我的 → 设置 → 关于哔哩哔哩 → BBZQ 设置`
+5. 进入 `我的 → 设置 → 关于哔哩哔哩 → BILIZ 设置`
 6. 启用需要的功能
 
 > [!WARNING]
-> **避坑提示：** 请勿使用 Hide My Applist (HMA) 等应用隐藏模组去对「哔哩哔哩」或「BBZQ」启用隐藏列表，否则会导致功能失效或应用崩溃。
-> 參考 https://github.com/HSSkyBoy/BBZQ/issues/5 和 https://github.com/HSSkyBoy/BBZQ/issues/17
+> **避坑提示：** 请勿使用 Hide My Applist (HMA) 等应用隐藏模组去对「哔哩哔哩」或「BILIZ」启用隐藏列表，否则会导致功能失效或应用崩溃。
+> 參考 https://github.com/HSSkyBoy/BILIZ/issues/5 和 https://github.com/HSSkyBoy/BILIZ/issues/17
 
 
 > 桌面图标是模组自身介绍页，不是独立的调试工具。  
@@ -42,7 +42,7 @@ BBZQ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采�
 
 本模组已集成 [NPatch-Remote-API](https://github.com/7723mod/NPatch-Remote-API)：
 - 免 Root 环境下**推荐使用 NPatch**（v1.0.7 或更高版本）。
-- 支持直接在桌面打开 BBZQ 独立应用修改各项设置，配置将通过 NPatch 管理器的 Remote Store 自动双向同步至目标应用，无需重新打包或每次进入宿主应用设置。
+- 支持直接在桌面打开 BILIZ 独立应用修改各项设置，配置将通过 NPatch 管理器的 Remote Store 自动双向同步至目标应用，无需重新打包或每次进入宿主应用设置。
 
 ---
 

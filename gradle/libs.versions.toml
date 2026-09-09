@@ -12,8 +12,6 @@ activity = "1.12.4"
 constraintlayout = "2.2.1"
 okhttp = "5.3.2"
 dexkit = "2.2.0"
-shizukuApi = "13.1.5"
-shizukuProvider = "13.1.5"
 
 [libraries]
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposedApi" }
@@ -27,8 +25,6 @@ activity = { group = "androidx.activity", name = "activity", version.ref = "acti
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 dexkit = { group = "org.luckypray", name = "dexkit", version.ref = "dexkit" }
-shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizukuApi" }
-shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizukuProvider" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -1,0 +1,271 @@
+package io.github.biliz.feats.hook
+
+import android.content.Context
+import io.github.biliz.ModuleSettings
+import io.github.biliz.feats.BaseRoamingHook
+import io.github.biliz.feats.RoamingEnv
+import io.github.biliz.feats.allFields
+import io.github.biliz.feats.hookAfter
+import io.github.biliz.feats.hookBefore
+import io.github.biliz.feats.symbol.RestoredRelateResponseGetItemsSymbols
+import io.github.biliz.feats.symbol.RestoredVideoDetailRelateFeedSymbols
+import java.lang.reflect.Field
+import java.lang.reflect.Method
+import java.lang.reflect.Modifier
+
+class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
+    private var titleKeywordsRaw = ""
+    private var titleKeywordsCache = emptyList<String>()
+    private val knownTypes = mutableSetOf<String>()
+    private val methodCache = java.util.concurrent.ConcurrentHashMap<Class<*>, java.util.concurrent.ConcurrentHashMap<String, Method?>>()
+
+    override fun startHook() {
+        if (env.processName != env.packageName) return
+        val enabled = ModuleSettings.isCustomVideoDetailRelateFilterEnabled(prefs)
+        if (!enabled) {
+            log("startHook: VideoDetailRelateFilter disabled, zero hooks installed")
+            return
+        }
+
+        ModuleSettings.refreshKnownVideoDetailRelateTypesCache(prefs)
+        knownTypes.addAll(ModuleSettings.getKnownVideoDetailRelateTypes(prefs))
+
+        val symbols = env.symbols?.videoDetailRelateFeed?.restore(classLoader)
+        if (symbols == null) {
+            log("startHook: VideoDetailRelateFilter skipped because symbols are unavailable")
+            return
+        }
+
+        var installed = 0
+        symbols.responseGetItems.forEach { response ->
+            if (installResponseFilter(response)) installed++
+        }
+
+        if (installed == 0) {
+            log("startHook: VideoDetailRelateFilter no hook point found")
+        } else {
+            isInstalled = true
+            log("startHook: VideoDetailRelateFilter installed=$installed")
+        }
+    }
+
+    private fun installResponseFilter(symbols: RestoredRelateResponseGetItemsSymbols): Boolean {
+        val getItems = symbols.getItems
+        env.hookAfter(getItems) { param ->
+            runCatching {
+                val original = param.result as? List<*> ?: return@runCatching
+                if (original.isEmpty()) return@runCatching
+
+                // 1. 采集所有遇到的卡片类型
+                original.forEach { item ->
+                    extractType(item)?.let { saveKnownType(it) }
+                }
+
+                // 2. 检查是否开启过滤
+                val enabled = ModuleSettings.isCustomVideoDetailRelateFilterEnabled(prefs)
+                if (!enabled) return@runCatching
+                val hiddenTypes = ModuleSettings.getHiddenVideoDetailRelateTypes(prefs)
+                val titleKeywords = currentTitleKeywords()
+
+                if (hiddenTypes.isEmpty() && titleKeywords.isEmpty()) return@runCatching
+
+                val filtered = ArrayList<Any?>(original.size)
+                var removed = 0
+                original.forEach { item ->
+                    if (shouldFilterItem(item, hiddenTypes, titleKeywords)) {
+                        removed++
+                    } else {
+                        filtered.add(item)
+                    }
+                }
+
+                if (removed > 0) {
+                    param.result = filtered
+                    symbols.itemsField?.let { field ->
+                        writeBackFilteredItems(param.thisObject, field, filtered)
+                    }
+                    log("VideoDetailRelateFilter removed $removed item(s) from ${getItems.declaringClass.name}.${getItems.name}")
+                }
+            }.onFailure {
+                log("VideoDetailRelateFilter response hook failed at ${getItems.declaringClass.name}.${getItems.name}", it)
+            }
+        }
+        return true
+    }
+
+    private fun isSafeRelateCardItem(item: Any?): Boolean {
+        if (item == null) return false
+        if (item is Context) return false
+        val name = item.javaClass.name
+        if (name.contains("Driver") ||
+            name.contains("Scope") ||
+            name.contains("Service") ||
+            name.contains("Activity") ||
+            name.contains("Fragment") ||
+            name.contains("Component")
+        ) {
+            return false
+        }
+        return true
+    }
+
+    private fun shouldFilterItem(
+        item: Any?,
+        hiddenTypes: Set<String>,
+        titleKeywords: List<String>,
+    ): Boolean {
+        if (!isSafeRelateCardItem(item)) return false
+        val type = extractType(item)
+
+        if (type != null && hiddenTypes.any { it.equals(type, ignoreCase = true) }) {
+            return true
+        }
+        if (titleKeywords.isNotEmpty()) {
+            val title = extractTitle(item)
+            if (!title.isNullOrBlank() && titleKeywords.any { title.contains(it, ignoreCase = true) }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun extractType(item: Any?): String? {
+        if (!isSafeRelateCardItem(item)) return null
+        // 1. Try getCardCase() (Protobuf RelateCard)
+        callNoArg(item, "getCardCase")?.let { cardCase ->
+            val name = (cardCase as? Enum<*>)?.name ?: cardCase.toString()
+            if (name.isNotBlank() && !name.equals("CARD_NOT_SET", ignoreCase = true)) {
+                return normalizeTypeName(name)
+            }
+        }
+
+        // 2. Try getGoto() / getCardType() (Protobuf Relate)
+        callNoArg(item, "getGoto")?.toString()?.takeIf { it.isNotBlank() }?.let {
+            return normalizeTypeName(it)
+        }
+        callNoArg(item, "getCardType")?.toString()?.takeIf { it.isNotBlank() }?.let {
+            return normalizeTypeName(it)
+        }
+
+        // 3. Try DetailRelateService D0 fields
+        val itemClass = item?.javaClass ?: return null
+        if (itemClass.name.endsWith("D0") || itemClass.name.contains("relate.D0")) {
+            runCatching {
+                val fieldA = itemClass.fields.firstOrNull { it.name == "f289440a" || it.name == "type" }
+                val typeVal = fieldA?.get(item)
+                val typeName = (typeVal as? Enum<*>)?.name ?: typeVal?.toString()
+                if (!typeName.isNullOrBlank() && !typeName.equals("CARD_TYPE_UNKNOWN", ignoreCase = true)) {
+                    return normalizeTypeName(typeName)
+                }
+            }
+            runCatching {
+                val fieldB = itemClass.fields.firstOrNull { it.name == "f289441b" || it.name == "goto" }
+                val gotoVal = fieldB?.get(item)?.toString()
+                if (!gotoVal.isNullOrBlank()) {
+                    return normalizeTypeName(gotoVal)
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun extractTitle(item: Any?): String? {
+        if (!isSafeRelateCardItem(item)) return null
+
+        // 1. Direct getTitle()
+        callNoArg(item, "getTitle")?.toString()?.takeIf { it.isNotBlank() }?.let {
+            return it
+        }
+
+        // 2. Sub-card in RelateCard: getAv(), getGame(), getCm(), getResource(), getLive(), getSpecial(), etc.
+        for (getter in SUB_GETTERS) {
+            val sub = callNoArg(item, getter) ?: continue
+            callNoArg(sub, "getTitle")?.toString()?.takeIf { it.isNotBlank() }?.let {
+                return it
+            }
+        }
+
+        return null
+    }
+
+    private fun normalizeTypeName(raw: String): String {
+        var clean = raw.trim().uppercase()
+        if (clean.startsWith("CARD_TYPE_")) {
+            clean = clean.removePrefix("CARD_TYPE_")
+        }
+        return clean
+    }
+
+    private fun saveKnownType(typeName: String) {
+        val normalized = normalizeTypeName(typeName)
+        if (normalized.isBlank() || normalized == "UNKNOWN" || normalized == "CARD_NOT_SET") return
+
+        synchronized(knownTypes) {
+            if (knownTypes.add(normalized)) {
+                val copy = knownTypes.toSet()
+                ModuleSettings.cacheKnownVideoDetailRelateTypes(copy)
+                prefs.edit()
+                    .putStringSet(ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES, copy)
+                    .apply()
+                log("VideoDetailRelateFilter discovered new card type: $normalized")
+            }
+        }
+    }
+
+    private fun currentTitleKeywords(): List<String> {
+        val raw = ModuleSettings.getVideoDetailRelateTitleKeywordsText(prefs)
+        if (raw != titleKeywordsRaw) {
+            titleKeywordsRaw = raw
+            titleKeywordsCache = ModuleSettings.parseVideoDetailRelateTitleKeywords(raw)
+        }
+        return titleKeywordsCache
+    }
+
+    private fun callNoArg(target: Any?, name: String): Any? {
+        if (target == null) return null
+        val method = debugNoArgMethod(target.javaClass, name) ?: return null
+        return runCatching { method.invoke(target) }.getOrNull()
+    }
+
+    private fun debugNoArgMethod(type: Class<*>, name: String): Method? =
+        methodCache.computeIfAbsent(type) { java.util.concurrent.ConcurrentHashMap() }
+            .computeIfAbsent(name) { methodName ->
+                type.methods
+                    .firstOrNull {
+                        it.name == methodName &&
+                            it.parameterCount == 0 &&
+                            !Modifier.isStatic(it.modifiers)
+                    }
+                    ?.apply { isAccessible = true }
+            }
+
+    private fun writeBackFilteredItems(target: Any?, field: Field?, items: List<Any?>) {
+        if (target == null || field == null) return
+        runCatching {
+            field.set(target, items)
+        }.onFailure { throwable ->
+            log("VideoDetailRelateFilter could not update response items field", throwable)
+        }
+    }
+
+    private companion object {
+        private val SUB_GETTERS = arrayOf(
+            "getBasicInfo",
+            "getAv",
+            "getGame",
+            "getCm",
+            "getResource",
+            "getLive",
+            "getSpecial",
+            "getBangumi",
+            "getBangumiSeason",
+            "getBangumiAv",
+            "getBangumiUgc",
+            "getHistoryAv",
+            "getCourse",
+            "getMiniProgram",
+            "getAiCard",
+        )
+    }
+}
