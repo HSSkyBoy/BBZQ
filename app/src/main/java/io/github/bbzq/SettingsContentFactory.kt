@@ -952,6 +952,12 @@ class SettingsContentFactory(
                 ModuleSettings.KEY_AVOID_HDR_DOLBY_ENABLED,
                 false,
             )
+            rows += createSwitchRow(
+                context.getString(R.string.fake_wifi_title),
+                context.getString(R.string.fake_wifi_summary),
+                ModuleSettings.KEY_FAKE_WIFI_ENABLED,
+                true,
+            )
             rows += createHalfScreenQualityRow()
             rows += createFullScreenQualityRow()
             rows += createSwitchRow(

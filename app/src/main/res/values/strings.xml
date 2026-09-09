@@ -38,6 +38,8 @@
     <string name="unlock_highest_bitrate_summary">自动强制请求 QN 127 最高画质，按 8K＞杜比视界＞HDR＞4K 的优先级选择服务端返回的最高档与最高码率候选，并在播放器控制栏提供带账号水印的视频统计信息。</string>
     <string name="avoid_hdr_dolby_title">避免 HDR / 杜比视界</string>
     <string name="avoid_hdr_dolby_summary">需先开启“解锁最高码率”。跳过 HDR 与杜比视界档位，改选同级最高的 SDR 画质（适合非 HDR 屏幕），8K 不受影响。</string>
+    <string name="fake_wifi_title">伪装 Wi-Fi</string>
+    <string name="fake_wifi_summary">强制解除移动数据/蜂窝流量限制，防止在非 Wi-Fi 环境下高码率与 4K 画质自动回退到 1080P。</string>
     <string name="half_screen_quality_title">视频半屏清晰度</string>
     <string name="half_screen_quality_summary">设置视频半屏播放时的清晰度（默认：%1$s）。若选择非默认档位将拦截半屏低画质预加载并强制锁定清晰度。</string>
     <string name="half_screen_quality_dialog_title">选择视频半屏清晰度</string>

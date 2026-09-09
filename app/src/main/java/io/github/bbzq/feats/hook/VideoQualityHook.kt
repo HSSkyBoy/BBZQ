@@ -10,9 +10,18 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (env.processName != env.packageName) return
         val halfScreenQuality = ModuleSettings.getHalfScreenQuality(prefs)
         val fullScreenQuality = ModuleSettings.getFullScreenQuality(prefs)
+        val fakeWifi = ModuleSettings.isFakeWifiEnabled(prefs)
+        val unlockHighestBitrate = ModuleSettings.isUnlockHighestBitrateEnabled(prefs)
+        val unlockVideoFeatures = ModuleSettings.isUnlockVideoFeaturesEnabled(prefs)
 
-        if (halfScreenQuality == 0 && fullScreenQuality == 0) {
-            log("startHook: VideoQualityHook disabled (both half and full screen are default)")
+        val anyQualityModActive = halfScreenQuality != 0 ||
+            fullScreenQuality != 0 ||
+            fakeWifi ||
+            unlockHighestBitrate ||
+            unlockVideoFeatures
+
+        if (!anyQualityModActive) {
+            log("startHook: VideoQualityHook disabled (no quality modification features enabled)")
             return
         }
 
@@ -36,10 +45,12 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
             symbols.playerQualityServiceMethods.forEach { method ->
                 runCatching {
-                    env.hookBefore(method) { param ->
-                        param.result = halfScreenQuality
+                    if (method.parameterCount == 0) {
+                        env.hookBefore(method) { param ->
+                            param.result = halfScreenQuality
+                        }
+                        installedHooks++
                     }
-                    installedHooks++
                 }.onFailure { log("Failed to hook quality service method ${method.name}", it) }
             }
         }
@@ -56,7 +67,7 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
-        // 3. AutoSupremumQuality constructor overriding & strategy routing
+        // 3. AutoSupremumQuality constructor overriding & ceiling lifting
         symbols.autoSupremumQualityConstructor?.let { ctor ->
             runCatching {
                 env.hookBefore(ctor) { param ->
@@ -71,25 +82,45 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             param.args[1] = fullScreenQuality // loginFull
                             param.args[2] = fullScreenQuality // loginMobileFull
                         }
+                        if (unlockHighestBitrate || unlockVideoFeatures) {
+                            val currentFull = (param.args[1] as? Int) ?: 0
+                            if (currentFull < 127) param.args[1] = 127
+                            val currentMobileFull = (param.args[2] as? Int) ?: 0
+                            if (currentMobileFull < 127) param.args[2] = 127
+                            val currentUnloginFull = (param.args[4] as? Int) ?: 0
+                            if (currentUnloginFull < 127) param.args[4] = 127
+                            val currentUnloginMobile = (param.args[5] as? Int) ?: 0
+                            if (currentUnloginMobile < 127) param.args[5] = 127
+                        }
+                        if (fakeWifi) {
+                            val mobileFull = (param.args[2] as? Int) ?: 0
+                            val full = (param.args[1] as? Int) ?: 0
+                            if (mobileFull < full) {
+                                param.args[2] = full
+                            }
+                        }
                     }
                 }
                 installedHooks++
             }.onFailure { log("Failed to hook AutoSupremumQuality constructor", it) }
         }
 
-        symbols.qualityStrategySelectMethod?.let { method ->
-            runCatching {
-                env.hookBefore(method) { param ->
-                    if (param.args.size >= 3) {
-                        // param.args[1]: isFullscreen, param.args[2]: isVideoPortrait
-                        // Setting isVideoPortrait = true routes through the designated full/half tier
-                        param.args[2] = true
+        // 4. QualityStrategy selectQuality routing
+        if (halfScreenQuality != 0 || fullScreenQuality != 0 || unlockHighestBitrate || unlockVideoFeatures) {
+            symbols.qualityStrategySelectMethod?.let { method ->
+                runCatching {
+                    env.hookBefore(method) { param ->
+                        if (param.args.size >= 3) {
+                            // param.args[1]: isFullscreen, param.args[2]: isVideoPortrait
+                            // Setting isVideoPortrait = true routes through the designated full/half tier
+                            param.args[2] = true
+                        }
                     }
-                }
-                installedHooks++
-            }.onFailure { log("Failed to hook QualityStrategy selectQuality method", it) }
+                    installedHooks++
+                }.onFailure { log("Failed to hook QualityStrategy selectQuality method", it) }
+            }
         }
 
-        log("startHook: VideoQualityHook active halfQn=$halfScreenQuality fullQn=$fullScreenQuality hooks=$installedHooks")
+        log("startHook: VideoQualityHook active halfQn=$halfScreenQuality fullQn=$fullScreenQuality fakeWifi=$fakeWifi highestBitrate=$unlockHighestBitrate hooks=$installedHooks")
     }
 }

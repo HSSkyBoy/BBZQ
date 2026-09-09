@@ -33,6 +33,7 @@ object ModuleSettings {
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
     const val KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED = "player_long_press_speed_lock_enabled"
     const val KEY_FIX_LIVE_QUALITY_URL_ENABLED = "fix_live_quality_url_enabled"
+    const val KEY_FAKE_WIFI_ENABLED = "fake_wifi_enabled"
     const val KEY_DISABLE_HALF_END_PAGE = "disable_half_end_page"
     const val KEY_DISABLE_ALL_END_PAGE = "disable_all_end_page"
     const val KEY_FIX_MEDIA_SESSION_CARD = "fix_media_session_card"
@@ -243,6 +244,9 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_AVOID_HDR_DOLBY_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_AVOID_HDR_DOLBY_ENABLED, false)
         },
+        ExportableConfigSpec(KEY_FAKE_WIFI_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_FAKE_WIFI_ENABLED, true)
+        },
         ExportableConfigSpec(KEY_HALF_SCREEN_QUALITY, ExportableValueType.INT) {
             getHalfScreenQuality(it)
         },
@@ -395,6 +399,9 @@ object ModuleSettings {
     fun isAvoidHdrDolbyEnabled(prefs: SharedPreferences): Boolean =
         isUnlockHighestBitrateEnabled(prefs) &&
             prefs.getBoolean(KEY_AVOID_HDR_DOLBY_ENABLED, false)
+
+    fun isFakeWifiEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_FAKE_WIFI_ENABLED, true)
 
     data class QualityOption(val qn: Int, val label: String)
 
