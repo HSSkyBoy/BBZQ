@@ -1,6 +1,7 @@
 package io.github.bbzq.feats
 
 import android.content.Context
+import io.github.bbzq.AccessKeyRepository
 import java.lang.reflect.Modifier
 
 internal object HostAccountResolver {
@@ -38,8 +39,27 @@ internal object HostAccountResolver {
                 .firstOrNull { it > 0L }
                 ?.toString()
                 .orEmpty()
-            Snapshot(true, uid, resolveUserName(classLoader))
+            val accessKey = resolveAccessKey(accountClass, account)
+            Snapshot(true, uid, resolveUserName(classLoader), accessKey)
         }.getOrDefault(Snapshot.LOGGED_OUT)
+    }
+
+    private fun resolveAccessKey(accountClass: Class<*>, account: Any): String {
+        return runCatching {
+            accountClass.allMethods().asSequence()
+                .filter { method ->
+                    method.parameterCount == 0 && method.returnType == String::class.java &&
+                        (method.name == "getAccessKey" || method.name == "loadAccessTokenString" ||
+                            method.name.contains("accessKey", ignoreCase = true))
+                }
+                .mapNotNull { method ->
+                    runCatching {
+                        method.invoke(if (Modifier.isStatic(method.modifiers)) null else account) as? String
+                    }.getOrNull()
+                }
+                .firstOrNull { AccessKeyRepository.looksLikeAccessKey(it) }
+                .orEmpty()
+        }.getOrDefault("")
     }
 
     private fun resolveUserName(classLoader: ClassLoader): String {
@@ -52,9 +72,14 @@ internal object HostAccountResolver {
         return profile.callMethod("getUserName")?.toString().orEmpty()
     }
 
-    data class Snapshot(val loggedIn: Boolean, val uid: String, val userName: String) {
+    data class Snapshot(
+        val loggedIn: Boolean,
+        val uid: String,
+        val userName: String,
+        val accessKey: String = "",
+    ) {
         companion object {
-            val LOGGED_OUT = Snapshot(false, "", "")
+            val LOGGED_OUT = Snapshot(false, "", "", "")
         }
     }
 

@@ -108,6 +108,9 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val account = HostAccountResolver.resolve(env.hostContext, classLoader)
             putString(ModuleSettings.KEY_HOST_ACCOUNT_UID, if (account.loggedIn) account.uid else "")
             putString(ModuleSettings.KEY_HOST_ACCOUNT_NAME, if (account.loggedIn) account.userName else "")
+            if (account.loggedIn && account.accessKey.isNotBlank()) {
+                putString(ModuleSettings.KEY_LAST_ACCESS_KEY, account.accessKey)
+            }
         }
 
     private companion object {
