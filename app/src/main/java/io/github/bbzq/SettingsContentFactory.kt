@@ -567,6 +567,24 @@ class SettingsContentFactory(
             ModuleSettings.KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_disable_half_end_page_title),
+            context.getString(R.string.playback_disable_half_end_page_summary),
+            ModuleSettings.KEY_DISABLE_HALF_END_PAGE,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_disable_all_end_page_title),
+            context.getString(R.string.playback_disable_all_end_page_summary),
+            ModuleSettings.KEY_DISABLE_ALL_END_PAGE,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_fix_media_session_card_title),
+            context.getString(R.string.playback_fix_media_session_card_summary),
+            ModuleSettings.KEY_FIX_MEDIA_SESSION_CARD,
+            false,
+        )
         return rows
     }
 

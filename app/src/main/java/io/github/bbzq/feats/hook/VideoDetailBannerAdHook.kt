@@ -176,6 +176,12 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         }
                     }
                 }
+                "getEndPage" -> {
+                    env.hookBefore(method) { param ->
+                        logBlocked("videoDetail.getEndPage")
+                        param.result = null
+                    }
+                }
             }
         }
         log("VideoDetailBannerAd successfully hooked methods on ${targetClass.name}")

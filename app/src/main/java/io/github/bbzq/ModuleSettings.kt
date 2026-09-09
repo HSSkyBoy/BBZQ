@@ -33,6 +33,9 @@ object ModuleSettings {
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
     const val KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED = "player_long_press_speed_lock_enabled"
     const val KEY_FIX_LIVE_QUALITY_URL_ENABLED = "fix_live_quality_url_enabled"
+    const val KEY_DISABLE_HALF_END_PAGE = "disable_half_end_page"
+    const val KEY_DISABLE_ALL_END_PAGE = "disable_all_end_page"
+    const val KEY_FIX_MEDIA_SESSION_CARD = "fix_media_session_card"
     const val KEY_CUSTOM_CDN_ENABLED = "custom_cdn_enabled"
     const val KEY_CUSTOM_CDN_HOST = "custom_cdn_host"
     const val KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED = "purify_home_recommend_ad_enabled"
@@ -507,6 +510,15 @@ object ModuleSettings {
 
     fun isFixLiveQualityUrlEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_FIX_LIVE_QUALITY_URL_ENABLED, false)
+
+    fun isDisableHalfEndPage(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_DISABLE_HALF_END_PAGE, false)
+
+    fun isDisableAllEndPage(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_DISABLE_ALL_END_PAGE, false)
+
+    fun isFixMediaSessionCardEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_FIX_MEDIA_SESSION_CARD, true)
 
     /** 已知的 UPos 节点，显示名称与 PiliPlus 当前的 CDN 列表保持一致。 */
     data class CdnEndpoint(val name: String, val host: String)

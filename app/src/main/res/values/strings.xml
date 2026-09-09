@@ -221,6 +221,12 @@
     <string name="playback_skip_reward_summary">自动尝试完成视频激励并获得奖励。</string>
     <string name="playback_auto_like_title">自动点赞视频</string>
     <string name="playback_auto_like_summary">进入详情页时自动对未点赞的视频执行点赞。</string>
+    <string name="playback_disable_half_end_page_title">去除半屏结束推荐</string>
+    <string name="playback_disable_half_end_page_summary">视频播完时仅去除半屏状态下的结束推荐页，保留重播按键；全屏播放时的结束推荐正常展示。</string>
+    <string name="playback_disable_all_end_page_title">去除全部结束推荐</string>
+    <string name="playback_disable_all_end_page_summary">视频播完时去除半屏、横屏全屏、竖屏全屏的所有结束推荐页，干净定格在视频末尾。</string>
+    <string name="playback_fix_media_session_card_title">修复系统媒体卡片与封面</string>
+    <string name="playback_fix_media_session_card_summary">修复后台听视频时封面背景模糊变纯色、以及媒体卡片从系统媒体中心消失的问题。</string>
 
     <!-- 關於頁 -->
     <string name="about_version_title">版本</string>

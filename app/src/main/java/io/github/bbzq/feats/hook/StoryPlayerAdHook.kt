@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats.hook
+package io.github.bbzq.feats.hook
 
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
@@ -104,9 +104,16 @@ class StoryPlayerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun filterReturnList(param: MethodHookParam): FilterResult? {
         val items = (param.result as? List<*>)?.map { it } ?: return null
+        if (items.isEmpty()) return null
         logStoryItems(items)
         val result = filteredStoryList(items)
         if (result.removed == 0) return null
+        if (result.items.isEmpty()) {
+            log("StoryPlayerAd warning: filtering would empty feed items! Retaining first non-ad item.")
+            val safeItem = items.firstOrNull { item -> item != null && !isStoryAd(item) } ?: items.first()
+            param.result = listOf(safeItem)
+            return result
+        }
         param.result = result.items
         incrementBlockedCount(prefs, result.removed)
         return result
@@ -114,9 +121,16 @@ class StoryPlayerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun filterArgumentList(param: MethodHookParam, index: Int): FilterResult? {
         val items = (param.args.getOrNull(index) as? List<*>)?.map { it } ?: return null
+        if (items.isEmpty()) return null
         logStoryItems(items)
         val result = filteredStoryList(items)
         if (result.removed == 0) return null
+        if (result.items.isEmpty()) {
+            log("StoryPlayerAd warning: filtering would empty story pager list! Retaining first non-ad item to prevent activity finish.")
+            val safeItem = items.firstOrNull { item -> item != null && !isStoryAd(item) } ?: items.first()
+            param.args[index] = listOf(safeItem)
+            return result
+        }
         param.args[index] = result.items
         incrementBlockedCount(prefs, result.removed)
         return result

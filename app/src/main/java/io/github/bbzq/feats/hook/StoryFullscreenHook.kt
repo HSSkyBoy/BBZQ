@@ -113,9 +113,17 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return 1
     }
 
+    private fun isStoryActivity(activity: Activity?): Boolean {
+        if (activity == null) return false
+        val name = activity.javaClass.name
+        return name == STORY_VIDEO_ACTIVITY || name.contains("Story", ignoreCase = true)
+    }
+
     private fun installApplyAfter(method: Method): Int {
         env.hookAfter(method) { param ->
-            applyStoryFullscreen(param.thisObject as? Activity)
+            val activity = param.thisObject as? Activity ?: return@hookAfter
+            if (!isStoryActivity(activity)) return@hookAfter
+            applyStoryFullscreen(activity)
         }
         log("startHook: StoryFullscreen at ${method.declaringClass.name}.${method.name}")
         return 1
@@ -124,7 +132,9 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun installFocusHook(method: Method): Int {
         env.hookAfter(method) { param ->
             if (param.args.firstOrNull() == true) {
-                applyStoryFullscreen(param.thisObject as? Activity)
+                val activity = param.thisObject as? Activity ?: return@hookAfter
+                if (!isStoryActivity(activity)) return@hookAfter
+                applyStoryFullscreen(activity)
             }
         }
         log("startHook: StoryFullscreen at ${method.declaringClass.name}.${method.name}")
@@ -132,6 +142,7 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun applyStoryFullscreen(activity: Activity?) {
+        if (!isStoryActivity(activity)) return
         val window = activity?.window ?: return
         setActiveStoryActivity(activity)
         applyStoryFullscreen(window, activity)
@@ -274,6 +285,7 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private companion object {
+        private const val STORY_VIDEO_ACTIVITY = "com.bilibili.video.story.StoryVideoActivity"
         private const val REAPPLY_DELAY_MS = 80L
         private val SYSTEM_BARS_INSET_TYPES =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
