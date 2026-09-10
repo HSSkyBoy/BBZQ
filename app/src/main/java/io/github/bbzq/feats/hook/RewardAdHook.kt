@@ -18,19 +18,26 @@ class RewardAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var miniGameSkipCount = 0
 
     override fun startHook() {
-        if (!ModuleSettings.isSkipRewardAdEnabled(prefs)) return
+        val skipRewardAd = ModuleSettings.isSkipRewardAdEnabled(prefs)
+        val skipMiniGame = ModuleSettings.isSkipMiniGameRewardAdEnabled(prefs)
+        if (!skipRewardAd && !skipMiniGame) return
+
         val symbols = env.symbols?.rewardAd?.restore(classLoader) ?: run {
             log("startHook: RewardAd skipped because symbols are unavailable")
             return
         }
 
         var count = 0
-        count += hookRewardActivity(symbols)
-        count += hookRewardHeaderTimer(symbols)
-        count += hookCountDownTextView(symbols)
-        count += hookMiniGameReward(symbols)
-        count += hookActivitySweeper()
-        log("startHook: RewardAd, methods=$count")
+        if (skipRewardAd) {
+            count += hookRewardActivity(symbols)
+            count += hookRewardHeaderTimer(symbols)
+            count += hookCountDownTextView(symbols)
+            count += hookActivitySweeper()
+        }
+        if (skipMiniGame) {
+            count += hookMiniGameReward(symbols)
+        }
+        log("startHook: RewardAd, methods=$count (rewardAd=$skipRewardAd, miniGame=$skipMiniGame)")
     }
 
     private fun hookRewardActivity(symbols: RestoredRewardAdSymbols): Int {

@@ -295,7 +295,7 @@ object ModuleSettings {
             it.getBoolean(KEY_STORY_VIDEO_KEEP_DANMAKU_ON_COMMENT_ENABLED, false)
         },
         ExportableConfigSpec(KEY_CUSTOM_DOWNLOAD_THREAD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_DOWNLOAD_THREAD_ENABLED, false) },
-        ExportableConfigSpec(KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED, true) },
+        ExportableConfigSpec(KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_LIVE_RESERVATION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_LIVE_RESERVATION_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED, false) },
         ExportableConfigSpec(KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED, false) },
@@ -784,7 +784,7 @@ object ModuleSettings {
         prefs.getInt(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, 1).coerceIn(1, 12)
 
     fun isSkipMiniGameRewardAdEnabled(prefs: SharedPreferences): Boolean =
-        prefs.getBoolean(KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED, true)
+        prefs.getBoolean(KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED, false)
 
     fun isSkipRewardAdEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SKIP_REWARD_AD_ENABLED, false)

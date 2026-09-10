@@ -556,6 +556,12 @@ class SettingsContentFactory(
             false,
         )
         rows += createSwitchRow(
+            context.getString(R.string.skip_mini_game_reward_ad_title),
+            context.getString(R.string.skip_mini_game_reward_ad_summary),
+            ModuleSettings.KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.playback_auto_like_title),
             context.getString(R.string.playback_auto_like_summary),
             ModuleSettings.KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED,
