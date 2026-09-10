@@ -16,9 +16,10 @@ import io.github.bbzq.feats.symbol.RestoredChronosPromotionSymbols
 import java.lang.reflect.Array as JavaArray
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
-import java.lang.reflect.Proxy
 import java.util.ArrayList
+import java.util.Collections
 import java.util.LinkedHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var blockedCount = 0
@@ -30,6 +31,10 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var dmViewByteScrubErrorCount = 0
     private var customDanmakuScrubErrorCount = 0
     private var commandDmListErrorCount = 0
+
+    private val hookedViewProgressClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedDmViewClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedCommandDmListClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -149,8 +154,7 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     return@hookBefore
                 }
                 val callback = param.args.getOrNull(4) ?: return@hookBefore
-                val proxy = createLocalViewProgressCallbackProxy(function2Type, callback, replyTypes) ?: return@hookBefore
-                param.args[4] = proxy
+                hookLocalViewProgressCallback(callback.javaClass, replyTypes)
             }
             log("startHook: ChronosPromotion local view progress at ${method.declaringClass.name}.${method.name}")
         }
@@ -186,8 +190,7 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     return@hookBefore
                 }
                 val callback = param.args.getOrNull(4) ?: return@hookBefore
-                val proxy = createLocalDmViewCallbackProxy(function2Type, callback, replyType) ?: return@hookBefore
-                param.args[4] = proxy
+                hookLocalDmViewCallback(callback.javaClass, replyType)
             }
             log("startHook: ChronosPromotion local dm view at ${method.declaringClass.name}.${method.name}")
         }
@@ -281,12 +284,7 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     val request = param.args.firstOrNull() ?: return@hookBefore
                     if (!commandDmListRequestType.isInstance(request)) return@hookBefore
                     val callback = param.args.getOrNull(3) ?: return@hookBefore
-                    val proxy = createCommandDmListCallbackProxy(
-                        function2Type = function2Type,
-                        callback = callback,
-                        responseType = commandDmListResponseType,
-                    ) ?: return@hookBefore
-                    param.args[3] = proxy
+                    hookCommandDmListCallback(callback.javaClass, commandDmListResponseType)
                 }
                 log("startHook: ChronosPromotion command dm list at ${method.declaringClass.name}.${method.name}")
             }
@@ -743,91 +741,71 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return removed
     }
 
-    private fun createLocalViewProgressCallbackProxy(
-        function2Type: Class<*>,
-        callback: Any,
-        replyTypes: Map<String, Class<*>>,
-    ): Any? =
-        runCatching {
-            createFunction2Proxy(function2Type, callback, "LocalViewProgress") { invoke, callbackArgs ->
-                val response = callbackArgs.getOrNull(0)
-                val extra = callbackArgs.getOrNull(1)
-                val scrubbed = scrubLocalViewProgressExtra(extra, replyTypes)
-                if (scrubbed.removed > 0) logBlocked("localViewProgress:${scrubbed.removed}")
-                invoke.invoke(callback, response, scrubbed.extra ?: extra)
-            }
-        }.onFailure { throwable ->
-            val count = ++localGetViewProgressErrorCount
-            if (count <= 3) {
-                log("ChronosPromotion local view progress proxy failed: ${throwable.message}", throwable)
-            }
-        }.getOrNull()
-
-    private fun createLocalDmViewCallbackProxy(
-        function2Type: Class<*>,
-        callback: Any,
-        replyType: Class<*>,
-    ): Any? =
-        runCatching {
-            createFunction2Proxy(function2Type, callback, "LocalDmView") { invoke, callbackArgs ->
-                val response = callbackArgs.getOrNull(0)
-                val extra = callbackArgs.getOrNull(1)
-                val scrubbed = scrubDmViewExtra(extra, replyType)
-                if (scrubbed.removed > 0) logBlocked("localDmView:${scrubbed.removed}")
-                invoke.invoke(callback, response, scrubbed.extra ?: extra)
-            }
-        }.onFailure { throwable ->
-            val count = ++localGetDmViewErrorCount
-            if (count <= 3) {
-                log("ChronosPromotion local dm view proxy failed: ${throwable.message}", throwable)
-            }
-        }.getOrNull()
-
-    private fun createCommandDmListCallbackProxy(
-        function2Type: Class<*>,
-        callback: Any,
-        responseType: Class<*>,
-    ): Any? =
-        runCatching {
-            createFunction2Proxy(function2Type, callback, "CommandDmList") { invoke, callbackArgs ->
-                val response = callbackArgs.getOrNull(0)
-                if (response != null && responseType.isInstance(response)) {
-                    val removed = scrubCommandDmListResponse(response)
-                    if (removed > 0) logBlocked("commandDmList:$removed")
+    private fun hookLocalViewProgressCallback(clazz: Class<*>, replyTypes: Map<String, Class<*>>) {
+        if (!hookedViewProgressClasses.add(clazz)) return
+        clazz.allMethods().filter { it.name == "invoke" && it.parameterCount == 2 }.forEach { invokeMethod ->
+            env.hookBefore(invokeMethod) { param ->
+                runCatching {
+                    if (!ModuleSettings.isBlockChronosPromotionEnabled(prefs)) return@hookBefore
+                    val extra = param.args.getOrNull(1) ?: return@hookBefore
+                    val scrubbed = scrubLocalViewProgressExtra(extra, replyTypes)
+                    if (scrubbed.removed > 0) logBlocked("localViewProgress:${scrubbed.removed}")
+                    if (scrubbed.extra != null) {
+                        param.args[1] = scrubbed.extra
+                    }
+                }.onFailure {
+                    val count = ++localGetViewProgressErrorCount
+                    if (count <= 3) {
+                        log("ChronosPromotion LocalViewProgress invoke hook failed", it)
+                    }
                 }
-                invoke.invoke(callback, response, callbackArgs.getOrNull(1))
-            }
-        }.onFailure { throwable ->
-            val count = ++commandDmListErrorCount
-            if (count <= 3) {
-                log("ChronosPromotion command dm list proxy failed: ${throwable.message}", throwable)
-            }
-        }.getOrNull()
-
-    private fun createFunction2Proxy(
-        function2Type: Class<*>,
-        callback: Any,
-        label: String,
-        onInvoke: (Method, Array<Any?>) -> Any?,
-    ): Any? {
-        val invoke = callback.javaClass.allMethods()
-            .firstOrNull { it.name == "invoke" && it.parameterCount == 2 }
-            ?: return null
-        return Proxy.newProxyInstance(classLoader, arrayOf(function2Type)) { proxy, method, args ->
-            when {
-                method.name == "invoke" && method.parameterCount == 2 ->
-                    onInvoke(invoke, args ?: emptyArray())
-                method.name == "toString" && method.parameterCount == 0 ->
-                    "ChronosPromotion${label}Callback($callback)"
-                method.name == "hashCode" && method.parameterCount == 0 ->
-                    System.identityHashCode(proxy)
-                method.name == "equals" && method.parameterCount == 1 ->
-                    proxy === args?.getOrNull(0)
-                else ->
-                    method.invoke(callback, *(args ?: emptyArray()))
             }
         }
     }
+
+    private fun hookLocalDmViewCallback(clazz: Class<*>, replyType: Class<*>) {
+        if (!hookedDmViewClasses.add(clazz)) return
+        clazz.allMethods().filter { it.name == "invoke" && it.parameterCount == 2 }.forEach { invokeMethod ->
+            env.hookBefore(invokeMethod) { param ->
+                runCatching {
+                    if (!ModuleSettings.isBlockChronosPromotionEnabled(prefs)) return@hookBefore
+                    val extra = param.args.getOrNull(1) ?: return@hookBefore
+                    val scrubbed = scrubDmViewExtra(extra, replyType)
+                    if (scrubbed.removed > 0) logBlocked("localDmView:${scrubbed.removed}")
+                    if (scrubbed.extra != null) {
+                        param.args[1] = scrubbed.extra
+                    }
+                }.onFailure {
+                    val count = ++localGetDmViewErrorCount
+                    if (count <= 3) {
+                        log("ChronosPromotion LocalDmView invoke hook failed", it)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun hookCommandDmListCallback(clazz: Class<*>, responseType: Class<*>) {
+        if (!hookedCommandDmListClasses.add(clazz)) return
+        clazz.allMethods().filter { it.name == "invoke" && it.parameterCount == 2 }.forEach { invokeMethod ->
+            env.hookBefore(invokeMethod) { param ->
+                runCatching {
+                    if (!ModuleSettings.isBlockChronosPromotionEnabled(prefs)) return@hookBefore
+                    val response = param.args.getOrNull(0) ?: return@hookBefore
+                    if (responseType.isInstance(response)) {
+                        val removed = scrubCommandDmListResponse(response)
+                        if (removed > 0) logBlocked("commandDmList:$removed")
+                    }
+                }.onFailure {
+                    val count = ++commandDmListErrorCount
+                    if (count <= 3) {
+                        log("ChronosPromotion CommandDmList invoke hook failed", it)
+                    }
+                }
+            }
+        }
+    }
+
 
     private fun scrubLocalViewProgressExtra(extra: Any?, replyTypes: Map<String, Class<*>>): ScrubbedExtra {
         val original = extra as? Map<*, *> ?: return ScrubbedExtra(null, 0)
