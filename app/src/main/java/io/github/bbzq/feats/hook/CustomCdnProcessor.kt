@@ -9,7 +9,7 @@ import java.lang.reflect.Modifier
 object CustomCdnProcessor {
 
     private val PC_DN_REGEX = Regex(
-        """(p[0-9]*|m[0-9]*|sz|hz|bj|sh|cd|cq|fs|gz|wh|xa|tj|zz|nn)-[a-zA-Z0-9-]+\.(bilivideo|mcdn\.bilivideo|szbdyd)\.(com|cn)""",
+        """^(?:upos-)?(p[0-9]*|m[0-9]*|sz|hz|bj|sh|cd|cq|fs|gz|wh|xa|tj|zz|nn)-[a-zA-Z0-9]+-(?:bilivideo|mcdn|szbdyd|p2p)""",
         RegexOption.IGNORE_CASE,
     )
 
