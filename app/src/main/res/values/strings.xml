@@ -219,6 +219,8 @@
     <!-- 播放页 -->
     <string name="playback_hide_banner_title">屏蔽视频页广告</string>
     <string name="playback_hide_banner_summary">阻止视频详情页播放器下方横幅、推荐列表、应用下载、好物推荐和暂停广告创建。</string>
+    <string name="playback_hide_video_mention_title">隐藏视频提及</string>
+    <string name="playback_hide_video_mention_summary">屏蔽播放页简介下方的视频提及、推荐提及等联动卡片与弹窗。</string>
     <string name="playback_block_chronos_promotion_title">屏蔽播放互动组件</string>
     <string name="playback_block_chronos_promotion_summary">移除播放器里的投票、预约、打卡、关注引导、商业活动卡、广告浮层和商业跳转按钮。</string>
     <string name="playback_block_activity_meta_sticker_title">屏蔽"云视听小电视"贴片</string>

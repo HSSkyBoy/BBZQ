@@ -19,6 +19,7 @@ object ModuleSettings {
     const val KEY_ACCESS_KEY_SETTINGS_VISIBLE = "access_key_settings_visible"
     const val KEY_TRY_FREE_QUALITY_SETTINGS_VISIBLE = "try_free_quality_settings_visible"
     const val KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED = "block_video_detail_banner_ad_enabled"
+    const val KEY_PURIFY_VIDEO_MENTION_ENABLED = "purify_video_mention_enabled"
     const val KEY_BLOCK_CHRONOS_PROMOTION_ENABLED = "block_chronos_promotion_enabled"
     const val KEY_UNLOCK_VIDEO_FEATURES_ENABLED = "unlock_video_features_enabled"
     const val KEY_UNLOCK_VIDEO_FEATURES_UI_ENABLED = "unlock_video_features_ui_enabled"
@@ -228,6 +229,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_ACCESS_KEY_SETTINGS_VISIBLE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_ACCESS_KEY_SETTINGS_VISIBLE, false) },
         ExportableConfigSpec(KEY_TRY_FREE_QUALITY_SETTINGS_VISIBLE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_TRY_FREE_QUALITY_SETTINGS_VISIBLE, false) },
         ExportableConfigSpec(KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED, false) },
+        ExportableConfigSpec(KEY_PURIFY_VIDEO_MENTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_VIDEO_MENTION_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_CHRONOS_PROMOTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_CHRONOS_PROMOTION_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_VIDEO_FEATURES_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_UNLOCK_VIDEO_FEATURES_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_VIDEO_FEATURES_UI_ENABLED, ExportableValueType.BOOLEAN) {
@@ -512,6 +514,9 @@ object ModuleSettings {
 
     fun isBlockVideoDetailBannerAdEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED, false)
+
+    fun isPurifyVideoMentionEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_PURIFY_VIDEO_MENTION_ENABLED, false)
 
     fun isBlockChronosPromotionEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_CHRONOS_PROMOTION_ENABLED, false)
