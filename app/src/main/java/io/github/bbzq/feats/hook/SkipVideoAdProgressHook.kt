@@ -1,6 +1,6 @@
 package io.github.bbzq.feats.hook
 
-import android.graphics.Canvas
+import android.graphics.drawable.LayerDrawable
 import android.view.View
 import android.widget.ProgressBar
 import io.github.bbzq.ModuleSettings
@@ -12,7 +12,9 @@ import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.callStaticMethod
 import io.github.bbzq.feats.hookAfter
+import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.symbol.RestoredSkipVideoAdProgressSymbols
+import java.lang.ref.WeakReference
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
@@ -61,11 +63,10 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (!hookedProgressDrawMethods.add(method.toGenericString())) return 0
 
         return runCatching {
-            env.hookAfter(method) { param ->
+            env.hookBefore(method) { param ->
                 runCatching {
                     val progressBar = param.thisObject as? ProgressBar ?: return@runCatching
-                    if (!isSupportedProgressView(progressBar)) return@runCatching
-                    drawSegments(progressBar, param.args.firstOrNull() as? Canvas)
+                    attachMarkerDrawable(progressBar)
                 }.onFailure {
                     log("SkipVideoAdProgress draw hook failed at ${method.declaringClass.name}.${method.name}", it)
                 }
@@ -120,26 +121,73 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 
-    private fun drawSegments(progressBar: ProgressBar, canvas: Canvas?) {
-        if (canvas == null) return
+    private fun attachMarkerDrawable(progressBar: ProgressBar) {
+        if (!isSupportedProgressView(progressBar)) return
+        val progressDrawable = progressBar.progressDrawable ?: return
         val config = ModuleSettings.getSkipVideoAdCache(prefs)
         if (!config.enabled) return
 
-        val state = resolveMarkerState(progressBar) ?: return
-        val durationMs = durationForDrawing(progressBar, state) ?: return
-        val segments = state.segments.filter { segment ->
-            (config.modes[segment.category] ?: SkipVideoAdMode.IGNORE) != SkipVideoAdMode.IGNORE
-        }
-        if (segments.isEmpty()) return
+        val density = progressBar.resources.displayMetrics.density
+        val minWidthPx = 3f * density
+        val weakBar = WeakReference(progressBar)
 
-        SkipVideoAdMarkerRenderer.draw(
-            progressBar = progressBar,
-            canvas = canvas,
-            durationMs = durationMs,
-            segments = segments,
-            colorForCategory = ::colorFor,
-        )
-        SkipVideoAdState.markSegmentsDrawn(state.key, progressBar.markerDetectionPositionMs(durationMs))
+        val segmentsProvider = {
+            val bar = weakBar.get()
+            if (bar == null) null
+            else {
+                val currentConfig = ModuleSettings.getSkipVideoAdCache(prefs)
+                if (!currentConfig.enabled) null
+                else {
+                    val state = resolveMarkerState(bar)
+                    val durationMs = state?.let { durationForDrawing(bar, it) }
+                    if (state != null && durationMs != null && durationMs > 0L) {
+                        val segments = state.segments.filter { segment ->
+                            (currentConfig.modes[segment.category] ?: SkipVideoAdMode.IGNORE) != SkipVideoAdMode.IGNORE
+                        }
+                        Pair(durationMs, segments)
+                    } else null
+                }
+            }
+        }
+
+        val onSegmentsDrawn = {
+            val bar = weakBar.get()
+            if (bar != null) {
+                val state = resolveMarkerState(bar)
+                val durationMs = state?.let { durationForDrawing(bar, it) }
+                if (state != null && durationMs != null && durationMs > 0L) {
+                    SkipVideoAdState.markSegmentsDrawn(state.key, bar.markerDetectionPositionMs(durationMs))
+                }
+            }
+        }
+
+        if (progressDrawable is LayerDrawable) {
+            val bgIndex = (0 until progressDrawable.numberOfLayers).firstOrNull {
+                progressDrawable.getId(it) == android.R.id.background
+            } ?: 0
+            val current = progressDrawable.getDrawable(bgIndex)
+            if (current !is SkipVideoAdMarkerDrawableWrapper) {
+                val wrapped = SkipVideoAdMarkerDrawableWrapper(
+                    wrapped = current,
+                    minMarkerWidthPx = minWidthPx,
+                    segmentsProvider = segmentsProvider,
+                    colorForCategory = ::colorFor,
+                    onSegmentsDrawn = onSegmentsDrawn,
+                )
+                progressDrawable.setDrawable(bgIndex, wrapped)
+                progressBar.invalidate()
+            }
+        } else if (progressDrawable !is SkipVideoAdMarkerDrawableWrapper) {
+            val wrapped = SkipVideoAdMarkerDrawableWrapper(
+                wrapped = progressDrawable,
+                minMarkerWidthPx = minWidthPx,
+                segmentsProvider = segmentsProvider,
+                colorForCategory = ::colorFor,
+                onSegmentsDrawn = onSegmentsDrawn,
+            )
+            progressBar.progressDrawable = wrapped
+            progressBar.invalidate()
+        }
     }
 
     private fun resolveMarkerState(progressBar: ProgressBar): SkipVideoAdState.TimelineMarkerState? {
@@ -175,9 +223,12 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
         if (requestSegments && identity != null && durationMs != null && durationMs > 0L) {
-            return bindProgressSegments(progressBar, identity, durationMs, listOf(controller), delayMs = 0L)
+            val state = bindProgressSegments(progressBar, identity, durationMs, listOf(controller), delayMs = 0L)
+            attachMarkerDrawable(progressBar)
+            return state
         }
         SkipVideoAdState.bindView(progressBar, key)
+        attachMarkerDrawable(progressBar)
         return SkipVideoAdState.stateForKey(key)
     }
 
@@ -196,9 +247,12 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
         SkipVideoAdHook.registerRuntimePlayerController(controller)
         val durationMs = updateDurationFromController(key, controller)
         if (requestSegments && identity != null && durationMs != null && durationMs > 0L) {
-            return bindProgressSegments(progressBar, identity, durationMs, listOf(controller), delayMs = 0L)
+            val state = bindProgressSegments(progressBar, identity, durationMs, listOf(controller), delayMs = 0L)
+            attachMarkerDrawable(progressBar)
+            return state
         }
         SkipVideoAdState.bindView(progressBar, key)
+        attachMarkerDrawable(progressBar)
         return SkipVideoAdState.stateForKey(key)
     }
 
@@ -222,16 +276,19 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         val durationMs = resolveStoryDurationMs(player, progressBar, detail, key)
         if (requestSegments && durationMs > 0L) {
-            return bindProgressSegments(
+            val state = bindProgressSegments(
                 progressBar,
                 identity,
                 durationMs,
                 listOf(controller, player),
                 delayMs = storySegmentRequestDelayMs(progressBar),
             )
+            attachMarkerDrawable(progressBar)
+            return state
         }
         SkipVideoAdState.bindView(progressBar, key)
         SkipVideoAdState.updateDuration(key, durationMs)
+        attachMarkerDrawable(progressBar)
         return SkipVideoAdState.stateForKey(key)
     }
 
@@ -495,13 +552,6 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 method.name == name && method.parameterCount == 0
             }?.apply { isAccessible = true }
         }.getOrNull()
-
-    private fun Class<*>.findNoArgCanvasMethod(name: String): Method? =
-        safeAllMethods("canvas method $name").firstOrNull { method ->
-            method.name == name &&
-                method.parameterCount == 1 &&
-                method.parameterTypes.firstOrNull() == Canvas::class.java
-        }
 
     private fun Class<*>.safeAllMethods(reason: String): List<Method> =
         runCatching { allMethods().toList() }
