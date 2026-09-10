@@ -24,13 +24,14 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val hookedMerchandiseClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private val hookedPausedPageClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private val hookedAdPanelClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val hookedEndPageClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private var blockedCount = 0
 
     override fun startHook() {
         if (env.processName != env.packageName) return
 
         var installed = 0
-        installed += installVDPausedPageDirectBlock()
+        installed += installDirectBannerBlocks()
 
         val symbols = env.symbols?.videoDetailBannerAd?.restore(classLoader)
         if (symbols != null) {
@@ -47,6 +48,92 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         } else {
             log("startHook: VideoDetailBannerAd no hook point found")
         }
+    }
+
+    private fun installDirectBannerBlocks(): Int {
+        var count = 0
+        count += installVDPausedPageDirectBlock()
+        count += installBannerV2ControllerDirectBlock()
+        count += installVideoDetailPanelHelperDirectBlock()
+        count += installAdMerchandisePanelDirectBlock()
+        count += installVDEndPageDirectBlock()
+        return count
+    }
+
+    private fun installBannerV2ControllerDirectBlock(): Int {
+        val bannerV2ControllerClass = classLoader.findClassOrNull(
+            "com.bilibili.ad.adview.videodetail.upper.banner.v2.BannerV2Controller"
+        ) ?: return 0
+        var count = 0
+        bannerV2ControllerClass.declaredMethods.filter {
+            it.name == "bindUniteBanner" && !Modifier.isStatic(it.modifiers)
+        }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("BannerV2Controller.bindUniteBanner")
+                param.result = null
+            }
+            count++
+        }
+        log("startHook: VideoDetailBannerAd BannerV2Controller direct hook installed=$count")
+        return count
+    }
+
+    private fun installVideoDetailPanelHelperDirectBlock(): Int {
+        val panelHelperClass = classLoader.findClassOrNull(
+            "com.bilibili.ad.adview.videodetail.panel.VideoDetailPanelHelper"
+        ) ?: return 0
+        var count = 0
+        panelHelperClass.declaredMethods.filter {
+            it.name == "show" && !Modifier.isStatic(it.modifiers)
+        }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("VideoDetailPanelHelper.show")
+                param.result = false
+            }
+            count++
+        }
+        log("startHook: VideoDetailBannerAd VideoDetailPanelHelper direct hook installed=$count")
+        return count
+    }
+
+    private fun installAdMerchandisePanelDirectBlock(): Int {
+        val merchandisePanelKtClass = classLoader.findClassOrNull(
+            "com.bilibili.ad.adview.videodetail.merchandise.AdMerchandisePanelKt"
+        ) ?: return 0
+        var count = 0
+        merchandisePanelKtClass.declaredMethods.filter {
+            it.name == "getAdMerchandisePanelView" && Modifier.isStatic(it.modifiers)
+        }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("AdMerchandisePanelKt.getAdMerchandisePanelView")
+                param.result = null
+            }
+            count++
+        }
+        log("startHook: VideoDetailBannerAd AdMerchandisePanelKt direct hook installed=$count")
+        return count
+    }
+
+    private fun installVDEndPageDirectBlock(): Int {
+        val vdEndPageClass = classLoader.findClassOrNull(
+            "com.bilibili.ad.adview.videodetail.endpage.VDEndPage"
+        ) ?: return 0
+        var count = 0
+        vdEndPageClass.declaredMethods.filter {
+            !Modifier.isStatic(it.modifiers) && (it.name == "getAdCard" || it.name == "getAdCardType")
+        }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("VDEndPage.${method.name}")
+                param.result = null
+            }
+            count++
+        }
+        log("startHook: VideoDetailBannerAd VDEndPage direct hook installed=$count")
+        return count
     }
 
     private fun installVDPausedPageDirectBlock(): Int {
@@ -179,10 +266,10 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     }
                 }
                 "getEndPage" -> {
-                    env.hookBefore(method) { param ->
-                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
-                        logBlocked("videoDetail.getEndPage")
-                        param.result = null
+                    env.hookAfter(method) { param ->
+                        if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
+                        val endPage = param.result ?: return@hookAfter
+                        hookEndPageClass(endPage.javaClass)
                     }
                 }
             }
@@ -214,10 +301,10 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun hookMerchandiseClass(clazz: Class<*>) {
         if (!hookedMerchandiseClasses.add(clazz)) return
-        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) && it.name == "getAdMerchandiseView" }.forEach { method ->
+        clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) && it.name in MERCHANDISE_BLOCKED_METHODS }.forEach { method ->
             env.hookBefore(method) { param ->
                 if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
-                logBlocked("merchandise.getAdMerchandiseView")
+                logBlocked("merchandise.${method.name}")
                 param.result = null
             }
         }
@@ -250,13 +337,26 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         clazz.allMethods().filter { !Modifier.isStatic(it.modifiers) }.forEach { method ->
             if (method.hasSameSignatureAs(getPausedPagePanel) ||
                 method.hasSameSignatureAs(getBrandPausedPagePanel) ||
-                method.name == "getDynamicPausedPagePanel"
+                method.name in AD_PANEL_BLOCKED_METHODS
             ) {
                 env.hookBefore(method) { param ->
                     if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
                     logBlocked("adPanel.${method.name}")
                     param.result = null
                 }
+            }
+        }
+    }
+
+    private fun hookEndPageClass(clazz: Class<*>) {
+        if (!hookedEndPageClasses.add(clazz)) return
+        clazz.allMethods().filter {
+            !Modifier.isStatic(it.modifiers) && (it.name == "getAdCard" || it.name == "getAdCardType")
+        }.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookBefore
+                logBlocked("endPage.${method.name}")
+                param.result = null
             }
         }
     }
@@ -275,6 +375,22 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private companion object {
-        private val BLOCKED_METHODS = setOf("getUpperAdView", "getUpperHDView", "getUpperNestView")
+        private val BLOCKED_METHODS = setOf(
+            "getUpperAdView",
+            "getUpperHDView",
+            "getUpperNestView",
+            "showCmHalfPanel",
+        )
+        private val AD_PANEL_BLOCKED_METHODS = setOf(
+            "getDynamicPausedPagePanel",
+            "getNestedGamePanel",
+            "getNestedGame2Panel",
+            "getNestedH5Panel",
+            "getNestedMallPanel",
+        )
+        private val MERCHANDISE_BLOCKED_METHODS = setOf(
+            "getAdMerchandiseView",
+            "getAdMerchandisePanelView",
+        )
     }
 }
