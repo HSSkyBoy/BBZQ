@@ -21,6 +21,7 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         var installed = 0
         installed += installEndPagePureVideoHook()
         installed += installDisableCMTransformerHook()
+        installed += installDisableRelatedTransformerHook()
         installed += installHalfScreenWidgetHook()
         installed += installFullScreenWidgetHook()
 
@@ -149,6 +150,8 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "com.bilibili.ship.theseus.ugc.endpage.UGCHalfScreenEndPageWidget",
             "com.bilibili.ship.theseus.ugc.endpage.widget.UGCHalfScreenEndPageWidget",
             "com.bilibili.ship.theseus.ogv.endpage.OgvPlayerEndPageHalfFunctionWidget",
+            "com.bilibili.app.gemini.ugc.feature.interactivevideo.InteractEndPageThumbWidget",
+            "com.bilibili.tgwt.player.widget.TogetherWatchEndPageFunctionWidget",
         )
         return hookWidgetViews(halfWidgetClasses) {
             ModuleSettings.isDisableAllEndPage(prefs) || ModuleSettings.isDisableHalfEndPage(prefs)
@@ -169,6 +172,7 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "com.bilibili.app.gemini.ugc.feature.endpage.GeminiEndPageLandscapeRelativeWidget",
             "com.bilibili.app.gemini.ugc.feature.endpage.GeminiEndPageThumbRelativeWidget",
             "com.bilibili.app.gemini.ugc.feature.endpage.GeminiEndPageThumbRelativeNewWidget",
+            "com.bilibili.app.gemini.ugc.feature.interactivevideo.InteractEndPageLandscapeWidget",
         )
         return hookWidgetViews(fullWidgetClasses) {
             ModuleSettings.isDisableAllEndPage(prefs)
@@ -277,6 +281,29 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("VideoEndRecommend: installDisableCMTransformerHook hooked $count methods")
         return count
     }
+
+    // =========================================================================
+    // 5. 靶向攔截普通推薦卡片渲染轉換器（去除全部結束推薦時生效，與 CM Transformer 形成雙保險）
+    // =========================================================================
+
+    private fun installDisableRelatedTransformerHook(): Int {
+        val transformerClass = classLoader.findClassOrNull(
+            "com.bilibili.ship.theseus.ugc.endpage.relatedrecommand.UGCEndPageRelatedComponentsTransformer"
+        ) ?: return 0
+        var count = 0
+        // b(RelateCard, int, ScreenModeType): 将服务端推荐卡片转换为端上 UI 组件 -> 去除全部结束推荐时返回 null
+        val createRelatedMethod = transformerClass.declaredMethods.firstOrNull {
+            it.name == "b" && it.parameterCount == 3
+        }
+        if (createRelatedMethod != null) {
+            env.hookBefore(createRelatedMethod) { param ->
+                if (ModuleSettings.isDisableAllEndPage(prefs)) {
+                    param.result = null
+                }
+            }
+            count++
+        }
+        log("VideoEndRecommend: installDisableRelatedTransformerHook hooked $count methods")
+        return count
+    }
 }
-
-
