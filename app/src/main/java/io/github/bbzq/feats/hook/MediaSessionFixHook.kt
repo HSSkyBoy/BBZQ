@@ -19,18 +19,25 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var currentMediaKey: String? = null
 
     companion object {
-        var activeSessionRef: java.lang.ref.WeakReference<Any>? = null
+        var activeCompatSessionRef: java.lang.ref.WeakReference<Any>? = null
+        var activeFwkSessionRef: java.lang.ref.WeakReference<android.media.session.MediaSession>? = null
         @Volatile
         var lastValidCoverBitmap: Bitmap? = null
         @Volatile
-        var lastValidMetadataObj: Any? = null
-        private val mainHandler = Handler(Looper.getMainLooper())
+        var lastCompatMetadataObj: Any? = null
+        @Volatile
+        var lastFwkMetadataObj: android.media.MediaMetadata? = null
 
-        /**
-         * 创建安全、独立的位图副本，保持 1080px 超清画质与 ARGB_8888 全彩通道。
-         * 杜绝二次模糊与色彩阶梯色带，保证控制中心背景丝滑细腻。
-         * 并在切集时平滑过渡，杜绝 Bitmap.recycle() 引起的空指针。
-         */
+        @Volatile
+        var currentActiveMediaKey: String? = null
+        @Volatile
+        var currentActiveArtUri: String? = null
+        @Volatile
+        var currentCoverMediaKey: String? = null
+
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private val coverFetchExecutor = java.util.concurrent.Executors.newFixedThreadPool(2)
+
         fun createSafeCopy(src: Bitmap, maxDim: Int = 1080): Bitmap? {
             return runCatching {
                 if (src.isRecycled) return null
@@ -52,6 +59,113 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 copy
             }.getOrNull()
         }
+
+        fun updateCoverToSessions(
+            targetMediaKey: String?,
+            bitmap: Bitmap,
+            compatBuilderClass: Class<*>?,
+        ) {
+            if (bitmap.isRecycled) return
+            val activeKey = currentActiveMediaKey
+            if (targetMediaKey != null && activeKey != null && targetMediaKey != activeKey) {
+                return
+            }
+
+            val safeCopy = createSafeCopy(bitmap, 1080) ?: return
+            lastValidCoverBitmap = safeCopy
+            currentCoverMediaKey = targetMediaKey ?: activeKey
+
+            mainHandler.post {
+                runCatching {
+                    val currentKey = currentActiveMediaKey
+                    if (targetMediaKey != null && currentKey != null && targetMediaKey != currentKey) {
+                        return@runCatching
+                    }
+                    if (safeCopy.isRecycled) return@runCatching
+
+                    val compatSession = activeCompatSessionRef?.get()
+                    val compatMeta = lastCompatMetadataObj
+                    if (compatSession != null && compatMeta != null && compatBuilderClass != null) {
+                        runCatching {
+                            val constructor = compatBuilderClass.getConstructor(compatMeta.javaClass)
+                            val builder = constructor.newInstance(compatMeta)
+                            val putBitmap = compatBuilderClass.getMethod("putBitmap", String::class.java, Bitmap::class.java)
+                            val build = compatBuilderClass.getMethod("build")
+                            putBitmap.invoke(builder, "android.media.metadata.ALBUM_ART", safeCopy)
+                            val newMeta = build.invoke(builder)
+                            if (newMeta != null) {
+                                lastCompatMetadataObj = newMeta
+                                val setMetadataMethod = compatSession.javaClass.methods.firstOrNull {
+                                    it.name == "setMetadata" && it.parameterCount == 1 && it.parameterTypes[0].isInstance(newMeta)
+                                } ?: compatSession.javaClass.methods.firstOrNull {
+                                    it.name == "setMetadata" && it.parameterCount == 1
+                                }
+                                setMetadataMethod?.invoke(compatSession, newMeta)
+                            }
+                        }
+                    }
+
+                    val fwkSession = activeFwkSessionRef?.get()
+                    val fwkMeta = lastFwkMetadataObj
+                    if (fwkSession != null && fwkMeta != null) {
+                        runCatching {
+                            val builder = android.media.MediaMetadata.Builder(fwkMeta)
+                            builder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, safeCopy)
+                            val newFwkMeta = builder.build()
+                            lastFwkMetadataObj = newFwkMeta
+                            fwkSession.setMetadata(newFwkMeta)
+                        }
+                    }
+                }
+            }
+        }
+
+        fun fetchCoverAsync(
+            targetMediaKey: String,
+            uriString: String?,
+            classLoader: ClassLoader,
+            compatBuilderClass: Class<*>?,
+        ) {
+            if (uriString.isNullOrBlank()) return
+
+            coverFetchExecutor.execute {
+                runCatching {
+                    runCatching {
+                        val cacheClass = classLoader.findClassOrNull("tv.danmaku.bili.ui.player.notification.MusicCoverImageCache")
+                        val getInstanceMethod = cacheClass?.getMethod("getInstance")
+                        val cacheInstance = getInstanceMethod?.invoke(null)
+                        if (cacheInstance != null) {
+                            val getBigImage = cacheClass.getMethod("getBigImage", String::class.java)
+                            val cachedBmp = getBigImage.invoke(cacheInstance, uriString) as? Bitmap
+                            if (cachedBmp != null && !cachedBmp.isRecycled) {
+                                updateCoverToSessions(targetMediaKey, cachedBmp, compatBuilderClass)
+                                return@execute
+                            }
+                        }
+                    }
+
+                    if (currentActiveMediaKey != targetMediaKey) return@runCatching
+
+                    val url = java.net.URL(uriString)
+                    val conn = url.openConnection() as? java.net.HttpURLConnection ?: return@runCatching
+                    conn.connectTimeout = 6000
+                    conn.readTimeout = 6000
+                    conn.setRequestProperty("User-Agent", "BiliApp/7.44.0")
+                    conn.setRequestProperty("Referer", "https://www.bilibili.com")
+                    conn.instanceFollowRedirects = true
+                    conn.connect()
+                    if (conn.responseCode == 200) {
+                        val bytes = conn.inputStream.use { it.readBytes() }
+                        if (bytes.isNotEmpty()) {
+                            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (bmp != null) {
+                                updateCoverToSessions(targetMediaKey, bmp, compatBuilderClass)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     override fun startHook() {
@@ -70,12 +184,6 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    /**
-     * 1. 拦截 MediaSessionCompat.setMetadata 与 Framework 原生 MediaSession.setMetadata：
-     * - 针对换集瞬间：如果新视频封面尚在异步加载中，平滑保留当前有效封面，绝对不让控制中心背景塌陷为纯色；
-     * - 当新视频高清封面加载到达后，平滑置换为新封面；
-     * - 仅注入一份高质量 ALBUM_ART，杜绝在同一 Parcel 中重复放入多份 Bitmap 导致 Binder 溢出。
-     */
     private fun installMediaSessionMetadataHook(): Int {
         var count = 0
         val sessionClass = classLoader.findClassOrNull("android.support.v4.media.session.MediaSessionCompat")
@@ -96,12 +204,12 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
             val session = param.thisObject
             if (session != null) {
-                activeSessionRef = java.lang.ref.WeakReference(session)
+                activeCompatSessionRef = java.lang.ref.WeakReference(session)
             }
 
             val arg0 = param.args.getOrNull(0)
             if (arg0 == null) {
-                val fallback = lastValidMetadataObj
+                val fallback = lastCompatMetadataObj
                 if (fallback != null) {
                     param.args[0] = fallback
                     log("MediaSessionCompat.setMetadata(null) intercepted: retained previous metadata")
@@ -116,6 +224,18 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     ?: getString.invoke(metadata, "android.media.metadata.TITLE")) as? String
             }.getOrNull()
 
+            val artUri = runCatching {
+                val getString = metadata.javaClass.getMethod("getString", String::class.java)
+                (getString.invoke(metadata, "android.media.metadata.ALBUM_ART_URI")
+                    ?: getString.invoke(metadata, "android.media.metadata.DISPLAY_ICON_URI")) as? String
+            }.getOrNull()
+
+            val isNewMedia = mediaKey != null && mediaKey != currentActiveMediaKey
+            if (isNewMedia) {
+                currentActiveMediaKey = mediaKey
+                currentActiveArtUri = artUri
+            }
+
             val coverBitmap = runCatching {
                 val getBitmap = metadata.javaClass.getMethod("getBitmap", String::class.java)
                 (getBitmap.invoke(metadata, "android.media.metadata.ALBUM_ART")
@@ -123,13 +243,11 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }.getOrNull()
 
             if (coverBitmap != null && !coverBitmap.isRecycled) {
-                // 收到携带封面的完整元数据，直接采用新封面
-                currentMediaKey = mediaKey
+                currentCoverMediaKey = mediaKey
                 val safeCopy = createSafeCopy(coverBitmap, 1080) ?: coverBitmap
                 lastValidCoverBitmap = safeCopy
-                lastValidMetadataObj = metadata
+                lastCompatMetadataObj = metadata
             } else {
-                // 收到暂无封面的过渡元数据（如切集瞬间），复用当前有效封面进行平滑过渡，杜绝纯色卡片塌陷
                 val cached = lastValidCoverBitmap
                 if (cached != null && !cached.isRecycled && builderClass != null) {
                     runCatching {
@@ -141,17 +259,20 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         val newMetadata = build.invoke(builder)
                         if (newMetadata != null) {
                             param.args[0] = newMetadata
-                            lastValidMetadataObj = newMetadata
+                            lastCompatMetadataObj = newMetadata
                         }
                     }
                 } else {
-                    lastValidMetadataObj = metadata
+                    lastCompatMetadataObj = metadata
+                }
+
+                if (isNewMedia && !artUri.isNullOrBlank()) {
+                    fetchCoverAsync(mediaKey, artUri, classLoader, builderClass)
                 }
             }
         }
         count++
 
-        // 双保险：Framework 原生 MediaSession.setMetadata
         runCatching {
             val fwkSessionClass = android.media.session.MediaSession::class.java
             val fwkMetadataClass = android.media.MediaMetadata::class.java
@@ -161,11 +282,13 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             if (fwkSetMetadata != null) {
                 env.hookBefore(fwkSetMetadata) { param ->
                     if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
-                    val fwkSession = param.thisObject
-                    if (fwkSession != null && activeSessionRef?.get() == null) {
-                        activeSessionRef = java.lang.ref.WeakReference(fwkSession)
+                    val fwkSession = param.thisObject as? android.media.session.MediaSession
+                    if (fwkSession != null) {
+                        activeFwkSessionRef = java.lang.ref.WeakReference(fwkSession)
                     }
                     val meta = param.args.getOrNull(0) as? android.media.MediaMetadata ?: return@hookBefore
+                    lastFwkMetadataObj = meta
+
                     val hasArt = meta.getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART) != null ||
                             meta.getBitmap(android.media.MediaMetadata.METADATA_KEY_ART) != null
                     if (!hasArt) {
@@ -173,7 +296,9 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         if (cached != null && !cached.isRecycled) {
                             val builder = android.media.MediaMetadata.Builder(meta)
                             builder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, cached)
-                            param.args[0] = builder.build()
+                            val newFwkMeta = builder.build()
+                            param.args[0] = newFwkMeta
+                            lastFwkMetadataObj = newFwkMeta
                         }
                     }
                 }
@@ -184,53 +309,17 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 
-    /**
-     * 2. 拦截 B 站官方封面加载完成回调与大图缓存入口：
-     * 精准拦截具体实现类（Su0.a$a 与 a$b）的 onFetched(url, bigBitmap, iconBitmap)，
-     * 以及 MusicCoverImageCache 的 putLocalBigImage，一旦高清封面就位，立即平滑推入 MediaSession。
-     */
     private fun installCoverImageFetchHook(): Int {
         var count = 0
         val builderClass = classLoader.findClassOrNull("android.support.v4.media.MediaMetadataCompat\$Builder")
             ?: classLoader.findClassOrNull("androidx.media.MediaMetadataCompat\$Builder")
-
-        fun dispatchCoverUpdate(bitmap: Bitmap) {
-            if (bitmap.isRecycled) return
-            val safeCopy = createSafeCopy(bitmap, 1080) ?: return
-            lastValidCoverBitmap = safeCopy
-
-            mainHandler.post {
-                runCatching {
-                    if (safeCopy.isRecycled) return@runCatching
-                    val session = activeSessionRef?.get()
-                    val meta = lastValidMetadataObj
-                    if (session != null && meta != null && builderClass != null) {
-                        val constructor = builderClass.getConstructor(meta.javaClass)
-                        val builder = constructor.newInstance(meta)
-                        val putBitmap = builderClass.getMethod("putBitmap", String::class.java, Bitmap::class.java)
-                        val build = builderClass.getMethod("build")
-                        putBitmap.invoke(builder, "android.media.metadata.ALBUM_ART", safeCopy)
-                        val newMeta = build.invoke(builder)
-                        if (newMeta != null) {
-                            lastValidMetadataObj = newMeta
-                            val setMetadataMethod = session.javaClass.methods.firstOrNull {
-                                it.name == "setMetadata" && it.parameterCount == 1 && it.parameterTypes[0].isInstance(newMeta)
-                            } ?: session.javaClass.methods.firstOrNull {
-                                it.name == "setMetadata" && it.parameterCount == 1
-                            }
-                            setMetadataMethod?.invoke(session, newMeta)
-                        }
-                    }
-                }
-            }
-        }
 
         // 1) 拦截封面具体回调类中的 onFetched(String, Bitmap, Bitmap)
         val listenerImplClasses = listOfNotNull(
             classLoader.findClassOrNull("Su0.a\$a"),
             classLoader.findClassOrNull("tv.danmaku.bili.ui.player.notification.a\$b"),
             classLoader.findClassOrNull("lI.a"),
-            classLoader.findClassOrNull("lI.c")
+            classLoader.findClassOrNull("lI.c"),
         )
 
         for (clazz in listenerImplClasses) {
@@ -238,10 +327,14 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (method.name == "onFetched") {
                     env.hookAfter(method) { param ->
                         if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookAfter
+                        val url = param.args.getOrNull(0) as? String
                         val bitmap = (param.args.getOrNull(1) as? Bitmap)
                             ?: (param.args.getOrNull(2) as? Bitmap)
                             ?: return@hookAfter
-                        dispatchCoverUpdate(bitmap)
+                        val activeUri = currentActiveArtUri
+                        if (url.isNullOrBlank() || activeUri.isNullOrBlank() || url == activeUri || activeUri.contains(url) || url.contains(activeUri)) {
+                            updateCoverToSessions(currentActiveMediaKey, bitmap, builderClass)
+                        }
                     }
                     count++
                 }
@@ -255,10 +348,14 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (method.name == "putLocalBigImage") {
                     env.hookAfter(method) { param ->
                         if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookAfter
+                        val url = param.args.getOrNull(0) as? String
                         val bitmap = (param.args.getOrNull(1) as? Bitmap)
                             ?: (param.args.getOrNull(0) as? Bitmap)
                             ?: return@hookAfter
-                        dispatchCoverUpdate(bitmap)
+                        val activeUri = currentActiveArtUri
+                        if (url.isNullOrBlank() || activeUri.isNullOrBlank() || url == activeUri || activeUri.contains(url) || url.contains(activeUri)) {
+                            updateCoverToSessions(currentActiveMediaKey, bitmap, builderClass)
+                        }
                     }
                     count++
                 }
@@ -348,9 +445,9 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             if (fwkSetPlaybackState != null) {
                 env.hookBefore(fwkSetPlaybackState) { param ->
                     if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
-                    val fwkSession = param.thisObject
-                    if (fwkSession != null && activeSessionRef?.get() == null) {
-                        activeSessionRef = java.lang.ref.WeakReference(fwkSession)
+                    val fwkSession = param.thisObject as? android.media.session.MediaSession
+                    if (fwkSession != null && activeFwkSessionRef?.get() == null) {
+                        activeFwkSessionRef = java.lang.ref.WeakReference(fwkSession)
                     }
                     val stateObj = param.args.getOrNull(0) as? android.media.session.PlaybackState ?: return@hookBefore
 
