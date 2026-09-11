@@ -5,12 +5,11 @@ import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.HostAccountResolver
 import io.github.bbzq.feats.callMethod
+import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.getObjectField
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
-import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
-import java.lang.reflect.Proxy
 
 class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook(env) {
     private var trialQualityEnabled = false
@@ -18,11 +17,15 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
     private val highestBitrate = HighestBitrateProcessor { message, throwable ->
         log("HighestBitrate $message", throwable)
     }
+    private val hookedHandlerClasses = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Class<*>, Boolean>())
+
+    private fun isTrialEnabled() = ModuleSettings.isUnlockVideoFeaturesEnabled(prefs)
+    private fun isHighestBitrateEnabled() = ModuleSettings.isUnlockHighestBitrateEnabled(prefs)
 
     override fun startHook() {
         if (env.processName != env.packageName) return
-        trialQualityEnabled = ModuleSettings.isUnlockVideoFeaturesEnabled(prefs)
-        highestBitrateEnabled = ModuleSettings.isUnlockHighestBitrateEnabled(prefs)
+        trialQualityEnabled = isTrialEnabled()
+        highestBitrateEnabled = isHighestBitrateEnabled()
         val videoDownloadEnabled = ModuleSettings.isVideoDownloadEnabled(prefs)
 
         if (!trialQualityEnabled && !highestBitrateEnabled && !videoDownloadEnabled) {
@@ -165,10 +168,7 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
                     runCatching {
                         preparePlayViewRequest(param.args.getOrNull(0))
                         val handler = param.args.getOrNull(1) ?: return@runCatching
-                        val wrapped = wrapResponseHandlerIfNeeded(handler)
-                        if (wrapped !== handler) {
-                            param.args[1] = wrapped
-                        }
+                        hookHandlerClass(handler.javaClass)
                     }.onFailure {
                         log("TryFreeQuality response before hook failed at ${method.declaringClass.name}.${method.name}", it)
                     }
@@ -185,11 +185,28 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
         return count
     }
 
+    private fun hookHandlerClass(handlerClass: Class<*>): Boolean {
+        if (!hookedHandlerClasses.add(handlerClass)) return true
+        var hooked = false
+        handlerClass.allMethods().filter { it.name == "onNext" && it.parameterCount == 1 }.forEach { onNextMethod ->
+            env.hookBefore(onNextMethod) { p ->
+                runCatching {
+                    processPlayViewResponse(p.args.firstOrNull())
+                }.onFailure {
+                    log("TryFreeQuality handler onNext hook failed", it)
+                }
+            }
+            hooked = true
+        }
+        return hooked
+    }
+
     private fun hookUiMethods(symbols: io.github.bbzq.feats.symbol.RestoredTryFreeQualitySymbols): Int {
         var count = 0
         symbols.getVipFreeMethods.forEach { method ->
             count += hookSafely(method, "ui/getVipFree") {
                 env.hookAfter(method) { param ->
+                    if (!isTrialEnabled() || !ModuleSettings.isUnlockVideoFeaturesUiEnabled(prefs)) return@hookAfter
                     val needVip = (param.thisObject?.getObjectField("needVip_") as? Boolean) ?: return@hookAfter
                     param.result = needVip
                 }
@@ -198,6 +215,7 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
         symbols.getNeedVipMethods.forEach { method ->
             count += hookSafely(method, "ui/getNeedVip") {
                 env.hookBefore(method) { param ->
+                    if (!isTrialEnabled() || !ModuleSettings.isUnlockVideoFeaturesUiEnabled(prefs)) return@hookBefore
                     param.result = false
                 }
             }
@@ -215,29 +233,12 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
         }
     }
 
-    private fun wrapResponseHandlerIfNeeded(handler: Any): Any {
-        val handlerInterface = handler.javaClass.interfaces.firstOrNull { type ->
-            type.methods.any { method -> method.name == "onNext" && method.parameterCount == 1 }
-        } ?: return handler
-
-        return Proxy.newProxyInstance(
-            handler.javaClass.classLoader ?: classLoader,
-            collectProxyInterfaces(handler, handlerInterface),
-        ) { _, method, args ->
-            runCatching {
-                if (method.name == "onNext") {
-                    processPlayViewResponse(args?.firstOrNull())
-                }
-            }.onFailure {
-                log("TryFreeQuality response proxy failed at ${method.declaringClass.name}.${method.name}", it)
-            }
-
-            invokeProxyMethod(handler, method, args)
-        }
-    }
-
     private fun processPlayViewResponse(target: Any?) {
         if (target == null) return
+        val trial = isTrialEnabled()
+        val highest = isHighestBitrateEnabled()
+        if (!trial && !highest) return
+
         runCatching {
             val videoInfo = target.callMethod("getVideoInfo") ?: target.callMethod("getVodInfo")
             val bvid = (videoInfo?.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
@@ -246,13 +247,16 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
                 VideoStatsOverlayController.currentBvid = bvid
             }
 
-            if (trialQualityEnabled) {
+            if (trial) {
                 clearTrialMarkers(target)
                 clearStreamVipMarkers(target.callMethod("getVideoInfo"))
                 clearStreamVipMarkers(target.callMethod("getVodInfo"))
                 clearStreamVipMarkers(target.callMethod("getViewInfo"))
             }
-            val stats = if (highestBitrateEnabled) {
+            if (highest) {
+                highestBitrate.avoidHdrDolby = ModuleSettings.isAvoidHdrDolbyEnabled(prefs)
+            }
+            val stats = if (highest) {
                 highestBitrate.preferHighestBitrate(target)
             } else {
                 highestBitrate.readStats(target)
@@ -260,6 +264,7 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
             if (stats != null) {
                 VideoStatsOverlayController.instance?.update(stats)
             }
+            CustomCdnProcessor.rewriteResponse(target, prefs, ::log)
         }.onFailure {
             log("PlayView quality response processing failed at ${target.javaClass.name}", it)
         }
@@ -306,6 +311,10 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
 
     private fun preparePlayViewRequest(request: Any?) {
         if (request == null) return
+        val trial = isTrialEnabled()
+        val highest = isHighestBitrateEnabled()
+        if (!trial && !highest) return
+
         runCatching {
             val bvid = (request.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
             val aid = (request.callMethod("getAid") as? Number)?.toLong()?.takeIf { it > 0 }
@@ -317,7 +326,7 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
             }
             if (cid != null) VideoStatsOverlayController.currentCid = cid
 
-            if (trialQualityEnabled) {
+            if (trial) {
                 request.callMethod("setIsNeedTrial", true)
                 request.callMethod("setIsNeedViewInfo", true)
                 request.callMethod("getVod")?.let { vod ->
@@ -328,30 +337,14 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
                     viewInfo.callMethod("setIsNeedViewInfo", true)
                 }
             }
-            if (highestBitrateEnabled) highestBitrate.prepareRequest(request)
+            if (highest) {
+                highestBitrate.avoidHdrDolby = ModuleSettings.isAvoidHdrDolbyEnabled(prefs)
+                highestBitrate.prepareRequest(request)
+            }
         }.onFailure {
             log("TryFreeQuality request prep failed at ${request.javaClass.name}", it)
         }
     }
-
-    private fun invokeProxyMethod(handler: Any, method: Method, args: Array<out Any?>?): Any? {
-        return try {
-            if (args == null) {
-                method.invoke(handler)
-            } else {
-                method.invoke(handler, *args)
-            }
-        } catch (throwable: Throwable) {
-            throw (throwable as? InvocationTargetException)?.targetException ?: throwable
-        }
-    }
-
-    private fun collectProxyInterfaces(original: Any, primaryType: Class<*>): Array<Class<*>> =
-        buildSet {
-            add(primaryType)
-            original.javaClass.interfaces.forEach(::add)
-            original.javaClass.takeIf { it.isInterface }?.let(::add)
-        }.toTypedArray()
 
     private fun resolveWatermarkIdentity(): UserWatermarkIdentity {
         val snapshot = HostAccountResolver.resolve(env.hostContext, classLoader)
