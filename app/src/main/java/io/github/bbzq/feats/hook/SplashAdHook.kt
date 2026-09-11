@@ -75,11 +75,20 @@ class SplashAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun clearSplashShowStrategy(target: Any) {
         target.javaClass.declaredFields
-            .filter { !it.type.isPrimitive }
-            .filter { it.type != String::class.java && it.type.name !in JSON_OBJECT_CLASSES }
             .forEach { field ->
                 field.isAccessible = true
-                runCatching { field.set(target, null) }
+                runCatching {
+                    val value = field.get(target) ?: return@runCatching
+                    if (value is MutableList<*>) {
+                        value.clear()
+                    } else if (value is MutableMap<*, *>) {
+                        value.clear()
+                    } else if (field.name.contains("ad", ignoreCase = true) || field.name.contains("strategy", ignoreCase = true)) {
+                        if (!field.type.isPrimitive && field.type != String::class.java && field.type.name !in JSON_OBJECT_CLASSES) {
+                            field.set(target, null)
+                        }
+                    }
+                }
             }
     }
 

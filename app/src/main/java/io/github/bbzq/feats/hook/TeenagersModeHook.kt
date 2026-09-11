@@ -15,6 +15,7 @@ class TeenagersModeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         methods.forEach { method ->
             env.hookAfter(method) { param ->
                 val activity = param.thisObject as? Activity ?: return@hookAfter
+                if (!isTeenagersModeActivity(activity)) return@hookAfter
                 activity.finish()
                 log("Teenagers mode dialog has been closed: ${activity.javaClass.name}")
             }
@@ -25,6 +26,12 @@ class TeenagersModeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         } else {
             log("TeenagersModeHook: Activity not found")
         }
+    }
+
+    private fun isTeenagersModeActivity(activity: Activity): Boolean {
+        val name = activity.javaClass.name
+        return name.contains("TeenagersMode", ignoreCase = true) ||
+            name.contains("TeensParentControl", ignoreCase = true)
     }
 }
 

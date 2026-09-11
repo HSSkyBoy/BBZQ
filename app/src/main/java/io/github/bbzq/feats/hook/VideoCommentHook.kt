@@ -18,6 +18,19 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
         if (env.processName != env.packageName) return
 
+        val disableComment = ModuleSettings.isCommentDisableEnabled(prefs)
+        val noQuickReply = ModuleSettings.isCommentNoQuickReplyEnabled(prefs)
+        val noVote = ModuleSettings.isCommentNoVoteEnabled(prefs)
+        val noFollow = ModuleSettings.isCommentNoFollowEnabled(prefs)
+        val noSearch = ModuleSettings.isCommentNoSearchEnabled(prefs)
+        val noEmptyPage = ModuleSettings.isCommentNoEmptyPageEnabled(prefs)
+        val cleanupActive = currentReplyCleanupOptions().active
+
+        if (!disableComment && !noQuickReply && !noVote && !noFollow && !noSearch && !noEmptyPage && !cleanupActive) {
+            log("startHook: VideoComment all features disabled, zero hooks installed")
+            return
+        }
+
         val symbols = env.symbols?.videoComment?.restore(classLoader)
         if (symbols == null) {
             log("startHook: VideoComment skipped because symbols are unavailable")
@@ -25,14 +38,15 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         var count = 0
-        count += hookDisableComment(symbols)
-        count += hookQuickReply(symbols)
-        count += hookVoteWidgets(symbols)
-        count += hookFollowWidgets(symbols)
-        count += hookSearchUrls(symbols)
-        count += hookEmptyPage(symbols)
-        count += hookMainListCleanup(symbols)
+        if (disableComment) count += hookDisableComment(symbols)
+        if (noQuickReply) count += hookQuickReply(symbols)
+        if (noVote) count += hookVoteWidgets(symbols)
+        if (noFollow) count += hookFollowWidgets(symbols)
+        if (noSearch) count += hookSearchUrls(symbols)
+        if (noEmptyPage) count += hookEmptyPage(symbols)
+        if (cleanupActive) count += hookMainListCleanup(symbols)
         log("startHook: VideoComment, methods=$count")
+        isInstalled = true
     }
 
     private fun hookDisableComment(symbols: RestoredVideoCommentSymbols): Int {

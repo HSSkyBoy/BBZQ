@@ -32,7 +32,11 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         env.hookAfterMethod(Activity::class.java, "onResume") { param ->
             val activity = param.thisObject as? Activity ?: return@hookAfterMethod
-            scheduleSweep(activity, activity.window?.decorView ?: return@hookAfterMethod, activity.javaClass.name)
+            val name = activity.javaClass.name
+            if (!isDynamicActivity(name)) return@hookAfterMethod
+            val window = activity.window ?: return@hookAfterMethod
+            val decor = runCatching { window.peekDecorView() ?: window.decorView }.getOrNull() ?: return@hookAfterMethod
+            scheduleSweep(activity, decor, name)
         }
         val fragmentClass = ANDROIDX_FRAGMENT_CLASS.from(classLoader)
         val fragmentHookCount = fragmentClass?.let { type ->
@@ -248,6 +252,9 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return keywords.any(className::contains)
     }
 
+    private fun isDynamicActivity(name: String): Boolean =
+        name.contains("MainActivity") || name.contains("Dynamic") || name.contains("Main2")
+
     private companion object {
         private val SWEEP_DELAYS_MS = longArrayOf(0L, 120L, 300L, 700L, 1500L, 3000L)
         private const val GLOBAL_SWEEP_WINDOW_MS = 4000L
@@ -258,6 +265,7 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private val DYNAMIC_FRAGMENT_KEYWORDS = listOf(
             "followinglist.home.mediator",
             "mediatorfragment",
+            "followinglist",
         )
         private val VIDEO_TAB_LABELS = setOf("视频")
         private val CITY_TAB_LABELS = setOf("同城")

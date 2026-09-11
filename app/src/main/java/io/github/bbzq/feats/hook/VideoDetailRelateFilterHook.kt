@@ -20,6 +20,12 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     override fun startHook() {
         if (env.processName != env.packageName) return
+        val enabled = ModuleSettings.isCustomVideoDetailRelateFilterEnabled(prefs)
+        if (!enabled) {
+            log("startHook: VideoDetailRelateFilter disabled, zero hooks installed")
+            return
+        }
+
         ModuleSettings.refreshKnownVideoDetailRelateTypesCache(prefs)
         knownTypes.addAll(ModuleSettings.getKnownVideoDetailRelateTypes(prefs))
 
@@ -40,6 +46,7 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (installed == 0) {
             log("startHook: VideoDetailRelateFilter no hook point found")
         } else {
+            isInstalled = true
             log("startHook: VideoDetailRelateFilter installed=$installed")
         }
     }
@@ -109,12 +116,28 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return true
     }
 
+    private fun isSafeRelateCardItem(item: Any?): Boolean {
+        if (item == null) return false
+        if (item is android.content.Context) return false
+        val name = item.javaClass.name
+        if (name.contains("Driver") ||
+            name.contains("Scope") ||
+            name.contains("Service") ||
+            name.contains("Activity") ||
+            name.contains("Fragment") ||
+            name.contains("Component")
+        ) {
+            return false
+        }
+        return true
+    }
+
     private fun shouldFilterItem(
         item: Any?,
         hiddenTypes: Set<String>,
         titleKeywords: List<String>,
     ): Boolean {
-        if (item == null) return false
+        if (!isSafeRelateCardItem(item)) return false
         val type = extractType(item)
         if (type != null && hiddenTypes.any { it.equals(type, ignoreCase = true) }) {
             return true
@@ -129,7 +152,7 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun extractType(item: Any?): String? {
-        if (item == null) return null
+        if (!isSafeRelateCardItem(item)) return null
         // 1. Try getCardCase() (Protobuf RelateCard)
         callNoArg(item, "getCardCase")?.let { cardCase ->
             val name = (cardCase as? Enum<*>)?.name ?: cardCase.toString()
@@ -147,7 +170,7 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         // 3. Try DetailRelateService D0 fields
-        val itemClass = item.javaClass
+        val itemClass = item?.javaClass ?: return null
         if (itemClass.name.endsWith("D0") || itemClass.name.contains("relate.D0")) {
             runCatching {
                 val fieldA = itemClass.fields.firstOrNull { it.name == "f289440a" || it.name == "type" }
@@ -170,7 +193,7 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun extractTitle(item: Any?): String? {
-        if (item == null) return null
+        if (!isSafeRelateCardItem(item)) return null
 
         // 1. Direct getTitle()
         callNoArg(item, "getTitle")?.toString()?.takeIf { it.isNotBlank() }?.let {

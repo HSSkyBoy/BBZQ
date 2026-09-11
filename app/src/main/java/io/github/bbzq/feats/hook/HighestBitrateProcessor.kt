@@ -2,6 +2,7 @@ package io.github.bbzq.feats.hook
 
 import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.callMethod
+import io.github.bbzq.feats.setObjectField
 
 /** Request/response policy used by the single PlayView hook pipeline. */
 internal class HighestBitrateProcessor(
@@ -23,7 +24,8 @@ internal class HighestBitrateProcessor(
         return runCatching {
             val videoInfo = response.callMethod("getVideoInfo")
             val vodInfo = response.callMethod("getVodInfo")
-            readSelectedStats(vodInfo) ?: readSelectedStats(videoInfo)
+            val viewInfo = response.callMethod("getViewInfo")
+            readSelectedStats(vodInfo) ?: readSelectedStats(videoInfo) ?: readSelectedStats(viewInfo)
         }.onFailure {
             reportFailure("response stats read failed at ${response.javaClass.name}", it)
         }.getOrNull()
@@ -34,9 +36,12 @@ internal class HighestBitrateProcessor(
         return runCatching {
             val videoInfo = response.callMethod("getVideoInfo")
             val vodInfo = response.callMethod("getVodInfo")
+            val viewInfo = response.callMethod("getViewInfo")
             reorderStreams(videoInfo)
             reorderStreams(vodInfo)
-            readSelectedStats(vodInfo) ?: readSelectedStats(videoInfo)
+            reorderStreams(viewInfo)
+            reorderStreams(viewInfo?.callMethod("getVideoInfo"))
+            readSelectedStats(vodInfo) ?: readSelectedStats(videoInfo) ?: readSelectedStats(viewInfo)
         }.onFailure {
             reportFailure("response selection failed at ${response.javaClass.name}", it)
         }.getOrNull()
@@ -193,6 +198,11 @@ internal class HighestBitrateProcessor(
         }.getOrDefault(false)
         if (replacedInPlace) return
 
+        val fieldReplaced = runCatching {
+            container.setObjectField("streamList_", reordered)
+        }.getOrDefault(false)
+        if (fieldReplaced) return
+
         val cleared = invokeNoArg(container, "clearStreamList")
         if (!cleared || !invokeOneArg(container, "addAllStreamList", reordered)) {
             // Restore when a generated protobuf exposes clear but not addAll on this version.
@@ -201,8 +211,11 @@ internal class HighestBitrateProcessor(
     }
 
     // Lower is more preferred; unknown qn values rank last
-    private fun preferenceRank(qn: Long): Int =
-        QN_PREFERENCE.indexOf(qn).let { if (it >= 0) it else Int.MAX_VALUE }
+    private fun preferenceRank(qn: Long): Int {
+        if (avoidHdrDolby && (qn == QN_HDR || qn == QN_DOLBY_VISION)) return Int.MAX_VALUE - 1
+        val index = QN_PREFERENCE.indexOf(qn)
+        return if (index >= 0) index else Int.MAX_VALUE
+    }
 
     private fun number(target: Any, getter: String): Long? =
         (target.callMethod(getter) as? Number)?.toLong()

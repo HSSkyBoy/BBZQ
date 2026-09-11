@@ -15,14 +15,19 @@ class BlockUpdateHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return
         }
 
-        env.hookBefore(symbols.checkMethod) {
-            throw createUpdateException()
+        env.hookBefore(symbols.checkMethod) { param ->
+            val exception = createUpdateException()
+            if (exception != null) {
+                throw exception
+            } else {
+                param.result = null
+            }
         }
 
         log("startHook: BlockUpdate, methods=1")
     }
 
-    private fun createUpdateException(): Throwable {
+    private fun createUpdateException(): Throwable? {
         val message = "哼，休想要我更新！<(￣︶￣)>"
         return runCatching {
             val type = classLoader.loadClass(UPDATE_EXCEPTION_CLASS)
@@ -30,9 +35,7 @@ class BlockUpdateHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 isAccessible = true
             }
             ctor.newInstance(message) as Throwable
-        }.getOrElse {
-            IllegalStateException(message)
-        }
+        }.getOrNull()
     }
 
     private companion object {

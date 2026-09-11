@@ -46,12 +46,21 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val setter = entry.javaClass.methodsNamed("setOnPreferenceClickListener")
             .firstOrNull { it.parameterCount == 1 && it.parameterTypes[0].isInterface } ?: return
         val listenerType = setter.parameterTypes[0]
-        val listener = Proxy.newProxyInstance(listenerType.classLoader, arrayOf(listenerType)) { _, method, _ ->
-            if (method.name == "onPreferenceClick") {
-                ModuleSettingsNavigator.open(activity, runtimeSnapshot())
-                true
-            } else {
-                null
+        val listener = Proxy.newProxyInstance(listenerType.classLoader, arrayOf(listenerType)) { proxy, method, args ->
+            when (method.name) {
+                "onPreferenceClick" -> {
+                    ModuleSettingsNavigator.open(activity, runtimeSnapshot())
+                    true
+                }
+                "equals" -> proxy === args?.getOrNull(0)
+                "hashCode" -> System.identityHashCode(proxy)
+                "toString" -> "BbzqOnPreferenceClickListener"
+                else -> when (method.returnType) {
+                    java.lang.Boolean.TYPE -> false
+                    java.lang.Integer.TYPE -> 0
+                    java.lang.Long.TYPE -> 0L
+                    else -> null
+                }
             }
         }
         setter.invoke(entry, listener)

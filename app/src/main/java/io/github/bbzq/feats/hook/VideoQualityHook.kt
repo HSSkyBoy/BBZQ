@@ -3,6 +3,7 @@ package io.github.bbzq.feats.hook
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
+import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
 
 class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
@@ -32,7 +33,37 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         var installedHooks = 0
 
-        // 1. Prevent half-screen preloading low quality streams
+        // 1. VIP privilege spoofing for quality management classes:
+        if (unlockHighestBitrate || unlockVideoFeatures) {
+            runCatching {
+                val vipClass = classLoader.findClassOrNull("com.bilibili.lib.accountinfo.model.VipUserInfo")
+                val isEffectiveVip = vipClass?.declaredMethods?.firstOrNull { method ->
+                    method.name == "isEffectiveVip" && method.parameterCount == 0
+                }
+                if (isEffectiveVip != null) {
+                    env.hookBefore(isEffectiveVip) { param ->
+                        runCatching {
+                            val trace = Thread.currentThread().stackTrace
+                            val limit = minOf(trace.size, 15)
+                            var isQualityCaller = false
+                            for (i in 0 until limit) {
+                                val cls = trace[i].className
+                                if (cls.contains(".quality.") || cls.contains(".player.")) {
+                                    isQualityCaller = true
+                                    break
+                                }
+                            }
+                            if (isQualityCaller) {
+                                param.result = true
+                            }
+                        }
+                    }
+                    installedHooks++
+                }
+            }.onFailure { log("Failed to hook VipUserInfo.isEffectiveVip", it) }
+        }
+
+        // 2. Prevent half-screen preloading low quality streams
         if (halfScreenQuality != 0) {
             symbols.playerPreloadGetMethods.forEach { method ->
                 runCatching {
