@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats.hook
+package io.github.bbzq.feats.hook
 
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
@@ -61,7 +61,16 @@ class SplashAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun clearMutableList(target: Any, fieldName: String) {
-        (target.getObjectField(fieldName) as? MutableList<*>)?.clear()
+        val list = target.getObjectField(fieldName) as? List<*> ?: return
+        if (list is MutableList<*>) {
+            runCatching { list.clear() }
+        } else {
+            runCatching {
+                val field = target.javaClass.getDeclaredField(fieldName)
+                field.isAccessible = true
+                field.set(target, emptyList<Any>())
+            }
+        }
     }
 
     private fun clearAllMutableLists(target: Any) {
@@ -69,24 +78,31 @@ class SplashAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             .filter { List::class.java.isAssignableFrom(it.type) }
             .forEach { field ->
                 field.isAccessible = true
-                runCatching { (field.get(target) as? MutableList<*>)?.clear() }
+                runCatching {
+                    val list = field.get(target) as? List<*>
+                    if (list is MutableList<*>) {
+                        list.clear()
+                    } else if (list != null && list.isNotEmpty()) {
+                        field.set(target, emptyList<Any>())
+                    }
+                }
             }
     }
 
     private fun clearSplashShowStrategy(target: Any) {
         target.javaClass.declaredFields
+            .filter { !it.type.isPrimitive }
+            .filter { it.type != String::class.java && it.type.name !in JSON_OBJECT_CLASSES }
             .forEach { field ->
                 field.isAccessible = true
                 runCatching {
-                    val value = field.get(target) ?: return@runCatching
+                    val value = field.get(target)
                     if (value is MutableList<*>) {
                         value.clear()
                     } else if (value is MutableMap<*, *>) {
                         value.clear()
-                    } else if (field.name.contains("ad", ignoreCase = true) || field.name.contains("strategy", ignoreCase = true)) {
-                        if (!field.type.isPrimitive && field.type != String::class.java && field.type.name !in JSON_OBJECT_CLASSES) {
-                            field.set(target, null)
-                        }
+                    } else {
+                        field.set(target, null)
                     }
                 }
             }
