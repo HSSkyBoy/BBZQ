@@ -56,7 +56,9 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
     fun attach(context: Context, prefs: SharedPreferences) {
         init(context)
         service?.let { currentService ->
-            syncWithRemote(context, currentService)
+            thread(name = "BBZQ-SyncAttach", isDaemon = true) {
+                syncWithRemote(context, currentService)
+            }
         }
     }
 

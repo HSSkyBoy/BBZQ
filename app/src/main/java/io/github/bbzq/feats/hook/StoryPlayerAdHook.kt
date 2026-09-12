@@ -2,21 +2,16 @@ package io.github.bbzq.feats.hook
 
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
-import android.view.View
-import android.view.ViewGroup
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.ModuleSettingsBridge
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.MethodHookParam
 import io.github.bbzq.feats.RoamingEnv
-import io.github.bbzq.feats.allMethods
-import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.getObjectField
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.replace
 import java.lang.reflect.Method
-import java.lang.reflect.Modifier
 import java.util.LinkedHashMap
 
 class StoryPlayerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
@@ -45,15 +40,10 @@ class StoryPlayerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         var hookCount = 0
-        if (enabled) {
-            hookCount += installStoryControllerAdGateHook()
-            hookCount += installStoryAdWidgetUiHooks()
-        }
 
         val symbols = env.symbols?.storyPlayerAd?.restore(classLoader)
         if (symbols == null) {
-            log("startHook: StoryPlayerAd symbols unavailable, installed direct hooks=$hookCount")
-            if (hookCount > 0) isInstalled = true
+            log("startHook: StoryPlayerAd symbols unavailable, direct hooks=0")
             return
         }
 
@@ -68,76 +58,6 @@ class StoryPlayerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         } else {
             log("startHook: StoryPlayerAd no hook point found")
         }
-    }
-
-    private fun installStoryControllerAdGateHook(): Int {
-        var count = 0
-        val storyControllerClass = classLoader.findClassOrNull("com.bilibili.video.story.action.StoryController")
-        if (storyControllerClass != null) {
-            storyControllerClass.declaredMethods.filter {
-                !Modifier.isStatic(it.modifiers) && (it.name == "getAdSection" || it.name == "getGameSection")
-            }.forEach { method ->
-                env.hookBefore(method) { param ->
-                    param.result = null
-                }
-                count++
-            }
-        }
-
-        val adStorySectionClass = classLoader.findClassOrNull("com.bilibili.ad.adview.story.AdStorySection")
-        if (adStorySectionClass != null) {
-            adStorySectionClass.declaredMethods.filter {
-                !Modifier.isStatic(it.modifiers) && (it.name == "getAdEndPageProxy" || it.name == "getAdViewProxy")
-            }.forEach { method ->
-                env.hookBefore(method) { param ->
-                    param.result = null
-                }
-                count++
-            }
-        }
-        log("startHook: StoryPlayerAd controller ad gate hook installed=$count")
-        return count
-    }
-
-    private fun installStoryAdWidgetUiHooks(): Int {
-        var count = 0
-        val widgetClassNames = listOf(
-            "com.bilibili.video.story.action.widget.StoryAdEndPageWidget",
-            "com.bilibili.video.story.action.widget.StoryAdWidget",
-            "com.bilibili.video.story.action.widget.StoryAdFullScreenWidget",
-            "com.bilibili.video.story.action.widget.StoryShopCartWidget",
-            "com.bilibili.video.story.action.widget.StoryGameWidget",
-        )
-
-        widgetClassNames.forEach { className ->
-            val widgetClass = classLoader.findClassOrNull(className) ?: return@forEach
-            widgetClass.allMethods().firstOrNull {
-                it.name == "setVisibility" &&
-                    it.parameterCount == 1 &&
-                    it.parameterTypes[0] == Int::class.javaPrimitiveType
-            }?.let { method ->
-                env.hookBefore(method) { param ->
-                    val visibility = param.args[0] as? Int ?: return@hookBefore
-                    if (visibility == View.VISIBLE) {
-                        param.args[0] = View.GONE
-                    }
-                }
-                count++
-            }
-
-            widgetClass.declaredMethods.firstOrNull {
-                it.name == "i0" && it.parameterCount == 1 && !Modifier.isStatic(it.modifiers)
-            }?.let { method ->
-                env.hookBefore(method) { param ->
-                    val view = param.thisObject as? View ?: return@hookBefore
-                    view.visibility = View.GONE
-                    (view as? ViewGroup)?.removeAllViews()
-                }
-                count++
-            }
-        }
-        log("startHook: StoryPlayerAd widget UI hooks installed=$count")
-        return count
     }
 
     private fun installStoryFeedResponseHook(getItems: Method): Int {

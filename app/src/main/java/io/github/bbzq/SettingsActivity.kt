@@ -9,8 +9,8 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsets
-import android.widget.LinearLayout
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -26,7 +26,16 @@ class SettingsActivity : Activity() {
     }
 
     private var pendingImportArchive: ByteArray? = null
-    private var contentFactory: SettingsContentFactory? = null
+    private var currentFactory: SettingsContentFactory? = null
+
+    // In-activity page stack for zero-delay navigation
+    private val pageStack = ArrayDeque<String>()
+    private lateinit var toolbarTitleView: TextView
+    private lateinit var contentContainer: FrameLayout
+
+    // Track current bottom inset so new pages get it applied immediately
+    private var currentBottomInset: Int = 0
+    private var toolbarBaseTop: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,31 +43,29 @@ class SettingsActivity : Activity() {
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
 
-        val page = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
-        val toolbar = createToolbar(page)
-        val factory = SettingsContentFactory(
-            context = this,
-            prefs = prefs,
-            page = page,
-            openPage = { targetPage ->
-                ModuleSettingsNavigator.open(
-                    context = this,
-                    runtimeValues = intent.getBundleExtra(RuntimeEnvironmentInfo.EXTRA_RUNTIME_VALUES),
-                    page = targetPage,
-                )
-            },
-            onExportClick = { launchExportConfig() },
-            onImportClick = { launchImportConfig() },
-            onCustomSkinImportClick = { launchCustomSkinImport() },
+        val initialPage = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
+        pageStack.addLast(initialPage)
+
+        val toolbar = createToolbar(initialPage)
+        contentContainer = FrameLayout(this)
+
+        val factory = buildFactory(initialPage)
+        currentFactory = factory
+        val scrollView = factory.createScrollView()
+        contentContainer.addView(
+            scrollView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
         )
-        contentFactory = factory
-        val content = factory.createScrollView()
+
         val contentRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(getColor(R.color.page_background))
             addView(toolbar)
             addView(
-                content,
+                contentContainer,
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -86,12 +93,11 @@ class SettingsActivity : Activity() {
         }
 
         setContentView(root)
-        applyWindowInsets(contentRoot, toolbar, content)
+        applyWindowInsets(contentRoot, toolbar, scrollView)
     }
 
     override fun onDestroy() {
-        contentFactory?.destroy()
-        contentFactory = null
+        currentFactory = null
         super.onDestroy()
     }
 
@@ -100,7 +106,14 @@ class SettingsActivity : Activity() {
         setIntent(intent)
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
-        recreate()
+        val targetPage = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
+        if (targetPage == PAGE_ROOT) {
+            pageStack.clear()
+            pageStack.addLast(PAGE_ROOT)
+            switchContent(PAGE_ROOT)
+        } else {
+            navigateTo(targetPage)
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -117,8 +130,65 @@ class SettingsActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        finish()
+        if (pageStack.size > 1) {
+            navigateBack()
+        } else {
+            finish()
+        }
     }
+
+    // ── In-activity Navigation ────────────────────────────────────────────────
+
+    private fun navigateTo(page: String) {
+        if (pageStack.lastOrNull() == page) return
+        pageStack.addLast(page)
+        switchContent(page)
+    }
+
+    private fun navigateBack() {
+        if (pageStack.size <= 1) { finish(); return }
+        pageStack.removeLast()
+        switchContent(pageStack.last())
+    }
+
+    private fun switchContent(page: String) {
+        currentFactory = null
+        contentContainer.removeAllViews()
+        toolbarTitleView.text = toolbarTitle(page)
+
+        val factory = buildFactory(page)
+        currentFactory = factory
+        val scrollView = factory.createScrollView()
+        // Apply tracked bottom inset to the new scroll view
+        if (currentBottomInset > 0) {
+            scrollView.setPadding(
+                scrollView.paddingLeft,
+                scrollView.paddingTop,
+                scrollView.paddingRight,
+                scrollView.paddingBottom + currentBottomInset,
+            )
+        }
+        contentContainer.addView(
+            scrollView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+    }
+
+    private fun buildFactory(page: String): SettingsContentFactory =
+        SettingsContentFactory(
+            context = this,
+            prefs = prefs,
+            page = page,
+            openPage = { targetPage -> navigateTo(targetPage) },
+            onExportClick = { launchExportConfig() },
+            onImportClick = { launchImportConfig() },
+            onCustomSkinImportClick = { launchCustomSkinImport() },
+        )
+
+    // ── File Picking / Import / Export ────────────────────────────────────────
 
     private fun launchExportConfig() {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -283,6 +353,8 @@ class SettingsActivity : Activity() {
         return "bbzq_config_$timestamp.zip"
     }
 
+    // ── Toolbar ───────────────────────────────────────────────────────────────
+
     private fun createToolbar(page: String): LinearLayout {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -296,6 +368,7 @@ class SettingsActivity : Activity() {
                 textSize = 20f
                 setTextColor(getColor(R.color.title_text))
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                toolbarTitleView = this
             })
 
             addView(TextView(this@SettingsActivity).apply {
@@ -333,6 +406,8 @@ class SettingsActivity : Activity() {
         else -> getString(R.string.settings_title)
     }
 
+    // ── Watermark ─────────────────────────────────────────────────────────────
+
     private fun createAccountWatermark(): AccountWatermarkView? {
         val uid = prefs.getString(ModuleSettings.KEY_HOST_ACCOUNT_UID, "").orEmpty()
         val userName = prefs.getString(ModuleSettings.KEY_HOST_ACCOUNT_NAME, "").orEmpty()
@@ -353,30 +428,36 @@ class SettingsActivity : Activity() {
             }.getOrNull()
     }
 
+    // ── Window Insets ─────────────────────────────────────────────────────────
+
     private fun applyWindowInsets(
         root: LinearLayout,
         toolbar: LinearLayout,
-        content: ScrollView,
+        initialContent: ScrollView,
     ) {
         val toolbarLeft = toolbar.paddingLeft
-        val toolbarTop = toolbar.paddingTop
+        toolbarBaseTop = toolbar.paddingTop
         val toolbarRight = toolbar.paddingRight
         val toolbarBottom = toolbar.paddingBottom
-        val contentLeft = content.paddingLeft
-        val contentTop = content.paddingTop
-        val contentRight = content.paddingRight
-        val contentBottom = content.paddingBottom
+        val contentLeft = initialContent.paddingLeft
+        val contentTop = initialContent.paddingTop
+        val contentRight = initialContent.paddingRight
+        val contentBottom = initialContent.paddingBottom
 
         root.setOnApplyWindowInsetsListener { _, insets ->
             val safeInsets =
                 insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             toolbar.setPadding(
                 toolbarLeft,
-                toolbarTop + safeInsets.top,
+                toolbarBaseTop + safeInsets.top,
                 toolbarRight,
                 toolbarBottom,
             )
-            content.setPadding(
+            // Track bottom inset so future page switches apply it to new ScrollViews
+            currentBottomInset = safeInsets.bottom
+            // Apply to whichever ScrollView is currently shown
+            val activeScroll = contentContainer.getChildAt(0) as? ScrollView
+            activeScroll?.setPadding(
                 contentLeft,
                 contentTop,
                 contentRight,

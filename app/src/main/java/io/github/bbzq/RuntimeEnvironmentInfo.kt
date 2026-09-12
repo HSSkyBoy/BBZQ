@@ -185,8 +185,8 @@ object RuntimeEnvironmentInfo {
         }
     }
 
-    fun applyRuntimeSnapshotFromIntent(intent: Intent?, prefs: SharedPreferences): Boolean {
-        val values = intent?.getBundleExtra(EXTRA_RUNTIME_VALUES) ?: return false
+    fun applyRuntimeSnapshotFromIntent(intent: Intent?, prefs: SharedPreferences) {
+        val values = intent?.getBundleExtra(EXTRA_RUNTIME_VALUES) ?: return
         val editor = prefs.edit()
         var changed = false
         values.keySet().forEach { key ->
@@ -204,7 +204,7 @@ object RuntimeEnvironmentInfo {
                 changed = true
             }
         }
-        return changed && editor.commit()
+        if (changed) editor.apply()
     }
 
     private fun resolveHostVersion(context: Context, prefs: SharedPreferences): VersionInfo {
