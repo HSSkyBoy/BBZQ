@@ -1,5 +1,6 @@
 package io.github.bbzq.feats.symbol
 
+import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Canvas
@@ -273,6 +274,7 @@ object BiliSymbolResolver {
             bridge?.let { return it }
             val opened = DexKitBridgeProvider.openFirstAvailable(
                 sourcePaths = sourcePaths,
+                context = hostContext,
                 recordError = ::recordError,
                 log = { log(it, null) },
             ) ?: return null
@@ -673,7 +675,11 @@ object BiliSymbolResolver {
         val activityClass = REWARD_ACTIVITY_CLASSES.firstNotNullOfOrNull { classLoader.loadClassOrNull(it) }
         val activityOnCreate = activityClass?.findMethod("onCreate", Void.TYPE, Bundle::class.java)
         val activityOnResume = activityClass?.findMethod("onResume", Void.TYPE)
-        val activityOnStop = activityClass?.findMethod("onStop", Void.TYPE)
+        val activityOnStop = activityClass?.findMethod("onStop", Void.TYPE)?.takeUnless {
+            it.declaringClass == Activity::class.java ||
+                it.declaringClass.name.startsWith("android.") ||
+                it.declaringClass.name.startsWith("androidx.")
+        }
         val activityCount = listOfNotNull(activityOnCreate, activityOnResume, activityOnStop).size
 
         val headerClass = classLoader.loadClassOrNull(REWARD_HEADER_VIEW)
@@ -1919,21 +1925,63 @@ object BiliSymbolResolver {
 
         for (name in STORY_COMMENT_OUTER_CANDIDATES) {
             val prefix = "com.bilibili.video.story.action.$name"
-            val containerInterface = classLoader.loadClassOrNull("$prefix\$b") ?: continue
-            val sig = containerInterface.allMethods().firstOrNull { method ->
-                method.name == "a" &&
-                    method.returnType == Void.TYPE &&
-                    method.parameterCount == 8 &&
-                    method.parameterTypes[0] == storyDetail &&
-                    method.parameterTypes[2] == Long::class.javaPrimitiveType &&
-                    method.parameterTypes[3] == Long::class.javaPrimitiveType &&
-                    method.parameterTypes[4] == String::class.java
-            }?.parameterTypes ?: continue
+            val outerClass = classLoader.loadClassOrNull(prefix)
+            val interfaceCandidates = buildList {
+                for (suffix in listOf("b", "c", "d", "a", "e", "f")) {
+                    classLoader.loadClassOrNull("$prefix\$$suffix")?.let(::add)
+                }
+                outerClass?.declaredClasses?.filterTo(this) { it.isInterface }
+            }.distinct()
+
+            var containerInterface: Class<*>? = null
+            var sig: Array<Class<*>>? = null
+            for (iface in interfaceCandidates) {
+                val candidateSig = iface.allMethods().firstOrNull { method ->
+                    method.name == "a" &&
+                        method.returnType == Void.TYPE &&
+                        method.parameterCount == 8 &&
+                        method.parameterTypes[0] == storyDetail &&
+                        method.parameterTypes[2] == Long::class.javaPrimitiveType &&
+                        method.parameterTypes[3] == Long::class.javaPrimitiveType &&
+                        method.parameterTypes[4] == String::class.java
+                }?.parameterTypes
+                if (candidateSig != null) {
+                    containerInterface = iface
+                    sig = candidateSig
+                    break
+                }
+            }
+            if (sig == null || containerInterface == null) continue
 
             matchedSignature = sig
-            matchedVerticalContainer = classLoader.loadClassOrNull("$prefix\$VerticalContainerV2")
+            val implCandidates = buildList {
+                listOf("VerticalContainerV2", "VerticalContainer", "LandscapeContainer", "f", "g", "d", "e").forEach { suffix ->
+                    classLoader.loadClassOrNull("$prefix\$$suffix")?.let(::add)
+                }
+                outerClass?.declaredClasses?.filterTo(this) {
+                    !it.isInterface && containerInterface.isAssignableFrom(it)
+                }
+            }.distinct()
+
+            matchedVerticalContainer = implCandidates.firstOrNull { cls ->
+                cls.name.contains("VerticalContainer") ||
+                    cls.name.endsWith("\$f") ||
+                    cls.name.endsWith("\$g") ||
+                    cls.allFields().any { it.type.name.contains("StoryCommentConstraintLayout") }
+            } ?: classLoader.loadClassOrNull("$prefix\$VerticalContainerV2")
                 ?: classLoader.loadClassOrNull("$prefix\$f")
-            matchedLandscapeContainer = classLoader.loadClassOrNull("$prefix\$d")
+                ?: classLoader.loadClassOrNull("$prefix\$g")
+
+            matchedLandscapeContainer = implCandidates.firstOrNull { cls ->
+                cls != matchedVerticalContainer && (
+                    cls.name.contains("LandscapeContainer") ||
+                        cls.name.endsWith("\$d") ||
+                        cls.name.endsWith("\$e")
+                )
+            } ?: classLoader.loadClassOrNull("$prefix\$LandscapeContainer")
+                ?: classLoader.loadClassOrNull("$prefix\$d")
+                ?: classLoader.loadClassOrNull("$prefix\$e")
+
             break
         }
 
@@ -4195,6 +4243,8 @@ object BiliSymbolResolver {
     )
 
     private val REWARD_ACTIVITY_CLASSES = arrayOf(
+        "com.bilibili.ad.reward.activity.RewardAdActivity",
+        "com.bilibili.ad.reward.activity.RewardAdDisplayActivity",
         "com.bilibili.ad.reward.activity.BaseRewardAdActivity",
         "com.bilibili.ad.reward.RewardAdActivity",
     )
