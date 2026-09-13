@@ -4,8 +4,11 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsets
@@ -14,6 +17,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -31,7 +36,12 @@ class SettingsActivity : Activity() {
     // In-activity page stack for zero-delay navigation
     private val pageStack = ArrayDeque<String>()
     private lateinit var toolbarTitleView: TextView
+    private lateinit var backButtonView: TextView
     private lateinit var contentContainer: FrameLayout
+
+    // Android 13+ Predictive Back callback
+    private var backInvokedCallback: OnBackInvokedCallback? = null
+    private var isBackCallbackRegistered = false
 
     // Track current bottom inset so new pages get it applied immediately
     private var currentBottomInset: Int = 0
@@ -94,9 +104,11 @@ class SettingsActivity : Activity() {
 
         setContentView(root)
         applyWindowInsets(contentRoot, toolbar, scrollView)
+        updateBackCallback()
     }
 
     override fun onDestroy() {
+        unregisterBackCallback()
         currentFactory = null
         super.onDestroy()
     }
@@ -128,6 +140,16 @@ class SettingsActivity : Activity() {
         }
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+            if (pageStack.size > 1) {
+                navigateBack()
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (pageStack.size > 1) {
@@ -151,10 +173,37 @@ class SettingsActivity : Activity() {
         switchContent(pageStack.last())
     }
 
+    private fun updateBackCallback() {
+        val shouldIntercept = pageStack.size > 1
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (shouldIntercept && !isBackCallbackRegistered) {
+                if (backInvokedCallback == null) {
+                    backInvokedCallback = OnBackInvokedCallback { navigateBack() }
+                }
+                onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                    backInvokedCallback!!,
+                )
+                isBackCallbackRegistered = true
+            } else if (!shouldIntercept && isBackCallbackRegistered) {
+                unregisterBackCallback()
+            }
+        }
+    }
+
+    private fun unregisterBackCallback() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isBackCallbackRegistered) {
+            backInvokedCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
+            isBackCallbackRegistered = false
+        }
+    }
+
     private fun switchContent(page: String) {
         currentFactory = null
         contentContainer.removeAllViews()
         toolbarTitleView.text = toolbarTitle(page)
+        backButtonView.visibility = if (pageStack.size > 1) View.VISIBLE else View.GONE
+        updateBackCallback()
 
         val factory = buildFactory(page)
         currentFactory = factory
@@ -362,6 +411,18 @@ class SettingsActivity : Activity() {
             setBackgroundColor(getColor(R.color.toolbar_background))
             setPadding(dp(16), dp(14), dp(16), dp(14))
             elevation = dp(2).toFloat()
+
+            addView(TextView(this@SettingsActivity).apply {
+                text = "←"
+                textSize = 22f
+                setTextColor(getColor(R.color.title_text))
+                isClickable = true
+                isFocusable = true
+                setPadding(0, dp(2), dp(12), dp(2))
+                visibility = if (pageStack.size > 1) View.VISIBLE else View.GONE
+                setOnClickListener { navigateBack() }
+                backButtonView = this
+            })
 
             addView(TextView(this@SettingsActivity).apply {
                 text = toolbarTitle(page)
