@@ -1718,6 +1718,13 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(halfScreenQualitySummary)
+            addView(TextView(context).apply {
+                text = context.getString(R.string.quality_first_use_hint)
+                textSize = 11f
+                setTextColor(summaryTextColor)
+                alpha = 0.7f
+                setPadding(0, dp(3), 0, 0)
+            })
         }
     }
 
@@ -1755,6 +1762,13 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(fullScreenQualitySummary)
+            addView(TextView(context).apply {
+                text = context.getString(R.string.quality_first_use_hint)
+                textSize = 11f
+                setTextColor(summaryTextColor)
+                alpha = 0.7f
+                setPadding(0, dp(3), 0, 0)
+            })
         }
     }
 

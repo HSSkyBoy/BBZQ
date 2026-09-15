@@ -44,17 +44,13 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     env.hookBefore(isEffectiveVip) { param ->
                         runCatching {
                             val trace = Thread.currentThread().stackTrace
-                            val limit = minOf(trace.size, 15)
-                            var isQualityCaller = false
+                            val limit = minOf(trace.size, 8)
                             for (i in 0 until limit) {
                                 val cls = trace[i].className
                                 if (cls.contains(".quality.") || cls.contains(".player.")) {
-                                    isQualityCaller = true
+                                    param.result = true
                                     break
                                 }
-                            }
-                            if (isQualityCaller) {
-                                param.result = true
                             }
                         }
                     }

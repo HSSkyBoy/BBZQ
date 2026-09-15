@@ -41,11 +41,12 @@
     <string name="fake_wifi_title">伪装 Wi-Fi</string>
     <string name="fake_wifi_summary">强制解除移动数据/蜂窝流量限制，防止在非 Wi-Fi 环境下高码率与 4K 画质自动回退到 1080P。</string>
     <string name="half_screen_quality_title">视频半屏清晰度</string>
-    <string name="half_screen_quality_summary">设置视频半屏播放时的清晰度（默认：%1$s）。若选择非默认档位将拦截半屏低画质预加载并强制锁定清晰度。</string>
+    <string name="half_screen_quality_summary">设置视频半屏播放时的清晰度（当前：%1$s）。若选择非默认档位将拦截半屏低画质预加载并强制锁定清晰度。</string>
     <string name="half_screen_quality_dialog_title">选择视频半屏清晰度</string>
     <string name="full_screen_quality_title">视频全屏清晰度</string>
-    <string name="full_screen_quality_summary">设置视频全屏播放时的默认清晰度（默认：%1$s）。</string>
+    <string name="full_screen_quality_summary">设置视频全屏播放时的默认清晰度（当前：%1$s）。</string>
     <string name="full_screen_quality_dialog_title">选择视频全屏清晰度</string>
+    <string name="quality_first_use_hint">首次使用须在播放器内手动调节一次清晰度后重启生效。</string>
     <string name="video_download_title">视频下载</string>
     <string name="video_download_summary">在视频简介中提供下载入口，支持解锁最高 8K 等画质并自动合并导出为 MP4。</string>
     <string name="auto_like_video_detail_title">视频详情页自动点赞</string>
