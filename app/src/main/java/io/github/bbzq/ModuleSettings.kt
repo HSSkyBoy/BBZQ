@@ -68,6 +68,10 @@ object ModuleSettings {
     const val KEY_HIDDEN_VIDEO_DETAIL_RELATE_TYPES = "hidden_video_detail_relate_types"
     const val KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES = "known_video_detail_relate_types"
     const val KEY_VIDEO_DETAIL_RELATE_TITLE_KEYWORDS = "video_detail_relate_title_keywords"
+    const val KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED = "block_all_component_pools_enabled"
+    const val KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED = "custom_component_pool_block_enabled"
+    const val KEY_BLOCKED_COMPONENT_POOLS = "blocked_component_pools"
+    const val KEY_KNOWN_COMPONENT_POOLS = "known_component_pools"
     const val KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED = "hide_all_home_components_enabled"
     const val KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED = "custom_home_component_hide_enabled"
     const val KEY_HIDDEN_HOME_COMPONENTS = "hidden_home_components"
@@ -296,6 +300,8 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, false) },
+        ExportableConfigSpec(KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED, false) },
+        ExportableConfigSpec(KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_STORY_VIDEO_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_STORY_VIDEO_AD_ENABLED, false) },
@@ -377,6 +383,9 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_HIDDEN_HOME_RECOMMEND_TABS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_HIDDEN_HOME_RECOMMEND_TABS, emptySet<String>())?.toSet() ?: emptySet<String>()
+        })
+        add(ExportableConfigSpec(KEY_BLOCKED_COMPONENT_POOLS, ExportableValueType.STRING_SET) {
+            it.getStringSet(KEY_BLOCKED_COMPONENT_POOLS, emptySet<String>())?.toSet() ?: emptySet<String>()
         })
         add(ExportableConfigSpec(KEY_HIDDEN_HOME_COMPONENTS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_HIDDEN_HOME_COMPONENTS, emptySet<String>())?.toSet() ?: emptySet<String>()
@@ -726,6 +735,36 @@ object ModuleSettings {
 
     fun getHiddenHomeComponents(prefs: SharedPreferences): Set<String> =
         prefs.getStringSet(KEY_HIDDEN_HOME_COMPONENTS, emptySet()) ?: emptySet()
+
+    // ── 组件库资源池拦截 ──────────────────────────────────────────────────────
+    //
+    // 与首页组件隐藏同构：一个"全量禁止"开关 + 一个"自定义勾选"开关 + 选中集 + 已知候选集。
+    // 差别在于候选集由宿主侧的清单请求**跨请求累积**得来，见 ComponentPoolBlockHook。
+
+    fun isBlockAllComponentPoolsEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED, false)
+
+    fun isCustomComponentPoolBlockEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED, false)
+
+    /** 勾中的池名；"全量禁止"开启时调用方应忽略本集合。 */
+    fun getBlockedComponentPools(prefs: SharedPreferences): Set<String> =
+        if (!isCustomComponentPoolBlockEnabled(prefs)) emptySet()
+        else prefs.getStringSet(KEY_BLOCKED_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
+
+    fun getKnownComponentPools(prefs: SharedPreferences): Set<String> =
+        prefs.getStringSet(KEY_KNOWN_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
+
+    /** `<池名>	<模块数>`；模块数只用于展示，不参与匹配。 */
+    fun encodeComponentPool(name: String, moduleCount: Int): String =
+        name.replace('	', ' ').trim() + "	" + moduleCount
+
+    fun decodeComponentPool(raw: String): Pair<String, Int>? {
+        val parts = raw.split('	', limit = 2)
+        val name = parts.getOrNull(0)?.trim().orEmpty()
+        if (name.isEmpty()) return null
+        return name to (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+    }
 
     fun getKnownHomeComponents(prefs: SharedPreferences): Set<String> =
         knownHomeComponentsCache

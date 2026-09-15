@@ -482,4 +482,14 @@
     <string name="restart_success_fallback">哔哩哔哩已重新启动</string>
     <string name="restart_failed_root_required">获取 Root 权限失败，请确保设备已 Root 并在授权管理（Magisk / KernelSU / APatch）中允许 BBZQ 的 Root 权限。如果您没有 Root 权限，Shizuku 也能提供强行停止应用的能力。</string>
     <string name="restart_failed_pkg_not_found">未找到已安装的哔哩哔哩客户端。</string>
+    <string name="section_component_pool">组件库拦截</string>
+    <string name="component_pool_title">App 基础组件库</string>
+    <string name="component_pool_info_summary">哔哩哔哩会按资源池清单下载组件库，也就是存储设置里的“App基础组件库”。这里拦的是再次下载，已经占用的空间要先去哔哩哔哩存储设置清理一次才看得出效果。</string>
+    <string name="component_pool_block_all_title">全部拦截</string>
+    <string name="component_pool_block_all_summary">拦截所有资源池，不必逐个勾选。还没扫描到候选时用这个。</string>
+    <string name="component_pool_custom_title">自定义拦截资源池</string>
+    <string name="component_pool_custom_summary">开启后可在下方逐个勾选要拦截的资源池。</string>
+    <string name="component_pool_list_title">已发现的资源池</string>
+    <string name="component_pool_unavailable_summary">暂无资源池数据。清单由哔哩哔哩按需分批下发，请先正常使用一段时间再回来查看；急用可先开“全部拦截”。</string>
+    <string name="component_pool_item_format">%1$s（%2$d 个模块）· 勾选即拦截</string>
 </resources>
