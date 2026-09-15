@@ -58,6 +58,9 @@ class SettingsContentFactory(
     private val homeRecommendItemCheckBoxes = mutableMapOf<String, CheckBox>()
     private val homeRecommendTabCheckBoxes = mutableMapOf<String, CheckBox>()
     private val homeComponentCheckBoxes = mutableMapOf<String, CheckBox>()
+    private val componentPoolCheckBoxes = mutableMapOf<String, CheckBox>()
+    private lateinit var blockAllComponentPoolsSwitch: Switch
+    private lateinit var customComponentPoolBlockSwitch: Switch
     private val videoDetailRelateTypeCheckBoxes = mutableMapOf<String, CheckBox>()
     private val sponsorBlockCategoryButtons = mutableMapOf<String, Button>()
     private lateinit var videoDetailRelateFilterSwitch: Switch
@@ -163,6 +166,9 @@ class SettingsContentFactory(
 
                 pageRoot.addView(createSectionLabel(context.getString(R.string.section_download_features)))
                 pageRoot.addView(createSectionCard(downloadRows()))
+
+                pageRoot.addView(createSectionLabel(context.getString(R.string.section_component_pool)))
+                pageRoot.addView(createSectionCard(componentPoolRows()))
 
                 pageRoot.addView(createSectionLabel(context.getString(R.string.section_video_cdn)))
                 pageRoot.addView(createSectionCard(customCdnRows()))
@@ -2137,6 +2143,81 @@ class SettingsContentFactory(
         }
     }
 
+    private fun componentPoolRows(): List<View> {
+        val rows = mutableListOf<View>()
+        rows += createInfoRow(
+            context.getString(R.string.component_pool_title),
+            context.getString(R.string.component_pool_info_summary),
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.component_pool_block_all_title),
+            context.getString(R.string.component_pool_block_all_summary),
+            ModuleSettings.KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED,
+            false,
+        ) {
+            blockAllComponentPoolsSwitch = it
+        }
+        rows += createSwitchRow(
+            context.getString(R.string.component_pool_custom_title),
+            context.getString(R.string.component_pool_custom_summary),
+            ModuleSettings.KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED,
+            false,
+        ) {
+            customComponentPoolBlockSwitch = it
+        }
+        val pools = componentPoolItems()
+        rows += if (pools.isEmpty()) {
+            createInfoRow(
+                context.getString(R.string.component_pool_list_title),
+                context.getString(R.string.component_pool_unavailable_summary),
+            )
+        } else {
+            createComponentPoolGroup(pools)
+        }
+        return rows
+    }
+
+    private fun createComponentPoolGroup(items: List<ComponentPoolItem>): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            items.forEach { item ->
+                addView(CheckBox(context).apply {
+                    text = context.getString(
+                        R.string.component_pool_item_format,
+                        item.name,
+                        item.moduleCount,
+                    )
+                    textSize = 14f
+                    setTextColor(titleTextColor)
+                    setPadding(dp(6), dp(2), dp(6), dp(2))
+                    setOnCheckedChangeListener { _, _ ->
+                        if (!refreshing) saveBlockedComponentPools()
+                    }
+                    componentPoolCheckBoxes[item.name] = this
+                })
+            }
+        }
+    }
+
+    private fun componentPoolItems(): List<ComponentPoolItem> =
+        ModuleSettings.getKnownComponentPools(prefs)
+            .mapNotNull(ModuleSettings::decodeComponentPool)
+            .map { (name, count) -> ComponentPoolItem(name, count) }
+            .distinctBy(ComponentPoolItem::name)
+            .sortedBy(ComponentPoolItem::name)
+
+    private fun blockedComponentPoolNames(): Set<String> =
+        componentPoolCheckBoxes.filterValues { it.isChecked }.keys.toSet()
+
+    private fun saveBlockedComponentPools() {
+        prefs.edit()
+            .putStringSet(ModuleSettings.KEY_BLOCKED_COMPONENT_POOLS, blockedComponentPoolNames().toMutableSet())
+            .apply()
+    }
+
+    private data class ComponentPoolItem(val name: String, val moduleCount: Int)
+
     private fun createHomeComponentGroup(items: List<HomeComponentItem>): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -2263,7 +2344,9 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_COMMENT_MIN_LEVEL_ENABLED ||
             key == ModuleSettings.KEY_SKIP_VIDEO_AD_ENABLED ||
             key == ModuleSettings.KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED ||
-            key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED
+            key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED ||
+            key == ModuleSettings.KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED ||
+            key == ModuleSettings.KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED
 
     private fun applyDesktopIconSetting(isChecked: Boolean) {
         DesktopIconHelper.applySetting(context, isChecked)
@@ -2510,6 +2593,22 @@ class SettingsContentFactory(
         homeComponentCheckBoxes.forEach { (className, checkBox) ->
             checkBox.isEnabled = homeComponentPickerEnabled
             checkBox.isChecked = className !in hiddenHomeComponents
+        }
+        val blockAllComponentPools = ModuleSettings.isBlockAllComponentPoolsEnabled(prefs)
+        val customComponentPoolBlock = ModuleSettings.isCustomComponentPoolBlockEnabled(prefs)
+        val blockedComponentPools = prefs.getStringSet(ModuleSettings.KEY_BLOCKED_COMPONENT_POOLS, emptySet())
+            ?.toSet() ?: emptySet()
+        if (::blockAllComponentPoolsSwitch.isInitialized) {
+            blockAllComponentPoolsSwitch.isChecked = blockAllComponentPools
+        }
+        if (::customComponentPoolBlockSwitch.isInitialized) {
+            customComponentPoolBlockSwitch.isChecked = customComponentPoolBlock
+            customComponentPoolBlockSwitch.isEnabled = !blockAllComponentPools
+        }
+        val componentPoolPickerEnabled = customComponentPoolBlock && !blockAllComponentPools
+        componentPoolCheckBoxes.forEach { (name, checkBox) ->
+            checkBox.isEnabled = componentPoolPickerEnabled
+            checkBox.isChecked = blockAllComponentPools || name in blockedComponentPools
         }
         if (::customMineComponentHideSwitch.isInitialized) {
             customMineComponentHideSwitch.isChecked = customMineComponentHideEnabled

@@ -25,6 +25,7 @@ import io.github.bbzq.feats.hook.FreeCopyHook
 import io.github.bbzq.feats.hook.HomeRecommendAdHook
 import io.github.bbzq.feats.hook.HomeRecommendPreloadHook
 import io.github.bbzq.feats.hook.HomeRecommendTabHook
+import io.github.bbzq.feats.hook.ComponentPoolBlockHook
 import io.github.bbzq.feats.hook.HomeComponentHideHook
 import io.github.bbzq.feats.hook.HomeTopBarPurifyHook
 import io.github.bbzq.feats.hook.SearchPurifyHook
@@ -163,6 +164,7 @@ object RoamingRuntime {
             )
 
             ProcessScope.DOWNLOAD -> listOf(
+                ::ComponentPoolBlockHook,
                 ::DownloadThreadHook,
                 ::CustomCdnHook,
             )
@@ -174,6 +176,7 @@ object RoamingRuntime {
                 ::ShareHook,
                 ::FreeCopyHook,
                 ::BottomBarHook,
+                ::ComponentPoolBlockHook,
                 ::HomeComponentHideHook,
                 ::HomeRecommendAdHook,
                 ::HomeRecommendTabHook,
