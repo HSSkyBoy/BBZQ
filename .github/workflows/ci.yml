@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '21'
@@ -69,14 +69,16 @@ jobs:
         uses: android-actions/setup-android@v4.0.1
         with:
           cmdline-tools-version: 14742923
+          packages: ''
 
       - name: Accept licenses
         run: yes | sdkmanager --licenses
 
-      - name: Install SDK 36
+      - name: Install SDK 37
         run: |
-          sdkmanager "platforms;android-36"
-          sdkmanager "build-tools;36.1.0"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-37.0"
+          sdkmanager "build-tools;37.0.0"
 
       - name: Restore release keystore
         env:
