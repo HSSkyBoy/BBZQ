@@ -14,7 +14,8 @@ class CustomCdnHook(env: RoamingEnv) : BaseRoamingHook(env) {
         methods.forEach { method ->
             runCatching {
                 env.hookAfter(method) { param ->
-                    CustomCdnProcessor.rewriteResponse(param.result, prefs, ::log)
+                    val isCellular = env.hostContext?.let { NetworkTypeDetector.isCellular(it) } ?: false
+                    CustomCdnProcessor.rewriteResponse(param.result, prefs, isCellular, ::log)
                 }
                 installed++
             }.onFailure { log("CustomCdn: failed to hook ${method.declaringClass.name}.${method.name}", it) }

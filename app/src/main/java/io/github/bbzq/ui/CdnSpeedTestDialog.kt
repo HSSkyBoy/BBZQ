@@ -4,7 +4,6 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.SharedPreferences
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
@@ -12,7 +11,16 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.BaseAdapter
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ListView
+import android.widget.ProgressBar
+import android.widget.RadioGroup
+import android.widget.RadioButton
+import android.widget.TextView
+import android.widget.Toast
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.R
 import io.github.bbzq.feats.hook.CustomCdnProcessor
@@ -22,6 +30,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -47,15 +56,12 @@ class CdnSpeedTestDialog(
     private var executor: ExecutorService? = null
     private val isCancelled = AtomicBoolean(false)
 
-    @Volatile
-    private var currentCall: Call? = null
-
     private var alertDialog: AlertDialog? = null
     private var statusHeader: TextView? = null
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
+            .connectionPool(ConnectionPool(25, 5, TimeUnit.MINUTES))
             .connectTimeout(3500, TimeUnit.MILLISECONDS)
             .readTimeout(5000, TimeUnit.MILLISECONDS)
             .retryOnConnectionFailure(true)
@@ -78,119 +84,95 @@ class CdnSpeedTestDialog(
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val item = getItem(position)
-            val isCustomEnabled = ModuleSettings.isCustomCdnEnabled(prefs)
-            val currentHost = ModuleSettings.getCustomCdnHost(prefs)
-            val isSelected = if (item.host.isBlank()) {
-                !isCustomEnabled
-            } else {
-                isCustomEnabled && item.host.equals(currentHost, ignoreCase = true)
-            }
-
-            val layout = (convertView as? LinearLayout) ?: LinearLayout(context).apply {
+            val root = (convertView as? LinearLayout) ?: LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-            }
-            layout.removeAllViews()
+                setPadding(dp(16), dp(10), dp(16), dp(10))
 
-            val leftLayout = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
+                val textCol = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    tag = "col"
+                }
 
-            val titleView = TextView(context).apply {
-                text = if (isSelected) "★ ${item.name}" else item.name
-                textSize = 15f
-                setTypeface(null, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
-                setTextColor(if (isSelected) context.getColor(R.color.accent_pink) else context.getColor(R.color.title_text))
-            }
+                val title = TextView(context).apply {
+                    textSize = 14f
+                    setTextColor(context.getColor(R.color.title_text))
+                    tag = "title"
+                }
+                val sub = TextView(context).apply {
+                    textSize = 11f
+                    setTextColor(context.getColor(R.color.summary_text))
+                    tag = "sub"
+                }
+                textCol.addView(title)
+                textCol.addView(sub)
+                addView(textCol)
 
-            val hostView = TextView(context).apply {
-                text = if (item.host.isBlank()) "直连 Bilibili 官方动态调度节点" else item.host
-                textSize = 12f
-                setTextColor(context.getColor(R.color.summary_text))
-                setPadding(0, dp(2), 0, 0)
-            }
+                val statusCol = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.END
+                    tag = "statusCol"
+                }
+                val status = TextView(context).apply {
+                    textSize = 13f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(context.getColor(R.color.title_text))
+                    tag = "status"
+                }
+                val ping = TextView(context).apply {
+                    textSize = 11f
+                    setTextColor(context.getColor(R.color.summary_text))
+                    tag = "ping"
+                }
+                statusCol.addView(status)
+                statusCol.addView(ping)
+                addView(statusCol)
 
-            leftLayout.addView(titleView)
-            leftLayout.addView(hostView)
-            layout.addView(leftLayout)
-
-            val rightLayout = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-            }
-
-            val speedView = TextView(context).apply {
-                textSize = 14f
-                setTypeface(null, Typeface.BOLD)
-                gravity = Gravity.END
-                when {
-                    item.speedMb >= 1.0 -> {
-                        text = String.format(Locale.US, "%.2f MB/s", item.speedMb)
-                        setTextColor(Color.parseColor("#4CAF50"))
-                    }
-                    item.speedMb > 0.0 -> {
-                        text = String.format(Locale.US, "%.0f KB/s", item.speedMb * 1024)
-                        setTextColor(Color.parseColor("#2196F3"))
-                    }
-                    item.isRunning -> {
-                        text = "测速中…"
-                        setTextColor(Color.parseColor("#FF9800"))
-                    }
-                    item.isDone -> {
-                        if (item.statusText.isNotBlank() && item.statusText != "等待中") {
-                            text = item.statusText
-                            setTextColor(Color.parseColor("#9E9E9E"))
-                        } else if (item.pingMs >= 0) {
-                            text = context.getString(R.string.cdn_speed_test_unavailable)
-                            setTextColor(Color.parseColor("#9E9E9E"))
-                        } else {
-                            text = context.getString(R.string.cdn_speed_test_timeout)
-                            setTextColor(Color.parseColor("#F44336"))
-                        }
-                    }
-                    else -> {
-                        text = item.statusText
-                        setTextColor(context.getColor(R.color.summary_text))
+                val progress = ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
+                    tag = "progress"
+                    visibility = View.GONE
+                    layoutParams = LinearLayout.LayoutParams(dp(20), dp(20)).apply {
+                        marginStart = dp(8)
                     }
                 }
+                addView(progress)
             }
 
-            val pingView = TextView(context).apply {
-                textSize = 11f
-                gravity = Gravity.END
-                setPadding(0, dp(2), 0, 0)
-                if (item.pingMs >= 0) {
-                    text = "${item.pingMs} ms"
-                    setTextColor(
-                        when {
-                            item.pingMs < 80 -> Color.parseColor("#4CAF50")
-                            item.pingMs < 180 -> Color.parseColor("#FF9800")
-                            else -> Color.parseColor("#F44336")
-                        }
-                    )
-                } else {
-                    text = ""
-                }
+            val title = root.findViewWithTag<TextView>("title")
+            val sub = root.findViewWithTag<TextView>("sub")
+            val status = root.findViewWithTag<TextView>("status")
+            val ping = root.findViewWithTag<TextView>("ping")
+            val progress = root.findViewWithTag<ProgressBar>("progress")
+
+            title?.text = item.name
+            sub?.text = if (item.host.isBlank()) "直连官方 UPOS" else item.host
+            status?.text = item.statusText
+            progress?.visibility = if (item.isRunning) View.VISIBLE else View.GONE
+
+            if (item.pingMs > 0) {
+                ping?.text = context.getString(R.string.cdn_speed_test_ping, item.pingMs)
+                ping?.visibility = View.VISIBLE
+            } else {
+                ping?.visibility = View.GONE
             }
 
-            rightLayout.addView(speedView)
-            rightLayout.addView(pingView)
-            layout.addView(rightLayout)
+            if (item.speedMb > 0) {
+                status?.setTextColor(0xFF00A050.toInt())
+            } else if (item.isDone && item.speedMb <= 0) {
+                status?.setTextColor(context.getColor(R.color.summary_text))
+            } else {
+                status?.setTextColor(context.getColor(R.color.title_text))
+            }
 
-            return layout
+            return root
         }
     }
 
     fun show() {
         val rootLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(0, dp(12), 0, dp(8))
         }
 
         statusHeader = TextView(context).apply {
@@ -217,7 +199,7 @@ class CdnSpeedTestDialog(
             .setView(rootLayout)
             .setPositiveButton(R.string.cdn_speed_test_close, null)
             .setNegativeButton(R.string.cdn_speed_test_retest, null)
-            .setNeutralButton(R.string.cdn_speed_test_apply_fastest, null)
+            .setNeutralButton(R.string.cdn_speed_test_apply_chain, null)
             .setOnDismissListener {
                 stopSpeedTest()
             }
@@ -227,20 +209,98 @@ class CdnSpeedTestDialog(
         dialog.show()
 
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE)?.setOnClickListener {
-            startSpeedTest()
+            showParamsDialog()
         }
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL)?.setOnClickListener {
-            val fastest = items.firstOrNull { it.speedMb > 0 }
-                ?: items.firstOrNull { it.pingMs > 0 }
-            if (fastest != null) {
-                applyNode(fastest)
+            val fastNodes = items.filter { it.speedMb > 0 && it.host.isNotBlank() }
+            if (fastNodes.isNotEmpty()) {
+                applyAsChain(fastNodes)
                 dialog.dismiss()
             } else {
-                Toast.makeText(context, "暂无可用测速结果", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.cdn_speed_test_no_result), Toast.LENGTH_SHORT).show()
             }
         }
 
         startSpeedTest()
+    }
+
+    private fun showParamsDialog() {
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+        }
+
+        root.addView(TextView(context).apply {
+            text = context.getString(R.string.cdn_speed_test_size_label) + " (MiB):"
+            textSize = 14f
+        })
+        val sizeEdit = EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(ModuleSettings.getCdnSpeedTestSizeMb(prefs).toString())
+        }
+        root.addView(sizeEdit)
+
+        root.addView(TextView(context).apply {
+            text = context.getString(R.string.cdn_speed_test_warmup_label) + " (MiB):"
+            textSize = 14f
+            setPadding(0, dp(8), 0, 0)
+        })
+        val warmupEdit = EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(ModuleSettings.getCdnSpeedTestWarmupMb(prefs).toString())
+        }
+        root.addView(warmupEdit)
+
+        root.addView(TextView(context).apply {
+            text = context.getString(R.string.cdn_speed_test_cooldown_label) + " (秒):"
+            textSize = 14f
+            setPadding(0, dp(8), 0, 0)
+        })
+        val cooldownEdit = EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(ModuleSettings.getCdnSpeedTestCooldownSec(prefs).toString())
+        }
+        root.addView(cooldownEdit)
+
+        root.addView(TextView(context).apply {
+            text = context.getString(R.string.cdn_speed_test_mode_label) + ":"
+            textSize = 14f
+            setPadding(0, dp(8), 0, 0)
+        })
+
+        val radioGroup = RadioGroup(context)
+        val rbParallel = RadioButton(context).apply {
+            text = context.getString(R.string.cdn_speed_test_mode_parallel) + " (" + context.getString(R.string.cdn_speed_test_mode_parallel_hint) + ")"
+            isChecked = ModuleSettings.isCdnSpeedTestParallel(prefs)
+        }
+        val rbSequential = RadioButton(context).apply {
+            text = context.getString(R.string.cdn_speed_test_mode_sequential) + " (" + context.getString(R.string.cdn_speed_test_mode_sequential_hint) + ")"
+            isChecked = !ModuleSettings.isCdnSpeedTestParallel(prefs)
+        }
+        radioGroup.addView(rbParallel)
+        radioGroup.addView(rbSequential)
+        root.addView(radioGroup)
+
+        AlertDialog.Builder(context)
+            .setTitle(R.string.cdn_speed_test_params_title)
+            .setView(root)
+            .setPositiveButton(R.string.cdn_speed_test_start) { _, _ ->
+                val size = sizeEdit.text.toString().toIntOrNull() ?: 16
+                val warmup = warmupEdit.text.toString().toIntOrNull() ?: 4
+                val cooldown = cooldownEdit.text.toString().toIntOrNull() ?: 0
+                val parallel = rbParallel.isChecked
+
+                prefs.edit()
+                    .putInt(ModuleSettings.KEY_CDN_SPEED_TEST_SIZE_MB, size)
+                    .putInt(ModuleSettings.KEY_CDN_SPEED_TEST_WARMUP_MB, warmup)
+                    .putInt(ModuleSettings.KEY_CDN_SPEED_TEST_COOLDOWN_SEC, cooldown)
+                    .putBoolean(ModuleSettings.KEY_CDN_SPEED_TEST_PARALLEL, parallel)
+                    .apply()
+
+                startSpeedTest()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
     }
 
     private fun applyNode(node: CdnSpeedResult) {
@@ -249,29 +309,59 @@ class CdnSpeedTestDialog(
                 .remove(ModuleSettings.KEY_CUSTOM_CDN_HOST)
                 .putBoolean(ModuleSettings.KEY_CUSTOM_CDN_ENABLED, false)
                 .apply()
-            Toast.makeText(
-                context,
-                "已应用系统默认官方直连",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(context, "已应用系统默认官方直连", Toast.LENGTH_SHORT).show()
         } else {
             prefs.edit()
                 .putString(ModuleSettings.KEY_CUSTOM_CDN_HOST, node.host)
                 .putBoolean(ModuleSettings.KEY_CUSTOM_CDN_ENABLED, true)
                 .apply()
-            Toast.makeText(
-                context,
-                context.getString(R.string.cdn_speed_test_applied, node.name),
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(context, context.getString(R.string.cdn_speed_test_applied, node.name), Toast.LENGTH_SHORT).show()
         }
         onApplied()
     }
 
+    private fun applyAsChain(nodes: List<CdnSpeedResult>) {
+        val topHosts = nodes.sortedByDescending { it.speedMb }
+            .take(3)
+            .map { it.host }
+
+        val choices = arrayOf(
+            context.getString(R.string.cdn_speed_test_apply_to_wifi),
+            context.getString(R.string.cdn_speed_test_apply_to_cellular),
+            context.getString(R.string.cdn_speed_test_apply_to_both),
+        )
+
+        AlertDialog.Builder(context)
+            .setTitle(R.string.cdn_speed_test_apply_to_title)
+            .setItems(choices) { _, which ->
+                when (which) {
+                    0 -> {
+                        ModuleSettings.saveCdnPriorityList(prefs, ModuleSettings.KEY_CDN_WIFI_PRIORITY, topHosts)
+                        prefs.edit().putBoolean(ModuleSettings.KEY_CDN_WIFI_ENABLED, true).apply()
+                    }
+                    1 -> {
+                        ModuleSettings.saveCdnPriorityList(prefs, ModuleSettings.KEY_CDN_CELLULAR_PRIORITY, topHosts)
+                        prefs.edit().putBoolean(ModuleSettings.KEY_CDN_CELLULAR_ENABLED, true).apply()
+                    }
+                    2 -> {
+                        ModuleSettings.saveCdnPriorityList(prefs, ModuleSettings.KEY_CDN_WIFI_PRIORITY, topHosts)
+                        ModuleSettings.saveCdnPriorityList(prefs, ModuleSettings.KEY_CDN_CELLULAR_PRIORITY, topHosts)
+                        prefs.edit()
+                            .putBoolean(ModuleSettings.KEY_CDN_WIFI_ENABLED, true)
+                            .putBoolean(ModuleSettings.KEY_CDN_CELLULAR_ENABLED, true)
+                            .apply()
+                    }
+                }
+                val hostNames = topHosts.map { h -> ModuleSettings.cdnEndpoints.firstOrNull { it.host == h }?.name ?: h }
+                Toast.makeText(context, context.getString(R.string.cdn_speed_test_chain_applied, hostNames.joinToString(" → ")), Toast.LENGTH_LONG).show()
+                onApplied()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
     private fun stopSpeedTest() {
         isCancelled.set(true)
-        runCatching { currentCall?.cancel() }
-        currentCall = null
         runCatching {
             executor?.shutdownNow()
         }
@@ -287,25 +377,51 @@ class CdnSpeedTestDialog(
         adapter.notifyDataSetChanged()
         statusHeader?.text = context.getString(R.string.cdn_speed_testing)
 
-        val pool = Executors.newSingleThreadExecutor()
+        val isParallel = ModuleSettings.isCdnSpeedTestParallel(prefs)
+        val sizeMb = ModuleSettings.getCdnSpeedTestSizeMb(prefs)
+        val warmupMb = ModuleSettings.getCdnSpeedTestWarmupMb(prefs)
+        val cooldownSec = ModuleSettings.getCdnSpeedTestCooldownSec(prefs)
+
+        val pool = if (isParallel) {
+            Executors.newFixedThreadPool(minOf(items.size, 16))
+        } else {
+            Executors.newSingleThreadExecutor()
+        }
         executor = pool
 
         pool.execute {
             val sampleMediaUrl = fetchSamplePlayUrl()
             val testingItems = ArrayList(items)
 
-            for (item in testingItems) {
-                if (isCancelled.get()) break
+            if (isParallel) {
+                val latch = CountDownLatch(testingItems.size)
+                for (item in testingItems) {
+                    if (isCancelled.get()) break
+                    pool.execute {
+                        try {
+                            if (!isCancelled.get()) {
+                                item.isRunning = true
+                                mainHandler.post { adapter.notifyDataSetChanged() }
+                                testEndpoint(item, sampleMediaUrl, sizeMb, warmupMb)
+                                mainHandler.post { adapter.notifyDataSetChanged() }
+                            }
+                        } finally {
+                            latch.countDown()
+                        }
+                    }
+                }
+                runCatching { latch.await(60, TimeUnit.SECONDS) }
+            } else {
+                for (item in testingItems) {
+                    if (isCancelled.get()) break
+                    item.isRunning = true
+                    mainHandler.post { adapter.notifyDataSetChanged() }
+                    testEndpoint(item, sampleMediaUrl, sizeMb, warmupMb)
+                    mainHandler.post { adapter.notifyDataSetChanged() }
 
-                item.isRunning = true
-                mainHandler.post { adapter.notifyDataSetChanged() }
-
-                testEndpoint(item, sampleMediaUrl)
-
-                if (isCancelled.get()) break
-
-                mainHandler.post {
-                    adapter.notifyDataSetChanged()
+                    if (cooldownSec > 0 && !isCancelled.get()) {
+                        runCatching { Thread.sleep(cooldownSec * 1000L) }
+                    }
                 }
             }
 
@@ -343,7 +459,7 @@ class CdnSpeedTestDialog(
         })
     }
 
-    private fun testEndpoint(item: CdnSpeedResult, sampleMediaUrl: String?) {
+    private fun testEndpoint(item: CdnSpeedResult, sampleMediaUrl: String?, sizeMb: Int, warmupMb: Int) {
         try {
             if (!sampleMediaUrl.isNullOrBlank()) {
                 val downloadUrl = if (item.host.isBlank()) {
@@ -351,8 +467,9 @@ class CdnSpeedTestDialog(
                 } else {
                     CustomCdnProcessor.replaceHost(sampleMediaUrl, item.host)
                 }
-                val targetSize = 8 * 1024 * 1024L
-                val maxTestTimeUs = 5_000_000L
+                val targetSize = sizeMb * 1024 * 1024L
+                val warmupBytes = warmupMb * 1024 * 1024L
+                val maxTestTimeUs = 8_000_000L
 
                 val req = Request.Builder()
                     .url(downloadUrl)
@@ -361,69 +478,62 @@ class CdnSpeedTestDialog(
                     .build()
 
                 val call = client.newCall(req)
-                currentCall = call
-
                 val reqStartMs = System.currentTimeMillis()
                 val response = call.execute()
                 val pingMs = System.currentTimeMillis() - reqStartMs
                 item.pingMs = maxOf(1L, pingMs)
 
                 if (response.isSuccessful) {
-                    val stream = response.body.byteStream()
-                    val buffer = ByteArray(65536)
-                    var totalBytes = 0L
+                    val stream = response.body?.byteStream()
+                    if (stream != null) {
+                        val buffer = ByteArray(65536)
+                        var totalBytes = 0L
+                        var timedBytes = 0L
 
-                    val streamStartUs = System.nanoTime() / 1000
-                    var windowStartUs = streamStartUs
-                    var windowBytes = 0L
-                    var peakSpeedMBs = 0.0
+                        val streamStartUs = System.nanoTime() / 1000
+                        var timedStartUs = streamStartUs
+                        var peakSpeedMBs = 0.0
 
-                    while (!isCancelled.get()) {
-                        val read = stream.read(buffer)
-                        if (read <= 0) break
-                        totalBytes += read
-                        windowBytes += read
+                        while (!isCancelled.get()) {
+                            val read = stream.read(buffer)
+                            if (read <= 0) break
+                            totalBytes += read
 
-                        val nowUs = System.nanoTime() / 1000
-                        val windowElapsedUs = nowUs - windowStartUs
-                        if (windowElapsedUs >= 150_000L) {
-                            val curMBs = windowBytes.toDouble() / windowElapsedUs.toDouble()
-                            if (curMBs > peakSpeedMBs) {
-                                peakSpeedMBs = curMBs
+                            if (totalBytes > warmupBytes) {
+                                if (timedBytes == 0L) {
+                                    timedStartUs = System.nanoTime() / 1000
+                                }
+                                timedBytes += read
                             }
-                            windowBytes = 0L
-                            windowStartUs = nowUs
+
+                            val nowUs = System.nanoTime() / 1000
+                            val elapsedUs = nowUs - streamStartUs
+                            if (totalBytes >= targetSize || elapsedUs >= maxTestTimeUs) {
+                                break
+                            }
                         }
+                        stream.close()
 
-                        val elapsedUs = nowUs - streamStartUs
-                        if (totalBytes >= targetSize || elapsedUs >= maxTestTimeUs) {
-                            break
-                        }
-                    }
-                    stream.close()
+                        val timedDurationUs = (System.nanoTime() / 1000) - timedStartUs
+                        val avgSpeedMBs = if (timedDurationUs > 0 && timedBytes > 0) timedBytes.toDouble() / timedDurationUs.toDouble() else (if (totalBytes > 0) totalBytes.toDouble() / ((System.nanoTime() / 1000) - streamStartUs).toDouble() else 0.0)
+                        val finalSpeedMBs = avgSpeedMBs
 
-                    val totalDurationUs = (System.nanoTime() / 1000) - streamStartUs
-                    val avgSpeedMBs = if (totalDurationUs > 0) totalBytes.toDouble() / totalDurationUs.toDouble() else 0.0
-                    val finalSpeedMBs = maxOf(peakSpeedMBs, avgSpeedMBs)
-
-                    if (totalBytes > 0 && finalSpeedMBs > 0.0) {
-                        item.speedMb = finalSpeedMBs
-                        item.speedKbps = (finalSpeedMBs * 1024).toLong()
-                        item.statusText = if (finalSpeedMBs >= 1.0) {
-                            String.format(Locale.US, "%.2f MB/s", finalSpeedMBs)
+                        if (totalBytes > 0 && finalSpeedMBs > 0.0) {
+                            item.speedMb = finalSpeedMBs
+                            item.speedKbps = (finalSpeedMBs * 1024).toLong()
+                            item.statusText = if (finalSpeedMBs >= 1.0) {
+                                String.format(Locale.US, "%.2f MB/s", finalSpeedMBs)
+                            } else {
+                                String.format(Locale.US, "%.0f KB/s", finalSpeedMBs * 1024)
+                            }
                         } else {
-                            String.format(Locale.US, "%.0f KB/s", finalSpeedMBs * 1024)
+                            item.speedMb = 0.0
+                            item.speedKbps = 0
+                            item.statusText = "测速失败"
                         }
                     } else {
-                        item.speedMb = 0.0
-                        item.speedKbps = 0
-                        item.statusText = "测速失败"
+                        item.statusText = "空响应体"
                     }
-                    response.close()
-                } else if (response.code in 400..499) {
-                    item.speedMb = 0.0
-                    item.speedKbps = 0
-                    item.statusText = "此视频可能无法替换为该CDN"
                     response.close()
                 } else {
                     item.speedMb = 0.0
@@ -444,7 +554,6 @@ class CdnSpeedTestDialog(
                 item.statusText = "连接超时"
             }
         } finally {
-            currentCall = null
             item.isRunning = false
             item.isDone = true
         }
@@ -501,30 +610,6 @@ class CdnSpeedTestDialog(
 
                 allUrls.firstOrNull { it.contains("/upgcxcode/") && !CustomCdnProcessor.isPCdn(it) && it.startsWith("http") }
                     ?: allUrls.firstOrNull { !CustomCdnProcessor.isPCdn(it) && it.startsWith("http") }
-            }.getOrNull()
-
-            if (!result.isNullOrBlank()) return result
-        }
-
-        val html5Apis = listOf(
-            "https://api.bilibili.com/x/player/playurl?bvid=BV1fK4y1t7hj&cid=196018899&qn=16&type=mp4&platform=html5",
-            "https://api.bilibili.com/x/player/playurl?avid=170001&cid=279786&qn=16&type=mp4&platform=html5",
-        )
-
-        for (apiUrl in html5Apis) {
-            val result = runCatching {
-                val req = Request.Builder()
-                    .url(apiUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15")
-                    .header("Referer", "https://www.bilibili.com/")
-                    .build()
-                val response = client.newCall(req).execute()
-                val jsonStr = response.body?.string().orEmpty()
-                response.close()
-
-                val json = JSONObject(jsonStr)
-                val durl = json.optJSONObject("data")?.optJSONArray("durl")
-                durl?.optJSONObject(0)?.optString("url")?.takeIf { it.isNotBlank() }
             }.getOrNull()
 
             if (!result.isNullOrBlank()) return result

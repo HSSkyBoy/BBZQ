@@ -40,6 +40,16 @@ object ModuleSettings {
     const val KEY_FIX_MEDIA_SESSION_CARD = "fix_media_session_card"
     const val KEY_CUSTOM_CDN_ENABLED = "custom_cdn_enabled"
     const val KEY_CUSTOM_CDN_HOST = "custom_cdn_host"
+    const val KEY_CDN_WIFI_ENABLED = "cdn_wifi_enabled"
+    const val KEY_CDN_WIFI_PRIORITY = "cdn_wifi_priority"
+    const val KEY_CDN_CELLULAR_ENABLED = "cdn_cellular_enabled"
+    const val KEY_CDN_CELLULAR_PRIORITY = "cdn_cellular_priority"
+    const val KEY_CDN_AUDIO_INDEPENDENT = "cdn_audio_independent"
+    const val KEY_CDN_SPEED_TEST_SIZE_MB = "cdn_speed_test_size_mb"
+    const val KEY_CDN_SPEED_TEST_WARMUP_MB = "cdn_speed_test_warmup_mb"
+    const val KEY_CDN_SPEED_TEST_COOLDOWN_SEC = "cdn_speed_test_cooldown_sec"
+    const val KEY_CDN_SPEED_TEST_PARALLEL = "cdn_speed_test_parallel"
+    const val MAX_CDN_PRIORITY_NODES = 5
     const val KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED = "purify_home_recommend_ad_enabled"
     const val KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED = "purify_home_recommend_picture_enabled"
     const val KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED = "purify_home_recommend_game_promo_enabled"
@@ -265,6 +275,10 @@ object ModuleSettings {
         },
         ExportableConfigSpec(KEY_FIX_LIVE_QUALITY_URL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FIX_LIVE_QUALITY_URL_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_CDN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_CDN_ENABLED, false) },
+        ExportableConfigSpec(KEY_CDN_WIFI_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CDN_WIFI_ENABLED, false) },
+        ExportableConfigSpec(KEY_CDN_CELLULAR_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CDN_CELLULAR_ENABLED, false) },
+        ExportableConfigSpec(KEY_CDN_AUDIO_INDEPENDENT, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CDN_AUDIO_INDEPENDENT, false) },
+        ExportableConfigSpec(KEY_CDN_SPEED_TEST_PARALLEL, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CDN_SPEED_TEST_PARALLEL, true) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED, false) },
@@ -351,6 +365,12 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_CUSTOM_CDN_HOST, ExportableValueType.STRING) { prefs ->
             getCustomCdnHost(prefs)
+        })
+        add(ExportableConfigSpec(KEY_CDN_WIFI_PRIORITY, ExportableValueType.STRING) { prefs ->
+            prefs.getString(KEY_CDN_WIFI_PRIORITY, null)
+        })
+        add(ExportableConfigSpec(KEY_CDN_CELLULAR_PRIORITY, ExportableValueType.STRING) { prefs ->
+            prefs.getString(KEY_CDN_CELLULAR_PRIORITY, null)
         })
         add(ExportableConfigSpec(KEY_HIDDEN_HOME_RECOMMEND_ITEMS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_HIDDEN_HOME_RECOMMEND_ITEMS, emptySet<String>())?.toSet() ?: emptySet<String>()
@@ -577,6 +597,51 @@ object ModuleSettings {
                 it.matches(Regex("[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?"))
         }
     }
+
+    fun getCdnPriorityList(prefs: SharedPreferences, key: String): List<String> {
+        val raw = prefs.getString(key, null).orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return raw.split(',')
+            .mapNotNull { normalizeCdnHost(it.trim()) }
+            .distinct()
+            .take(MAX_CDN_PRIORITY_NODES)
+    }
+
+    fun saveCdnPriorityList(prefs: SharedPreferences, key: String, hosts: List<String>) {
+        prefs.edit().putString(key, hosts.joinToString(",")).apply()
+    }
+
+    fun getActiveCdnHosts(prefs: SharedPreferences, isCellular: Boolean): List<String> {
+        if (isCellular && prefs.getBoolean(KEY_CDN_CELLULAR_ENABLED, false)) {
+            val list = getCdnPriorityList(prefs, KEY_CDN_CELLULAR_PRIORITY)
+            if (list.isNotEmpty()) return list
+        }
+        if (prefs.getBoolean(KEY_CDN_WIFI_ENABLED, false)) {
+            val list = getCdnPriorityList(prefs, KEY_CDN_WIFI_PRIORITY)
+            if (list.isNotEmpty()) return list
+        }
+        // backward compat: migrate old single-host setting
+        if (prefs.getBoolean(KEY_CUSTOM_CDN_ENABLED, false)) {
+            val host = getCustomCdnHost(prefs)
+            if (host != null) return listOf(host)
+        }
+        return emptyList()
+    }
+
+    fun isCdnAudioIndependent(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CDN_AUDIO_INDEPENDENT, false)
+
+    fun getCdnSpeedTestSizeMb(prefs: SharedPreferences): Int =
+        prefs.getInt(KEY_CDN_SPEED_TEST_SIZE_MB, 16).coerceIn(1, 64)
+
+    fun getCdnSpeedTestWarmupMb(prefs: SharedPreferences): Int =
+        prefs.getInt(KEY_CDN_SPEED_TEST_WARMUP_MB, 4).coerceIn(0, 16)
+
+    fun getCdnSpeedTestCooldownSec(prefs: SharedPreferences): Int =
+        prefs.getInt(KEY_CDN_SPEED_TEST_COOLDOWN_SEC, 0).coerceIn(0, 30)
+
+    fun isCdnSpeedTestParallel(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_CDN_SPEED_TEST_PARALLEL, true)
 
     fun getHomeRecommendTitleKeywordsText(prefs: SharedPreferences): String =
         prefs.getString(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, "").orEmpty()

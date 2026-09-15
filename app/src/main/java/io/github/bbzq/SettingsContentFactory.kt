@@ -98,7 +98,8 @@ class SettingsContentFactory(
     private lateinit var mineComponentPickerRow: View
     private lateinit var mineComponentPickerSummary: TextView
     private lateinit var symbolScanStatusSummary: TextView
-    private lateinit var customCdnHostSummary: TextView
+    private lateinit var customCdnWifiSummary: TextView
+    private lateinit var customCdnCellularSummary: TextView
     private lateinit var halfScreenQualitySummary: TextView
     private lateinit var fullScreenQualitySummary: TextView
     /** 「检查更新」行的摘要文本视图，用于回显检查状态；界面销毁时置空避免泄漏。 */
@@ -613,13 +614,14 @@ class SettingsContentFactory(
     }
 
     private fun customCdnRows(): List<View> = listOf(
+        createCustomCdnWifiRow(),
+        createCustomCdnCellularRow(),
         createSwitchRow(
-            context.getString(R.string.custom_cdn_enabled_title),
-            context.getString(R.string.custom_cdn_enabled_summary),
-            ModuleSettings.KEY_CUSTOM_CDN_ENABLED,
+            context.getString(R.string.cdn_audio_independent_title),
+            context.getString(R.string.cdn_audio_independent_summary),
+            ModuleSettings.KEY_CDN_AUDIO_INDEPENDENT,
             false,
         ),
-        createCustomCdnHostRow(),
         createCustomCdnSpeedTestRow(),
     )
 
@@ -1772,8 +1774,8 @@ class SettingsContentFactory(
             .show()
     }
 
-    private fun createCustomCdnHostRow(): View {
-        customCdnHostSummary = TextView(context).apply {
+    private fun createCustomCdnWifiRow(): View {
+        customCdnWifiSummary = TextView(context).apply {
             textSize = 12f
             setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
@@ -1783,15 +1785,46 @@ class SettingsContentFactory(
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             isFocusable = true
-            setOnClickListener { showCustomCdnHostDialog() }
+            setOnClickListener {
+                io.github.bbzq.ui.CdnPriorityListDialog(context, prefs, isCellular = false) {
+                    refresh()
+                }.show()
+            }
             addView(TextView(context).apply {
-                text = context.getString(R.string.custom_cdn_host_title)
+                text = context.getString(R.string.cdn_wifi_priority_title)
                 textSize = 15f
                 setTextColor(titleTextColor)
             })
-            addView(customCdnHostSummary)
+            addView(customCdnWifiSummary)
         }
     }
+
+    private fun createCustomCdnCellularRow(): View {
+        customCdnCellularSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                io.github.bbzq.ui.CdnPriorityListDialog(context, prefs, isCellular = true) {
+                    refresh()
+                }.show()
+            }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.cdn_cellular_priority_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(customCdnCellularSummary)
+        }
+    }
+
+
 
     private fun createCustomCdnSpeedTestRow(): View {
         return LinearLayout(context).apply {
@@ -1816,56 +1849,6 @@ class SettingsContentFactory(
                 setPadding(0, dp(4), 0, 0)
             })
         }
-    }
-
-    private fun showCustomCdnHostDialog() {
-        val endpoints = ModuleSettings.cdnEndpoints
-        val current = ModuleSettings.getCustomCdnHost(prefs)
-        val selected = endpoints.indexOfFirst { it.host == current }
-        val labels = (endpoints.map { "${it.name}\n${it.host}" } + context.getString(R.string.custom_cdn_host_custom)).toTypedArray()
-        AlertDialog.Builder(context)
-            .setTitle(R.string.custom_cdn_host_dialog_title)
-            .setSingleChoiceItems(labels, if (selected >= 0) selected else endpoints.size) { dialog, which ->
-                dialog.dismiss()
-                if (which < endpoints.size) {
-                    prefs.edit().putString(ModuleSettings.KEY_CUSTOM_CDN_HOST, endpoints[which].host).apply()
-                    refresh()
-                } else {
-                    showCustomCdnHostInputDialog()
-                }
-            }
-            .setNegativeButton(R.string.dialog_cancel, null)
-            .show()
-    }
-
-    private fun showCustomCdnHostInputDialog() {
-        val input = EditText(context).apply {
-            setSingleLine(true)
-            setSelectAllOnFocus(true)
-            setText(ModuleSettings.getCustomCdnHost(prefs).orEmpty())
-            hint = "upos-sz-mirrorali.bilivideo.com"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-        }
-        val dialog = AlertDialog.Builder(context)
-            .setTitle(R.string.custom_cdn_host_custom)
-            .setMessage(R.string.custom_cdn_host_input_message)
-            .setView(input)
-            .setNegativeButton(R.string.dialog_cancel, null)
-            .setPositiveButton(R.string.dialog_save, null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val host = ModuleSettings.normalizeCdnHost(input.text?.toString())
-                if (host == null) {
-                    input.error = context.getString(R.string.custom_cdn_host_invalid)
-                    return@setOnClickListener
-                }
-                prefs.edit().putString(ModuleSettings.KEY_CUSTOM_CDN_HOST, host).apply()
-                refresh()
-                dialog.dismiss()
-            }
-        }
-        dialog.show()
     }
 
     private fun showCustomSkinConfigDialog() {
@@ -2409,12 +2392,24 @@ class SettingsContentFactory(
                 }.getOrElse { context.getString(R.string.custom_skin_config_loaded, "JSON") }
             }
         }
-        if (::customCdnHostSummary.isInitialized) {
-            val host = ModuleSettings.getCustomCdnHost(prefs)
-            customCdnHostSummary.text = if (host == null) {
-                context.getString(R.string.custom_cdn_host_empty_summary)
+        if (::customCdnWifiSummary.isInitialized) {
+            val hosts = ModuleSettings.getCdnPriorityList(prefs, ModuleSettings.KEY_CDN_WIFI_PRIORITY)
+            val isEnabled = prefs.getBoolean(ModuleSettings.KEY_CDN_WIFI_ENABLED, false)
+            customCdnWifiSummary.text = if (!isEnabled || hosts.isEmpty()) {
+                context.getString(R.string.cdn_wifi_priority_summary_empty)
             } else {
-                context.getString(R.string.custom_cdn_host_current_summary, host)
+                val names = hosts.map { h -> ModuleSettings.cdnEndpoints.firstOrNull { it.host == h }?.name?.substringBefore("（") ?: h }
+                context.getString(R.string.cdn_wifi_priority_summary_set, names.joinToString(" → "))
+            }
+        }
+        if (::customCdnCellularSummary.isInitialized) {
+            val hosts = ModuleSettings.getCdnPriorityList(prefs, ModuleSettings.KEY_CDN_CELLULAR_PRIORITY)
+            val isEnabled = prefs.getBoolean(ModuleSettings.KEY_CDN_CELLULAR_ENABLED, false)
+            customCdnCellularSummary.text = if (!isEnabled || hosts.isEmpty()) {
+                context.getString(R.string.cdn_cellular_priority_summary_empty)
+            } else {
+                val names = hosts.map { h -> ModuleSettings.cdnEndpoints.firstOrNull { it.host == h }?.name?.substringBefore("（") ?: h }
+                context.getString(R.string.cdn_cellular_priority_summary_set, names.joinToString(" → "))
             }
         }
         if (::halfScreenQualitySummary.isInitialized) {

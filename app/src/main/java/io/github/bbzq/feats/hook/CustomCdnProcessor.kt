@@ -16,10 +16,13 @@ object CustomCdnProcessor {
     fun rewriteResponse(
         response: Any?,
         prefs: SharedPreferences,
+        isCellular: Boolean = false,
         log: (String, Throwable?) -> Unit = { _, _ -> },
     ) {
-        val host = ModuleSettings.getCustomCdnHost(prefs)
-        if (!ModuleSettings.isCustomCdnEnabled(prefs) || host == null || response == null) return
+        if (response == null) return
+        val hosts = ModuleSettings.getActiveCdnHosts(prefs, isCellular)
+        if (hosts.isEmpty()) return
+        val audioIndependent = ModuleSettings.isCdnAudioIndependent(prefs)
 
         runCatching {
             sequenceOf(
@@ -27,47 +30,47 @@ object CustomCdnProcessor {
                 response.callMethod("getVodInfo"),
                 response.callMethod("getViewInfo"),
                 response,
-            ).filterNotNull().distinct().forEach { rewriteVideoInfo(it, host) }
+            ).filterNotNull().distinct().forEach { rewriteVideoInfo(it, hosts, audioIndependent) }
         }.onFailure { log("CustomCdnProcessor: response rewrite failed", it) }
     }
 
-    private fun rewriteVideoInfo(videoInfo: Any, host: String) {
+    private fun rewriteVideoInfo(videoInfo: Any, hosts: List<String>, audioIndependent: Boolean) {
         val streams = videoInfo.callMethod("getStreamListList")
             ?: videoInfo.callMethod("getStreamList")
         (streams as? Iterable<*>)?.forEach { stream ->
             stream ?: return@forEach
             listOf("getDashVideo", "getMultiDashVideo", "getSegmentVideo")
-                .forEach { getter -> stream.callMethod(getter)?.let { rewriteVideoContent(it, host) } }
+                .forEach { getter -> stream.callMethod(getter)?.let { rewriteVideoContent(it, hosts) } }
             stream.callMethod("getContent")?.callMethod("getValue")
-                ?.let { rewriteVideoContent(it, host) }
-            rewriteAudioLists(stream, host)
+                ?.let { rewriteVideoContent(it, hosts) }
+            if (!audioIndependent) rewriteAudioLists(stream, hosts)
         }
-        rewriteAudioLists(videoInfo, host)
+        if (!audioIndependent) rewriteAudioLists(videoInfo, hosts)
     }
 
-    private fun rewriteVideoContent(content: Any, host: String) {
+    private fun rewriteVideoContent(content: Any, hosts: List<String>) {
         if (content.callMethod("getBaseUrl") is String || content.callMethod("getUrl") is String) {
-            rewriteUrlItem(content, host)
+            rewriteUrlItem(content, hosts)
         }
         val dashVideos = content.callMethod("getDashVideosList") ?: content.callMethod("getDashVideos")
         (dashVideos as? Iterable<*>)
-            ?.forEach { it?.let { item -> rewriteUrlItem(item, host) } }
+            ?.forEach { it?.let { item -> rewriteUrlItem(item, hosts) } }
         val segments = content.callMethod("getSegmentList") ?: content.callMethod("getSegment")
         (segments as? Iterable<*>)
-            ?.forEach { it?.let { item -> rewriteUrlItem(item, host) } }
+            ?.forEach { it?.let { item -> rewriteUrlItem(item, hosts) } }
     }
 
-    private fun rewriteAudioLists(owner: Any, host: String) {
+    private fun rewriteAudioLists(owner: Any, hosts: List<String>) {
         listOf("getDashAudioList", "getDashAudioListList", "getAudioDashVideoList", "getDashAudio")
             .forEach { getter ->
                 when (val result = owner.callMethod(getter)) {
-                    is Iterable<*> -> result.forEach { it?.let { item -> rewriteUrlItem(item, host) } }
-                    else -> result?.let { rewriteUrlItem(it, host) }
+                    is Iterable<*> -> result.forEach { it?.let { item -> rewriteUrlItem(item, hosts) } }
+                    else -> result?.let { rewriteUrlItem(it, hosts) }
                 }
             }
     }
 
-    private fun rewriteUrlItem(item: Any, selectedHost: String) {
+    private fun rewriteUrlItem(item: Any, hosts: List<String>) {
         val baseGetter = when {
             item.callMethod("getBaseUrl") is String -> "getBaseUrl"
             item.callMethod("getUrl") is String -> "getUrl"
@@ -88,9 +91,10 @@ object CustomCdnProcessor {
         val backups = (rawBackups as? Iterable<*>)
             ?.filterIsInstance<String>().orEmpty()
         val source = listOf(base).plus(backups).firstOrNull { !isPCdn(it) } ?: return
-        val rewrittenBase = replaceHost(source, selectedHost)
+
+        val rewrittenBase = replaceHost(source, hosts[0])
         val rewrittenBackups = buildList {
-            addAll(backups.filter { !isPCdn(it) }.take(2).map { replaceHost(it, selectedHost) })
+            hosts.drop(1).take(4).forEach { h -> add(replaceHost(source, h)) }
             add(source)
         }.filter { it != rewrittenBase }.distinct()
 

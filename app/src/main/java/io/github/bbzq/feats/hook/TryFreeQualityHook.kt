@@ -264,7 +264,8 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
             if (stats != null) {
                 VideoStatsOverlayController.instance?.update(stats)
             }
-            CustomCdnProcessor.rewriteResponse(target, prefs, ::log)
+            val isCellular = env.hostContext?.let { NetworkTypeDetector.isCellular(it) } ?: false
+            CustomCdnProcessor.rewriteResponse(target, prefs, isCellular, ::log)
         }.onFailure {
             log("PlayView quality response processing failed at ${target.javaClass.name}", it)
         }
