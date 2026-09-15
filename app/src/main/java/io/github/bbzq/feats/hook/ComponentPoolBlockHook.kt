@@ -11,40 +11,14 @@ import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 
-/**
- * 拦截 App 基础组件库（`app_mod_resource`）的下载清单。
- *
- * 宿主通过 `ModuleMoss.list(ListReq)` 拉取资源池清单，再按清单去下载模块文件。
- * 这里把**被选中的池**的模块列表清空，宿主就没有可下载项了。
- *
- * ## 两条必须知道的前提
- *
- * 1. **清单是按需分片下发的，不是全量目录。** 一次响应通常只带 1 个池、1 个模块。
- *    真机实测：`app_mod_resource/manifest/` 下有 17 个池，而单次响应只带了
- *    `appletBasic` 的 1 个模块。所以候选池必须**跨请求累积**，
- *    按"本次响应即全部候选"去整份覆盖的话，设置页里永远只会看到最后请求的那一个池。
- * 2. **只拦再次下载，不删已有文件。** 已经落盘的模块要用户自己去
- *    哔哩哔哩的存储设置里清一次才看得出效果。
- *
- * ## 为什么用 callMethod 而不是安装期解析 builder
- *
- * protobuf-lite 的 `toBuilder()` **声明**返回的是基类 `GeneratedMessageLite$Builder`，
- * 不是具体 builder。任何"解析 `toBuilder().returnType` 再找 `build()`"的写法都会失败。
- * 这里全程走运行期按名反射（`callMethod`），拿到的是实例的真实类，不受此限。
- */
 class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
-
-    /** 池名 -> 已见模块名；跨请求累积，见类注释第 1 条。 */
     private val knownPools = linkedMapOf<String, LinkedHashSet<String>>()
 
-    /** 模块名读不出来时的兜底计数：该池在单次响应里见过的最大模块数。 */
     private val poolCountFloor = linkedMapOf<String, Int>()
 
     private var persistedSignature: String? = null
 
     override fun startHook() {
-        // 两个开关都关时**也要装**：不装就没人去观察清单，设置页里永远没有候选可勾。
-        // 观察本身不改写响应，只读几个字段，代价可以忽略。
         val mossClass = MOSS_CLASSES.firstNotNullOfOrNull(classLoader::findClassOrNull)
         val requestClass = REQUEST_CLASSES.firstNotNullOfOrNull(classLoader::findClassOrNull)
         if (mossClass == null || requestClass == null) {
@@ -68,8 +42,6 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
             installed++
         }
 
-        // 异步版本：第二个参数是 MossResponseHandler，结果从 onNext 回调里来，
-        // 所以要换掉 handler 而不是改返回值。
         val handlerClass = classLoader.findClassOrNull(MOSS_HANDLER)
         if (handlerClass != null) {
             mossClass.declaredMethods.firstOrNull {
@@ -94,11 +66,6 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("ComponentPoolBlock: installed on $installed entry point(s)")
     }
 
-    /**
-     * 把 delegate 包一层：onNext 收到的 reply 先过滤再转交。
-     *
-     * 任何一步出错都原样透传原始 reply——宁可这次没拦住，也不能让宿主拿到半成品。
-     */
     private fun wrapHandler(handlerClass: Class<*>, delegate: Any): Any =
         Proxy.newProxyInstance(
             handlerClass.classLoader,
@@ -118,7 +85,6 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
             },
         )
 
-    /** 记下这一份分片里出现的池，并在内容变化时写回设置。 */
     private fun observe(reply: Any) {
         runCatching {
             val pools = reply.callMethod("getPoolsList") as? List<*> ?: return@runCatching
@@ -148,12 +114,6 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }.onFailure { log("ComponentPoolBlock: observe failed", it) }
     }
 
-    /**
-     * 只在内容真的变了时才写 prefs。
-     *
-     * 清单请求在一次会话里会来很多次，每次都 `putStringSet` 是纯浪费：
-     * 那意味着每次都要把整份集合重新序列化一遍。
-     */
     private fun persistKnownPools() {
         val encoded = knownPools.entries
             .sortedBy { it.key }
@@ -170,9 +130,6 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }.onFailure { log("ComponentPoolBlock: persist failed", it) }
     }
 
-    /**
-     * 返回清空了目标池模块列表的新 reply；没有任何池命中就返回 null（原样放行）。
-     */
     private fun filtered(reply: Any): Any? = runCatching {
         val blockAll = ModuleSettings.isBlockAllComponentPoolsEnabled(prefs)
         val blocked = if (blockAll) emptySet() else ModuleSettings.getBlockedComponentPools(prefs)
@@ -206,7 +163,6 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }.onFailure { log("ComponentPoolBlock: filter failed", it) }.getOrNull()
 
     private companion object {
-        /** 有界：池数与每池模块名都不允许无限增长。 */
         const val MAX_POOLS = 256
         const val MAX_MODULES_PER_POOL = 512
 

@@ -2143,13 +2143,6 @@ class SettingsContentFactory(
         }
     }
 
-    /**
-     * 组件库资源池拦截。
-     *
-     * 候选池由 ComponentPoolBlockHook 在宿主侧**跨请求累积**后写入；
-     * 冷启动后要等宿主真的请求过清单才会出现，所以列表为空是正常初始态，
-     * 此时用「全部拦截」兜底。
-     */
     private fun componentPoolRows(): List<View> {
         val rows = mutableListOf<View>()
         rows += createInfoRow(
@@ -2184,7 +2177,6 @@ class SettingsContentFactory(
         return rows
     }
 
-    /** 勾中 = 拦截该池（与首页组件那一组「勾中 = 保留」相反，措辞里已写明）。 */
     private fun createComponentPoolGroup(items: List<ComponentPoolItem>): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL

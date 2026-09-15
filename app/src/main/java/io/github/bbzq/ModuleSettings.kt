@@ -736,18 +736,12 @@ object ModuleSettings {
     fun getHiddenHomeComponents(prefs: SharedPreferences): Set<String> =
         prefs.getStringSet(KEY_HIDDEN_HOME_COMPONENTS, emptySet()) ?: emptySet()
 
-    // ── 组件库资源池拦截 ──────────────────────────────────────────────────────
-    //
-    // 与首页组件隐藏同构：一个"全量禁止"开关 + 一个"自定义勾选"开关 + 选中集 + 已知候选集。
-    // 差别在于候选集由宿主侧的清单请求**跨请求累积**得来，见 ComponentPoolBlockHook。
-
     fun isBlockAllComponentPoolsEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED, false)
 
     fun isCustomComponentPoolBlockEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED, false)
 
-    /** 勾中的池名；"全量禁止"开启时调用方应忽略本集合。 */
     fun getBlockedComponentPools(prefs: SharedPreferences): Set<String> =
         if (!isCustomComponentPoolBlockEnabled(prefs)) emptySet()
         else prefs.getStringSet(KEY_BLOCKED_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
@@ -755,7 +749,6 @@ object ModuleSettings {
     fun getKnownComponentPools(prefs: SharedPreferences): Set<String> =
         prefs.getStringSet(KEY_KNOWN_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
 
-    /** `<池名>	<模块数>`；模块数只用于展示，不参与匹配。 */
     fun encodeComponentPool(name: String, moduleCount: Int): String =
         name.replace('	', ' ').trim() + "	" + moduleCount
 
