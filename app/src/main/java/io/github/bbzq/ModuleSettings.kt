@@ -11,6 +11,7 @@ object ModuleSettings {
     const val KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED = "block_teenagers_mode_dialog"
     const val KEY_BLOCK_UPDATE_ENABLED = "block_update_enabled"
     const val KEY_SKIP_SPLASH_AD_ENABLED = "skip_splash_ad_enabled"
+    const val KEY_SPLASH_AUTO_NIGHT_ENABLED = "splash_auto_night_enabled"
     const val KEY_SKIP_VIDEO_AD_ENABLED = "skip_video_ad_enabled"
     const val KEY_SKIP_VIDEO_AD_AUTO_LIKE_ENABLED = "skip_video_ad_auto_like_enabled"
     const val KEY_SKIP_VIDEO_AD_CATEGORIES = "skip_video_ad_categories"
@@ -216,6 +217,8 @@ object ModuleSettings {
     private var knownMineComponentsCache: Set<String>? = null
     @Volatile
     private var knownVideoDetailRelateTypesCache: Set<String>? = null
+    @Volatile
+    private var knownComponentPoolsCache: Set<String>? = null
 
     enum class ExportableValueType {
         BOOLEAN,
@@ -237,6 +240,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_UPDATE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_UPDATE_ENABLED, false) },
         ExportableConfigSpec(KEY_SKIP_SPLASH_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_SPLASH_AD_ENABLED, true) },
+        ExportableConfigSpec(KEY_SPLASH_AUTO_NIGHT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SPLASH_AUTO_NIGHT_ENABLED, false) },
         ExportableConfigSpec(KEY_SKIP_VIDEO_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_VIDEO_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_SKIP_VIDEO_AD_AUTO_LIKE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_VIDEO_AD_AUTO_LIKE_ENABLED, false) },
         ExportableConfigSpec(KEY_SKIP_VIDEO_AD_SETTINGS_VISIBLE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_VIDEO_AD_SETTINGS_VISIBLE, false) },
@@ -414,6 +418,9 @@ object ModuleSettings {
 
     fun isSkipSplashAdEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SKIP_SPLASH_AD_ENABLED, true)
+
+    fun isSplashAutoNightEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SPLASH_AUTO_NIGHT_ENABLED, false)
 
     fun isBlockTeenagersModeDialogEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED, false)
@@ -747,7 +754,13 @@ object ModuleSettings {
         else prefs.getStringSet(KEY_BLOCKED_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
 
     fun getKnownComponentPools(prefs: SharedPreferences): Set<String> =
-        prefs.getStringSet(KEY_KNOWN_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
+        knownComponentPoolsCache
+            ?: prefs.getStringSet(KEY_KNOWN_COMPONENT_POOLS, emptySet())?.toSet()
+            ?: emptySet()
+
+    fun cacheKnownComponentPools(items: Set<String>) {
+        knownComponentPoolsCache = items.toSet()
+    }
 
     fun encodeComponentPool(name: String, moduleCount: Int): String =
         name.replace('	', ' ').trim() + "	" + moduleCount

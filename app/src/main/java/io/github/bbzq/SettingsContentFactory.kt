@@ -269,6 +269,12 @@ class SettingsContentFactory(
             )
         }
         rows += createSwitchRow(
+            context.getString(R.string.startup_splash_auto_night_title),
+            context.getString(R.string.startup_splash_auto_night_summary),
+            ModuleSettings.KEY_SPLASH_AUTO_NIGHT_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.startup_block_teenagers_title),
             context.getString(R.string.startup_block_teenagers_summary),
             ModuleSettings.KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED,
