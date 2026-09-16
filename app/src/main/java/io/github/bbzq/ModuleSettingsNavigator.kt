@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 
 object ModuleSettingsNavigator {
@@ -24,10 +25,12 @@ object ModuleSettingsNavigator {
 
         runCatching { context.startActivity(intent) }
             .onFailure {
+                Log.w(TAG, "open SettingsActivity failed", it)
                 Toast.makeText(context, "无法打开 BBZQ 设置", Toast.LENGTH_SHORT).show()
             }
     }
 
+    private const val TAG = "BBZQ"
     private const val MODULE_PACKAGE = "io.github.bbzq"
     private const val SETTINGS_ACTIVITY = "io.github.bbzq.SettingsActivity"
 }
