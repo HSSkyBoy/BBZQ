@@ -276,6 +276,9 @@ object RuntimeEnvironmentInfo {
             ModuleSettings.getKnownVideoDetailRelateTypes(prefs)
                 .takeIf { it.isNotEmpty() }
                 ?.let { put(ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES, it) }
+            ModuleSettings.getKnownComponentPools(prefs)
+                .takeIf { it.isNotEmpty() }
+                ?.let { put(ModuleSettings.KEY_KNOWN_COMPONENT_POOLS, it) }
         }
     }
 
@@ -286,7 +289,11 @@ object RuntimeEnvironmentInfo {
         items: Set<String>,
     ) {
         val localItems = prefs.getStringSet(key, emptySet()).orEmpty()
-        val updated = if (items.size < localItems.size) localItems else items
+        val updated = if (key == ModuleSettings.KEY_KNOWN_COMPONENT_POOLS) {
+            mergeComponentPools(localItems, items)
+        } else {
+            if (items.size < localItems.size) localItems else items
+        }
         editor.putStringSet(key, updated.toMutableSet())
         when (key) {
             ModuleSettings.KEY_KNOWN_BOTTOM_BAR_ITEMS -> ModuleSettings.cacheKnownBottomBarItems(updated)
@@ -294,7 +301,18 @@ object RuntimeEnvironmentInfo {
             ModuleSettings.KEY_KNOWN_HOME_COMPONENTS -> ModuleSettings.cacheKnownHomeComponents(updated)
             ModuleSettings.KEY_KNOWN_MINE_COMPONENTS -> ModuleSettings.cacheKnownMineComponents(updated)
             ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES -> ModuleSettings.cacheKnownVideoDetailRelateTypes(updated)
+            ModuleSettings.KEY_KNOWN_COMPONENT_POOLS -> ModuleSettings.cacheKnownComponentPools(updated)
         }
+    }
+
+    private fun mergeComponentPools(local: Set<String>, incoming: Set<String>): Set<String> {
+        val counts = linkedMapOf<String, Int>()
+        (local.asSequence() + incoming.asSequence())
+            .mapNotNull(ModuleSettings::decodeComponentPool)
+            .forEach { (name, count) -> counts[name] = maxOf(counts[name] ?: 0, count) }
+        return counts.entries
+            .sortedBy { it.key }
+            .mapTo(linkedSetOf()) { ModuleSettings.encodeComponentPool(it.key, it.value) }
     }
 
     private fun symbolScanStatusValues(hostContext: Context): Map<String, String> {
@@ -415,6 +433,7 @@ object RuntimeEnvironmentInfo {
         ModuleSettings.KEY_KNOWN_HOME_COMPONENTS,
         ModuleSettings.KEY_KNOWN_MINE_COMPONENTS,
         ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES,
+        ModuleSettings.KEY_KNOWN_COMPONENT_POOLS,
     )
 
     private data class VersionInfo(

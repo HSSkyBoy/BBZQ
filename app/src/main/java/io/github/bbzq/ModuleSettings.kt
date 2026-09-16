@@ -216,6 +216,8 @@ object ModuleSettings {
     private var knownMineComponentsCache: Set<String>? = null
     @Volatile
     private var knownVideoDetailRelateTypesCache: Set<String>? = null
+    @Volatile
+    private var knownComponentPoolsCache: Set<String>? = null
 
     enum class ExportableValueType {
         BOOLEAN,
@@ -747,7 +749,13 @@ object ModuleSettings {
         else prefs.getStringSet(KEY_BLOCKED_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
 
     fun getKnownComponentPools(prefs: SharedPreferences): Set<String> =
-        prefs.getStringSet(KEY_KNOWN_COMPONENT_POOLS, emptySet())?.toSet() ?: emptySet()
+        knownComponentPoolsCache
+            ?: prefs.getStringSet(KEY_KNOWN_COMPONENT_POOLS, emptySet())?.toSet()
+            ?: emptySet()
+
+    fun cacheKnownComponentPools(items: Set<String>) {
+        knownComponentPoolsCache = items.toSet()
+    }
 
     fun encodeComponentPool(name: String, moduleCount: Int): String =
         name.replace('	', ' ').trim() + "	" + moduleCount
