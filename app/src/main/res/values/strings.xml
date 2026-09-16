@@ -156,6 +156,8 @@
     <!-- 启动 -->
     <string name="startup_skip_splash_title">跳过开屏广告</string>
     <string name="startup_skip_splash_summary">拦截开屏广告请求，缩短启动等待时间。</string>
+    <string name="startup_splash_auto_night_title">开屏页跟随深色模式</string>
+    <string name="startup_splash_auto_night_summary">深色模式下把开屏页底色改为黑色，避免从深色界面进入时闪白。</string>
     <string name="startup_block_teenagers_title">关闭青少年模式弹窗</string>
     <string name="startup_block_teenagers_summary">检测并自动关闭青少年模式提醒弹窗。</string>
     <string name="block_update_title">禁止 App 检查更新</string>

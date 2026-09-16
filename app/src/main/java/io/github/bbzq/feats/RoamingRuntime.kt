@@ -35,6 +35,7 @@ import io.github.bbzq.feats.hook.ShareHook
 import io.github.bbzq.feats.hook.SkipVideoAdHook
 import io.github.bbzq.feats.hook.SkipVideoAdProgressHook
 import io.github.bbzq.feats.hook.SplashAdHook
+import io.github.bbzq.feats.hook.SplashAutoNightHook
 import io.github.bbzq.feats.hook.StoryComponentAlphaHook
 import io.github.bbzq.feats.hook.StoryDanmakuHook
 import io.github.bbzq.feats.hook.StoryDefaultLaunchHook
@@ -173,6 +174,7 @@ object RoamingRuntime {
                 ::DaggerCircularDependencyFixHook,
                 ::SettingHook,
                 ::SplashAdHook,
+                ::SplashAutoNightHook,
                 ::ShareHook,
                 ::FreeCopyHook,
                 ::BottomBarHook,
