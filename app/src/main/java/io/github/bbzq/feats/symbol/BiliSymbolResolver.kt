@@ -4205,6 +4205,7 @@ object BiliSymbolResolver {
     private val PREFERENCE_CLASS_NAMES = listOf(
         "com.bilibili.p4439app.preferences.settingWide.CornerPreference",
         "com.bilibili.app.preferences.settingWide.CornerPreference",
+        "tv.danmaku.bili.widget.preference.BLPreference",
         "tv.danmaku.p9138bili.widget.preference.BLPreference",
         "androidx.preference.Preference",
     )
@@ -4281,6 +4282,7 @@ object BiliSymbolResolver {
     private val MINE_VIP_VIEW_CLASS_NAMES = listOf(
         "tv.danmaku.bili.ui.main2.mine.widgets.MineVipEntranceView",
         "tv.danmaku.p9138bili.p9228ui.main2.p9247mine.widgets.MineVipEntranceView",
+        "tv.danmaku.bili.ui.main2.mine.modularvip.VipEntranceView",
         "tv.danmaku.p9138bili.p9228ui.main2.p9247mine.modularvip.VipEntranceView",
     )
 
@@ -4377,6 +4379,7 @@ object BiliSymbolResolver {
     private val PEGASUS_RESPONSE_CLASSES = arrayOf(
         "com.bilibili.pegasus.data.base.PegasusResponse",
         "com.bilibili.pegasus.p5730data.p5731base.PegasusResponse",
+        "com.bilibili.pegasus.data.request.PegasusResponseWrapper",
         "com.bilibili.pegasus.p5730data.request.PegasusResponseWrapper",
     )
     private const val PEGASUS_HOLDER_DATA = "com.bilibili.pegasus.PegasusHolderData"
