@@ -116,8 +116,19 @@ class SettingsContentFactory(
     private var versionTapCount = 0
     private var firstVersionTapAt = 0L
     private var refreshing = false
+    private val searchTargets = mutableListOf<SettingsSearchTarget>()
+    private var currentSearchSection: String = ""
+    private var indexSearchTargets = true
+
+    fun collectSearchTargets(): List<SettingsSearchTarget> = searchTargets.toList()
+
+    fun findSearchTarget(key: String): SettingsSearchTarget? =
+        searchTargets.firstOrNull { it.item.key == key }
 
     fun createScrollView(): ScrollView {
+        searchTargets.clear()
+        currentSearchSection = ""
+        indexSearchTargets = page !in hiddenSearchPages
         val pageRoot = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(pageBackgroundColor)
@@ -126,86 +137,66 @@ class SettingsContentFactory(
 
         when (page) {
             SettingsActivity.PAGE_SKIP_VIDEO_AD_SWITCH -> {
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_skip_video_ad)))
-                pageRoot.addView(createSectionCard(skipVideoAdOverviewRows()))
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_thanks)))
-                pageRoot.addView(createSectionCard(skipVideoAdCreditRows()))
+                pageRoot.addSettingsSection(context.getString(R.string.section_skip_video_ad)) {
+                    skipVideoAdOverviewRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.section_thanks)) {
+                    skipVideoAdCreditRows()
+                }
             }
 
             SettingsActivity.PAGE_SKIP_VIDEO_AD_CATEGORY -> {
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_category_filter)))
-                pageRoot.addView(createSectionCard(skipVideoAdCategoryRows()))
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_thanks)))
-                pageRoot.addView(createSectionCard(skipVideoAdCreditRows()))
+                pageRoot.addSettingsSection(context.getString(R.string.section_category_filter)) {
+                    skipVideoAdCategoryRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.section_thanks)) {
+                    skipVideoAdCreditRows()
+                }
             }
 
             SettingsActivity.PAGE_HIDDEN_FEATURES -> {
-                pageRoot.addView(createSectionLabel(context.getString(R.string.about_hidden_features_title)))
-                pageRoot.addView(createSectionCard(hiddenFeaturesRows()))
+                pageRoot.addSettingsSection(context.getString(R.string.about_hidden_features_title)) {
+                    hiddenFeaturesRows()
+                }
             }
 
             SettingsActivity.PAGE_UPDATE -> {
-                pageRoot.addView(createSectionLabel(context.getString(R.string.about_update_title)))
-                pageRoot.addView(createSectionCard(updateRows()))
+                pageRoot.addSettingsSection(context.getString(R.string.about_update_title)) {
+                    updateRows()
+                }
             }
 
             SettingsActivity.PAGE_CONFIG_BACKUP -> {
-                pageRoot.addView(createSectionLabel(context.getString(R.string.about_config_backup_title)))
-                pageRoot.addView(createSectionCard(configBackupRows()))
+                pageRoot.addSettingsSection(context.getString(R.string.about_config_backup_title)) {
+                    configBackupRows()
+                }
             }
 
             else -> {
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_share_link)))
-                pageRoot.addView(createSectionCard(shareRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_copy_enhance)))
-                pageRoot.addView(createSectionCard(copyRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_startup_purify)))
-                pageRoot.addView(createSectionCard(startupRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_download_features)))
-                pageRoot.addView(createSectionCard(downloadRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_component_pool)))
-                pageRoot.addView(createSectionCard(componentPoolRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_video_cdn)))
-                pageRoot.addView(createSectionCard(customCdnRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_home_recommend_purify)))
-                pageRoot.addView(createSectionCard(homeRecommendRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_dynamic_page)))
-                pageRoot.addView(createSectionCard(dynamicRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_ui_customize)))
-                pageRoot.addView(createSectionCard(bottomBarRows()))
-
-                val playbackSectionRows = playbackRows()
-                if (playbackSectionRows.isNotEmpty()) {
-                    pageRoot.addView(createSectionLabel(context.getString(R.string.section_playback_purify)))
-                    pageRoot.addView(createSectionCard(playbackSectionRows))
-                }
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_comment_purify)))
-                pageRoot.addView(createSectionCard(commentRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_mine_customize)))
-                pageRoot.addView(createSectionCard(mineProfileRows()))
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_story_purify)))
-                pageRoot.addView(createSectionCard(storyRows()))
-
+                pageRoot.addSettingsSection(context.getString(R.string.section_share_link)) { shareRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_copy_enhance)) { copyRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_startup_purify)) { startupRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_download_features)) { downloadRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_component_pool)) { componentPoolRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_video_cdn)) { customCdnRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_home_recommend_purify)) { homeRecommendRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_dynamic_page)) { dynamicRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_ui_customize)) { bottomBarRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_playback_purify)) { playbackRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_comment_purify)) { commentRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_mine_customize)) { mineProfileRows() }
+                pageRoot.addSettingsSection(context.getString(R.string.section_story_purify)) { storyRows() }
                 if (hasHiddenFeatures()) {
-                    pageRoot.addView(createSectionLabel(context.getString(R.string.about_hidden_features_title)))
-                    pageRoot.addView(createSectionCard(hiddenFeaturesEntryRows()))
+                    indexSearchTargets = false
+                    pageRoot.addSettingsSection(context.getString(R.string.about_hidden_features_title)) {
+                        hiddenFeaturesEntryRows()
+                    }
+                    indexSearchTargets = true
                 }
-
-                pageRoot.addView(createSectionLabel(context.getString(R.string.section_about)))
-                pageRoot.addView(createSectionCard(aboutRows()))
+                pageRoot.addSettingsSection(context.getString(R.string.section_about)) { aboutRows() }
             }
         }
+        registerRemoteSearchTargets()
 
         return ScrollView(context).apply {
             setBackgroundColor(pageBackgroundColor)
@@ -1081,6 +1072,12 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(summaryView)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.about_check_update_title),
+                context.getString(R.string.about_check_update_summary),
+                "action:${context.getString(R.string.about_check_update_title)}",
+            )
         }
     }
 
@@ -1263,6 +1260,12 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(symbolScanStatusSummary)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.symbol_cache_refresh_title),
+                context.getString(R.string.symbol_cache_refresh_no_status),
+                "action:${context.getString(R.string.symbol_cache_refresh_title)}",
+            )
         }
     }
 
@@ -1356,6 +1359,88 @@ class SettingsContentFactory(
             .show()
     }
 
+    private fun LinearLayout.addSettingsSection(section: String, buildRows: () -> List<View>) {
+        currentSearchSection = section
+        val rows = buildRows()
+        if (rows.isEmpty()) return
+        addView(createSectionLabel(section))
+        addView(createSectionCard(rows))
+    }
+
+    private fun registerSearchTarget(
+        view: View?,
+        title: String,
+        detail: String,
+        key: String,
+        pageOverride: String = page,
+        sectionOverride: String = currentSearchSection,
+    ) {
+        if (!indexSearchTargets) return
+        val trimmedTitle = title.trim()
+        if (trimmedTitle.isEmpty()) return
+        if (searchTargets.any { it.item.key == key && it.page == pageOverride }) return
+        searchTargets += SettingsSearchTarget(
+            item = SettingsSearchItem(
+                key = key,
+                title = trimmedTitle,
+                detail = detail.trim(),
+                section = sectionOverride,
+            ),
+            view = view,
+            page = pageOverride,
+        )
+    }
+
+    private fun registerRemoteSearchTargets() {
+        fun remote(pageId: String, section: String, title: String, detail: String, key: String) {
+            if (page == pageId) return
+            registerSearchTarget(
+                view = null,
+                title = title,
+                detail = detail,
+                key = key,
+                pageOverride = pageId,
+                sectionOverride = section,
+            )
+        }
+
+        remote(
+            SettingsActivity.PAGE_UPDATE,
+            context.getString(R.string.about_update_title),
+            context.getString(R.string.about_check_update_title),
+            context.getString(R.string.about_check_update_summary),
+            "action:${context.getString(R.string.about_check_update_title)}",
+        )
+        remote(
+            SettingsActivity.PAGE_UPDATE,
+            context.getString(R.string.about_update_title),
+            context.getString(R.string.about_accept_prerelease_title),
+            context.getString(R.string.about_accept_prerelease_summary),
+            ModuleSettings.KEY_ACCEPT_PRERELEASE_UPDATE,
+        )
+        remote(
+            SettingsActivity.PAGE_CONFIG_BACKUP,
+            context.getString(R.string.about_config_backup_title),
+            context.getString(R.string.about_export_config_title),
+            context.getString(R.string.about_export_config_summary),
+            "action:${context.getString(R.string.about_export_config_title)}",
+        )
+        remote(
+            SettingsActivity.PAGE_CONFIG_BACKUP,
+            context.getString(R.string.about_config_backup_title),
+            context.getString(R.string.about_import_config_title),
+            context.getString(R.string.about_import_config_summary),
+            "action:${context.getString(R.string.about_import_config_title)}",
+        )
+        remote(
+            SettingsActivity.PAGE_CONFIG_BACKUP,
+            context.getString(R.string.about_config_backup_title),
+            context.getString(R.string.symbol_cache_refresh_title),
+            context.getString(R.string.symbol_cache_refresh_title),
+            "action:${context.getString(R.string.symbol_cache_refresh_title)}",
+        )
+    }
+
     private fun createSectionLabel(text: String): TextView {
         return TextView(context).apply {
             this.text = text
@@ -1420,6 +1505,7 @@ class SettingsContentFactory(
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
+            registerSearchTarget(this, title, summary, "action:$title")
         }
     }
 
@@ -1443,6 +1529,12 @@ class SettingsContentFactory(
             addView(homeRecommendTitleKeywordSummaryView)
         }.also {
             homeRecommendTitleKeywordRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.home_recommend_title_keyword_title),
+                context.getString(R.string.home_recommend_title_keyword_title),
+                "action:${context.getString(R.string.home_recommend_title_keyword_title)}",
+            )
         }
     }
 
@@ -1496,6 +1588,12 @@ class SettingsContentFactory(
             addView(videoDetailRelateTitleKeywordSummaryView)
         }.also {
             videoDetailRelateTitleKeywordRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.video_detail_relate_title_keyword_title),
+                context.getString(R.string.video_detail_relate_title_keyword_title),
+                "action:${context.getString(R.string.video_detail_relate_title_keyword_title)}",
+            )
         }
     }
 
@@ -1549,6 +1647,12 @@ class SettingsContentFactory(
             addView(commentKeywordSummary)
         }.also {
             commentKeywordRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.comment_keyword_row_title),
+                context.getString(R.string.comment_keyword_row_title),
+                "action:${context.getString(R.string.comment_keyword_row_title)}",
+            )
         }
     }
 
@@ -1661,7 +1765,15 @@ class SettingsContentFactory(
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
             addView(customThemeColorSwatch)
-        }.also { customThemeColorRow = it }
+        }.also {
+            customThemeColorRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.custom_theme_color_title),
+                context.getString(R.string.custom_theme_color_title),
+                "action:${context.getString(R.string.custom_theme_color_title)}",
+            )
+        }
     }
 
     private fun showCustomThemeColorDialog() {
@@ -1709,7 +1821,15 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(customSkinConfigSummary)
-        }.also { customSkinConfigRow = it }
+        }.also {
+            customSkinConfigRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.custom_skin_config_title),
+                context.getString(R.string.custom_skin_config_title),
+                "action:${context.getString(R.string.custom_skin_config_title)}",
+            )
+        }
     }
 
     private fun createHalfScreenQualityRow(): View {
@@ -1737,6 +1857,12 @@ class SettingsContentFactory(
                 alpha = 0.7f
                 setPadding(0, dp(3), 0, 0)
             })
+            registerSearchTarget(
+                this,
+                context.getString(R.string.half_screen_quality_title),
+                context.getString(R.string.half_screen_quality_summary, ""),
+                ModuleSettings.KEY_HALF_SCREEN_QUALITY,
+            )
         }
     }
 
@@ -1781,6 +1907,12 @@ class SettingsContentFactory(
                 alpha = 0.7f
                 setPadding(0, dp(3), 0, 0)
             })
+            registerSearchTarget(
+                this,
+                context.getString(R.string.full_screen_quality_title),
+                context.getString(R.string.full_screen_quality_summary, ""),
+                ModuleSettings.KEY_FULL_SCREEN_QUALITY,
+            )
         }
     }
 
@@ -1822,6 +1954,12 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(customCdnWifiSummary)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.cdn_wifi_priority_title),
+                context.getString(R.string.cdn_wifi_priority_summary_empty),
+                "action:${context.getString(R.string.cdn_wifi_priority_title)}",
+            )
         }
     }
 
@@ -1847,6 +1985,12 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(customCdnCellularSummary)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.cdn_cellular_priority_title),
+                context.getString(R.string.cdn_wifi_priority_summary_empty),
+                "action:${context.getString(R.string.cdn_cellular_priority_title)}",
+            )
         }
     }
 
@@ -1874,6 +2018,12 @@ class SettingsContentFactory(
                 setTextColor(summaryTextColor)
                 setPadding(0, dp(4), 0, 0)
             })
+            registerSearchTarget(
+                this,
+                context.getString(R.string.custom_cdn_speed_test_title),
+                context.getString(R.string.custom_cdn_speed_test_summary),
+                "action:${context.getString(R.string.custom_cdn_speed_test_title)}",
+            )
         }
     }
 
@@ -1977,6 +2127,12 @@ class SettingsContentFactory(
                 setPadding(0, dp(4), 0, dp(8))
             })
             addView(storyVideoComponentAlphaSeekBar)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.story_video_component_alpha_title),
+                context.getString(R.string.story_video_component_alpha_title),
+                ModuleSettings.KEY_STORY_VIDEO_COMPONENT_ALPHA,
+            )
         }
     }
 
@@ -2027,6 +2183,12 @@ class SettingsContentFactory(
             )
             addView(createCategoryColorLegend(category))
             addView(button)
+            registerSearchTarget(
+                this,
+                category.label,
+                category.summary,
+                "skip_cat:${category.key}",
+            )
         }
     }
 
@@ -2261,7 +2423,15 @@ class SettingsContentFactory(
                 setTextColor(titleTextColor)
             })
             addView(mineComponentPickerSummary)
-        }.also { mineComponentPickerRow = it }
+        }.also {
+            mineComponentPickerRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.mine_component_picker_title),
+                context.getString(R.string.mine_component_picker_title),
+                "action:${context.getString(R.string.mine_component_picker_title)}",
+            )
+        }
     }
 
     private fun showMineComponentPickerDialog(items: List<MineComponentItem>) {
@@ -2307,6 +2477,7 @@ class SettingsContentFactory(
             setPadding(dp(16), dp(14), dp(16), dp(14))
             addView(createTextColumn(title, summary), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(switchView)
+            registerSearchTarget(this, title, summary, key)
         }
     }
 
@@ -2964,6 +3135,11 @@ class SettingsContentFactory(
         private const val VERSION_TAP_WINDOW_MS = 1500L
         private const val TITLE_KEYWORD_SUMMARY_MAX_ITEMS = 4
         private const val UNKNOWN_RUNTIME_VALUE = "unknown"
+        private val hiddenSearchPages = setOf(
+            SettingsActivity.PAGE_HIDDEN_FEATURES,
+            SettingsActivity.PAGE_SKIP_VIDEO_AD_SWITCH,
+            SettingsActivity.PAGE_SKIP_VIDEO_AD_CATEGORY,
+        )
         private val SUPPORTED_HOST_PACKAGES = listOf(
             "tv.danmaku.bili",
             "com.bilibili.app.blue",

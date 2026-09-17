@@ -1,8 +1,14 @@
 package io.github.bbzq
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +19,7 @@ import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsets
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -32,8 +39,12 @@ class SettingsActivity : Activity() {
 
     private var pendingImportArchive: ByteArray? = null
     private var currentFactory: SettingsContentFactory? = null
+    private var pendingSearchRevealKey: String? = null
+    private var searchHighlightView: View? = null
+    private var searchHighlightDrawable: GradientDrawable? = null
+    private var searchHighlightAnimator: ValueAnimator? = null
+    private var searchHighlightRunnable: Runnable? = null
 
-    // In-activity page stack for zero-delay navigation
     private val pageStack = ArrayDeque<String>()
     private lateinit var toolbarTitleView: TextView
     private lateinit var backButtonView: TextView
@@ -109,6 +120,8 @@ class SettingsActivity : Activity() {
 
     override fun onDestroy() {
         unregisterBackCallback()
+        clearSettingsSearchHighlight()
+        currentFactory?.destroy()
         currentFactory = null
         super.onDestroy()
     }
@@ -199,6 +212,8 @@ class SettingsActivity : Activity() {
     }
 
     private fun switchContent(page: String) {
+        clearSettingsSearchHighlight()
+        currentFactory?.destroy()
         currentFactory = null
         contentContainer.removeAllViews()
         toolbarTitleView.text = toolbarTitle(page)
@@ -208,7 +223,6 @@ class SettingsActivity : Activity() {
         val factory = buildFactory(page)
         currentFactory = factory
         val scrollView = factory.createScrollView()
-        // Apply tracked bottom inset to the new scroll view
         if (currentBottomInset > 0) {
             scrollView.setPadding(
                 scrollView.paddingLeft,
@@ -224,6 +238,7 @@ class SettingsActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
+        scrollView.post { revealPendingSearchTarget() }
     }
 
     private fun buildFactory(page: String): SettingsContentFactory =
@@ -432,6 +447,15 @@ class SettingsActivity : Activity() {
                 toolbarTitleView = this
             })
 
+            addView(ImageView(this@SettingsActivity).apply {
+                setImageResource(R.drawable.ic_search)
+                contentDescription = getString(R.string.settings_search_description)
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                setOnClickListener { showSettingsSearchDialog() }
+            })
+
             addView(TextView(this@SettingsActivity).apply {
                 text = getString(R.string.toolbar_save_and_restart)
                 textSize = 15f
@@ -465,6 +489,124 @@ class SettingsActivity : Activity() {
         PAGE_UPDATE -> getString(R.string.about_update_title)
         PAGE_CONFIG_BACKUP -> getString(R.string.about_config_backup_title)
         else -> getString(R.string.settings_title)
+    }
+
+    private fun showSettingsSearchDialog() {
+        SettingsSearchDialog.show(
+            activity = this,
+            targets = currentFactory?.collectSearchTargets().orEmpty(),
+            onPick = ::revealSearchTarget,
+        )
+    }
+
+    private fun revealSearchTarget(target: SettingsSearchTarget) {
+        if (target.page != pageStack.lastOrNull()) {
+            pendingSearchRevealKey = target.item.key
+            openSearchTargetPage(target.page)
+            return
+        }
+        val view = target.view ?: currentFactory?.findSearchTarget(target.item.key)?.view ?: return
+        scrollAndHighlightSearchTarget(view)
+    }
+
+    private fun openSearchTargetPage(page: String) {
+        if (pageStack.lastOrNull() == page) {
+            revealPendingSearchTarget()
+            return
+        }
+        pageStack.clear()
+        pageStack.addLast(PAGE_ROOT)
+        if (page != PAGE_ROOT) pageStack.addLast(page)
+        switchContent(page)
+    }
+
+    private fun revealPendingSearchTarget() {
+        val key = pendingSearchRevealKey ?: return
+        val target = currentFactory?.findSearchTarget(key) ?: return
+        pendingSearchRevealKey = null
+        val view = target.view ?: return
+        scrollAndHighlightSearchTarget(view)
+    }
+
+    private fun scrollAndHighlightSearchTarget(targetView: View) {
+        val scrollView = contentContainer.getChildAt(0) as? ScrollView ?: return
+        scrollView.post {
+            if (isFinishing || isDestroyed || targetView.parent == null) return@post
+            val rect = Rect()
+            targetView.getDrawingRect(rect)
+            scrollView.offsetDescendantRectToMyCoords(targetView, rect)
+            val topPadding = (28 * resources.displayMetrics.density).toInt()
+            scrollView.smoothScrollTo(0, (rect.top - topPadding).coerceAtLeast(0))
+            scheduleSettingsSearchHighlight(targetView)
+        }
+    }
+
+    private fun clearSettingsSearchHighlight() {
+        val highlightView = searchHighlightView
+        val highlightDrawable = searchHighlightDrawable
+        val highlightAnimator = searchHighlightAnimator
+        val highlightRunnable = searchHighlightRunnable
+        searchHighlightView = null
+        searchHighlightDrawable = null
+        searchHighlightAnimator = null
+        searchHighlightRunnable = null
+        if (highlightRunnable != null) highlightView?.removeCallbacks(highlightRunnable)
+        highlightAnimator?.cancel()
+        if (highlightDrawable != null) highlightView?.overlay?.remove(highlightDrawable)
+    }
+
+    private fun scheduleSettingsSearchHighlight(targetView: View) {
+        clearSettingsSearchHighlight()
+        searchHighlightView = targetView
+        val highlightRunnable = object : Runnable {
+            override fun run() {
+                if (searchHighlightRunnable !== this) return
+                searchHighlightRunnable = null
+                if (isFinishing || isDestroyed || !targetView.isAttachedToWindow ||
+                    targetView.width <= 0 || targetView.height <= 0
+                ) {
+                    clearSettingsSearchHighlight()
+                    return
+                }
+                val density = resources.displayMetrics.density
+                val accent = getColor(R.color.accent_pink)
+                val highlightDrawable = GradientDrawable().apply {
+                    cornerRadius = 12f * density
+                    setColor(Color.argb(0x42, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                    setStroke(
+                        (2f * density).toInt().coerceAtLeast(1),
+                        Color.argb(0xD0, Color.red(accent), Color.green(accent), Color.blue(accent)),
+                    )
+                    bounds = Rect(0, 0, targetView.width, targetView.height)
+                    alpha = 0
+                }
+                targetView.overlay.add(highlightDrawable)
+                searchHighlightDrawable = highlightDrawable
+                val highlightAnimator = ValueAnimator.ofFloat(0f, 1f, 0f).apply {
+                    duration = SETTINGS_SEARCH_HIGHLIGHT_DURATION_MS
+                    addUpdateListener { animator ->
+                        highlightDrawable.alpha = (255f * (animator.animatedValue as Float)).toInt()
+                    }
+                    addListener(object : AnimatorListenerAdapter() {
+                        private fun finish(animation: Animator) {
+                            targetView.overlay.remove(highlightDrawable)
+                            if (searchHighlightAnimator === animation) {
+                                searchHighlightAnimator = null
+                                searchHighlightDrawable = null
+                                searchHighlightView = null
+                            }
+                        }
+
+                        override fun onAnimationEnd(animation: Animator) = finish(animation)
+                        override fun onAnimationCancel(animation: Animator) = finish(animation)
+                    })
+                }
+                searchHighlightAnimator = highlightAnimator
+                highlightAnimator.start()
+            }
+        }
+        searchHighlightRunnable = highlightRunnable
+        targetView.postDelayed(highlightRunnable, SETTINGS_SEARCH_HIGHLIGHT_DELAY_MS)
     }
 
     // ── Watermark ─────────────────────────────────────────────────────────────
@@ -542,5 +684,7 @@ class SettingsActivity : Activity() {
         private const val REQUEST_EXPORT_CONFIG = 0x5001
         private const val REQUEST_IMPORT_CONFIG = 0x5002
         private const val REQUEST_IMPORT_CUSTOM_SKIN = 0x5003
+        private const val SETTINGS_SEARCH_HIGHLIGHT_DELAY_MS = 240L
+        private const val SETTINGS_SEARCH_HIGHLIGHT_DURATION_MS = 560L
     }
 }
