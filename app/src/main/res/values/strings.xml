@@ -292,6 +292,11 @@
     <!-- 對話框 / 吐司 -->
     <string name="version_hidden_entry_toast">已显示隐藏入口</string>
     <string name="settings_done">完成</string>
+    <string name="settings_search_title">搜索设置</string>
+    <string name="settings_search_hint">搜索开关名称</string>
+    <string name="settings_search_description">搜索设置项</string>
+    <string name="settings_search_prompt">输入关键词搜索开关名称，可用空格分开多个词。</string>
+    <string name="settings_search_empty">未找到匹配的设置项</string>
     <string name="config_export_success">已导出 %1$d 个功能开关和 %2$d 个手动配置。</string>
     <string name="config_export_failed">导出失败：%1$s</string>
     <string name="config_import_success">已导入 %1$d 个功能开关、%2$d 个手动配置，略过 %3$d 个其他内容。</string>
