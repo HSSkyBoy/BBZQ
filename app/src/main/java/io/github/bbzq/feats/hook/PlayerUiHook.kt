@@ -62,7 +62,9 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             override fun onTrimMemory(level: Int) = Unit
         })
 
-        log("startHook: PlayerUi installed (gesture safe)")
+        installPlayerWidgetHook()
+
+        log("startHook: PlayerUi installed (portrait story button control & gesture safe)")
         isInstalled = true
     }
 
@@ -95,6 +97,25 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     }
                 }
             }
+        }
+    }
+
+    private fun installPlayerWidgetHook() {
+        runCatching {
+            val storyWidgetClass = classLoader.findClassOrNull("com.bilibili.app.gemini.player.widget.story.GeminiPlayerFullStoryWidget")
+            if (storyWidgetClass != null) {
+                storyWidgetClass.declaredMethods
+                    .filter { it.name == "setVisibility" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
+                    .forEach { method ->
+                        env.hookBefore(method) { param ->
+                            if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                                param.args[0] = View.GONE
+                            }
+                        }
+                    }
+            }
+        }.onFailure {
+            log("PlayerUi: installPlayerWidgetHook failed", it)
         }
     }
 
@@ -134,6 +155,8 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     view.layoutParams = lp
                 }
             }
+            view.isClickable = false
+            view.setOnClickListener(null)
             return
         }
         if (view is ViewGroup) {
@@ -145,8 +168,15 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun isPortraitControl(view: View): Boolean {
+        val className = view.javaClass.name
+        if (className.contains("FullStoryWidget", ignoreCase = true) ||
+            className.contains("GeminiPlayerFullStoryWidget", ignoreCase = true)
+        ) {
+            return true
+        }
+
         if (view is ViewGroup) {
-            if (view::class.java.name.startsWith("android.view.")) return false
+            if (className.startsWith("android.view.")) return false
             if (view.childCount > 3 || (view.width > 300 && view.height > 300)) return false
         }
 
