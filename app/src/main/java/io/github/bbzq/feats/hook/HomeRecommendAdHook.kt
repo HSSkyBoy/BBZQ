@@ -608,10 +608,11 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun verticalAvDetailUri(item: Any, uri: String?): String? {
         if (uri?.startsWith(STORY_URI_PREFIX) == true) {
-            return VIDEO_URI_PREFIX + uri.removePrefix(STORY_URI_PREFIX)
+            val stripped = uri.removePrefix(STORY_URI_PREFIX).trimStart('/')
+            return VIDEO_URI_PREFIX + stripped
         }
         val param = invokeStringMethod(item, "getParam")?.takeIf { it.isNotBlank() } ?: return null
-        return VIDEO_URI_PREFIX + Uri.encode(param)
+        return VIDEO_URI_PREFIX + Uri.encode(param.trimStart('/'))
     }
 
     private fun Any.setStringProperty(fieldName: String, serializedName: String, value: String): Boolean =
