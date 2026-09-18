@@ -81,6 +81,8 @@
     <!-- 竪屏視頻 -->
     <string name="story_video_default_launch_title">启动进入竖屏视频</string>
     <string name="story_video_default_launch_summary">打开哔哩哔哩时自动进入竖屏视频流。</string>
+    <string name="story_video_as_detail_title">竖屏视频进入详情页</string>
+    <string name="story_video_as_detail_summary">点击竖屏视频时改为打开普通视频详情页，并禁止播放器自动切回竖屏流。</string>
     <string name="purify_story_video_ad_title">净化竖屏视频广告</string>
     <string name="purify_story_video_ad_summary">按标签过滤竖屏视频流中的广告和直播内容。</string>
     <string name="story_video_immersive_fullscreen_title">竖屏视频沉浸全屏</string>

@@ -79,6 +79,7 @@ object ModuleSettings {
     const val KEY_KNOWN_HOME_COMPONENTS = "known_home_components"
     const val KEY_PURIFY_STORY_VIDEO_AD_ENABLED = "purify_story_video_ad_enabled"
     const val KEY_STORY_VIDEO_DEFAULT_LAUNCH_ENABLED = "story_video_default_launch_enabled"
+    const val KEY_STORY_VIDEO_AS_DETAIL_ENABLED = "story_video_as_detail_enabled"
     const val KEY_STORY_VIDEO_IMMERSIVE_FULLSCREEN_ENABLED = "story_video_immersive_fullscreen_enabled"
     const val KEY_STORY_VIDEO_KEEP_DANMAKU_ON_COMMENT_ENABLED = "story_video_keep_danmaku_on_comment_enabled"
     const val KEY_STORY_VIDEO_COMPONENT_ALPHA = "story_video_component_alpha"
@@ -853,6 +854,9 @@ object ModuleSettings {
 
     fun isStoryVideoDefaultLaunchEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_STORY_VIDEO_DEFAULT_LAUNCH_ENABLED, false)
+
+    fun isStoryVideoAsDetailEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_STORY_VIDEO_AS_DETAIL_ENABLED, false)
 
     fun isStoryVideoImmersiveFullscreenEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_STORY_VIDEO_IMMERSIVE_FULLSCREEN_ENABLED, false)

@@ -39,6 +39,7 @@ import io.github.bbzq.feats.hook.SplashAutoNightHook
 import io.github.bbzq.feats.hook.StoryComponentAlphaHook
 import io.github.bbzq.feats.hook.StoryDanmakuHook
 import io.github.bbzq.feats.hook.StoryDefaultLaunchHook
+import io.github.bbzq.feats.hook.StoryDetailRedirectHook
 import io.github.bbzq.feats.hook.StoryFullscreenHook
 import io.github.bbzq.feats.hook.StoryPlayerAdHook
 import io.github.bbzq.feats.hook.BlockUpdateHook
@@ -187,6 +188,7 @@ object RoamingRuntime {
                 ::HomeTopBarPurifyHook,
                 ::SearchPurifyHook,
                 ::StoryDefaultLaunchHook,
+                ::StoryDetailRedirectHook,
                 ::StoryPlayerAdHook,
                 ::StoryFullscreenHook,
                 ::StoryDanmakuHook,

@@ -806,6 +806,12 @@ class SettingsContentFactory(
             false,
         )
         rows += createSwitchRow(
+            context.getString(R.string.story_video_as_detail_title),
+            context.getString(R.string.story_video_as_detail_summary),
+            ModuleSettings.KEY_STORY_VIDEO_AS_DETAIL_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.story_video_immersive_fullscreen_title),
             context.getString(R.string.story_video_immersive_fullscreen_summary),
             ModuleSettings.KEY_STORY_VIDEO_IMMERSIVE_FULLSCREEN_ENABLED,
