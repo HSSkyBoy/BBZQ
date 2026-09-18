@@ -382,10 +382,10 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
      */
     private fun installMediaSessionPlaybackStateHook(): Int {
         var count = 0
-        val actionRewind = 8L
-        val actionSkipToPrevious = 16L
-        val actionSkipToNext = 32L
-        val actionFastForward = 64L
+        val actionRewind = android.media.session.PlaybackState.ACTION_REWIND
+        val actionSkipToPrevious = android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        val actionSkipToNext = android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT
+        val actionFastForward = android.media.session.PlaybackState.ACTION_FAST_FORWARD
 
         // A. 拦截 PlaybackStateCompat.Builder 源头：addCustomAction 与 setActions
         runCatching {
@@ -425,8 +425,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         env.hookBefore(method) { param ->
                             if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
                             val orig = param.args[0] as? Long ?: return@hookBefore
-                            val newActions = (orig and (actionRewind or actionFastForward).inv()) or
-                                    (actionSkipToPrevious or actionSkipToNext)
+                            val newActions = MediaSessionActions.withTrackNavigation(orig)
                             param.args[0] = newActions
                         }
                         count++
@@ -464,8 +463,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     }
 
                     runCatching {
-                        val newActions = (origActions and (actionRewind or actionFastForward).inv()) or
-                                (actionSkipToPrevious or actionSkipToNext)
+                        val newActions = MediaSessionActions.withTrackNavigation(origActions)
 
                         val builder = android.media.session.PlaybackState.Builder()
                         builder.setState(stateObj.state, stateObj.position, stateObj.playbackSpeed, stateObj.lastPositionUpdateTime)
