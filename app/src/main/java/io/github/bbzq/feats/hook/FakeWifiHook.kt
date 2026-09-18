@@ -16,6 +16,7 @@ class FakeWifiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         // 1. Hook NetworkCapabilities
         runCatching {
             env.hookAfterMethod(NetworkCapabilities::class.java, "hasTransport", Int::class.javaPrimitiveType!!) { param ->
+                if (NetworkTransportReadScope.isActive) return@hookAfterMethod
                 val transport = param.args[0] as? Int ?: return@hookAfterMethod
                 if (transport == NetworkCapabilities.TRANSPORT_WIFI) {
                     param.result = true
