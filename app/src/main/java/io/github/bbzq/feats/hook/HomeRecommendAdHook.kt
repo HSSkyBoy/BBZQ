@@ -109,7 +109,10 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             removeVerticalAv = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_VERTICAL_AV in blockedItems,
             removeLargeCover = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_LARGE_COVER in blockedItems,
             titleKeywords = if (enabled) currentTitleKeywords() else emptyList(),
-            openVerticalAvInDetail = ModuleSettings.isHomeRecommendVerticalAvDetailEnabled(prefs),
+            openVerticalAvInDetail = StoryDetailRoutePolicy.useHomeCardRewrite(
+                ModuleSettings.isHomeRecommendVerticalAvDetailEnabled(prefs),
+                ModuleSettings.isStoryVideoAsDetailEnabled(prefs),
+            ),
         )
 
     private fun currentTitleKeywords(): List<String> {
