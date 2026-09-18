@@ -2,12 +2,8 @@ package io.github.bbzq.feats.hook
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.Rect
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -19,7 +15,6 @@ import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.findClassOrNull
-import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 
 class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
@@ -67,10 +62,9 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             override fun onTrimMemory(level: Int) = Unit
         })
 
-        installStoryRedirectHook()
-        installVerticalPlayerConfigHook()
+        installPlayerWidgetHook()
 
-        log("startHook: PlayerUi installed (international portrait alignment & gesture safe)")
+        log("startHook: PlayerUi installed (portrait story button control & gesture safe)")
         isInstalled = true
     }
 
@@ -106,129 +100,22 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    // 拦截 bilibili://story/ 路由与短视频流页面启动，重写为普通视频详情页
-    private fun installStoryRedirectHook() {
+    private fun installPlayerWidgetHook() {
         runCatching {
-            // 1. Hook Activity.startActivity
-            Activity::class.java.declaredMethods
-                .filter { it.name in setOf("startActivity", "startActivityForResult") }
-                .forEach { method ->
-                    env.hookBefore(method) { param ->
-                        val intent = param.args.firstOrNull() as? Intent ?: return@hookBefore
-                        rewriteStoryIntent(intent)
-                    }
-                }
-
-            // 2. Hook ContextWrapper.startActivity
-            ContextWrapper::class.java.declaredMethods
-                .filter { it.name == "startActivity" }
-                .forEach { method ->
-                    env.hookBefore(method) { param ->
-                        val intent = param.args.firstOrNull() as? Intent ?: return@hookBefore
-                        rewriteStoryIntent(intent)
-                    }
-                }
-
-            // 3. Hook 哔哩哔哩原生 Router 如果存在
-            val routerClass = classLoader.findClassOrNull("com.bilibili.lib.router.Router")
-                ?: classLoader.findClassOrNull("com.bilibili.router.BiliRouter")
-            if (routerClass != null) {
-                routerClass.declaredMethods.forEach { method ->
-                    val paramTypes = method.parameterTypes
-                    val strIndex = paramTypes.indexOfFirst { it == String::class.java }
-                    val uriIndex = paramTypes.indexOfFirst { it == Uri::class.java }
-                    if (strIndex >= 0) {
+            val storyWidgetClass = classLoader.findClassOrNull("com.bilibili.app.gemini.player.widget.story.GeminiPlayerFullStoryWidget")
+            if (storyWidgetClass != null) {
+                storyWidgetClass.declaredMethods
+                    .filter { it.name == "setVisibility" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
+                    .forEach { method ->
                         env.hookBefore(method) { param ->
-                            val url = param.args.getOrNull(strIndex) as? String ?: return@hookBefore
-                            val rewritten = rewriteStoryUrl(url)
-                            if (rewritten != null) {
-                                param.args[strIndex] = rewritten
+                            if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                                param.args[0] = View.GONE
                             }
                         }
                     }
-                    if (uriIndex >= 0) {
-                        env.hookBefore(method) { param ->
-                            val uri = param.args.getOrNull(uriIndex) as? Uri ?: return@hookBefore
-                            val rewritten = rewriteStoryUrl(uri.toString())
-                            if (rewritten != null) {
-                                param.args[uriIndex] = Uri.parse(rewritten)
-                            }
-                        }
-                    }
-                }
             }
         }.onFailure {
-            log("PlayerUi: installStoryRedirectHook failed", it)
-        }
-    }
-
-    private fun rewriteStoryUrl(url: String): String? {
-        if (!url.startsWith("bilibili://story/")) return null
-        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
-        val videoId = uri.pathSegments.lastOrNull { it.isNotEmpty() } ?: return null
-        return "bilibili://video/$videoId"
-    }
-
-    private fun rewriteStoryIntent(intent: Intent): Boolean {
-        var modified = false
-        val data = intent.data
-        if (data != null && data.scheme == "bilibili" && (data.host == "story" || data.authority == "story")) {
-            val videoId = data.pathSegments.lastOrNull { it.isNotEmpty() }
-            if (!videoId.isNullOrEmpty()) {
-                intent.data = Uri.parse("bilibili://video/$videoId")
-                modified = true
-            }
-        }
-
-        val componentCls = intent.component?.className.orEmpty()
-        if (componentCls.contains("Story", ignoreCase = true)) {
-            val bvid = intent.getStringExtra("bvid")
-            val aid = intent.getLongExtra("aid", 0L)
-            if (!bvid.isNullOrEmpty()) {
-                intent.data = Uri.parse("bilibili://video/$bvid")
-                intent.component = null
-                intent.`package` = env.packageName
-                modified = true
-            } else if (aid > 0) {
-                intent.data = Uri.parse("bilibili://video/av$aid")
-                intent.component = null
-                intent.`package` = env.packageName
-                modified = true
-            } else if (modified) {
-                intent.component = null
-                intent.`package` = env.packageName
-            }
-        }
-        return modified
-    }
-
-    // 强制设置 fullplayer_vertical 返回 "0"，禁用转 Story 短视频流
-    private fun installVerticalPlayerConfigHook() {
-        runCatching {
-            val spClass = Class.forName("android.app.SharedPreferencesImpl")
-            spClass.declaredMethods.firstOrNull {
-                it.name == "getString" && it.parameterCount == 2
-            }?.let { method ->
-                env.hookBefore(method) { param ->
-                    val key = param.args[0] as? String ?: return@hookBefore
-                    if (key == "fullplayer_vertical") {
-                        param.result = "0"
-                    }
-                }
-            }
-
-            spClass.declaredMethods.firstOrNull {
-                it.name == "getBoolean" && it.parameterCount == 2
-            }?.let { method ->
-                env.hookBefore(method) { param ->
-                    val key = param.args[0] as? String ?: return@hookBefore
-                    if (key == "fullscreen2story" || key == "fullscreen_to_story" || key == "vertical_fullplayer_to_story") {
-                        param.result = false
-                    }
-                }
-            }
-        }.onFailure {
-            log("PlayerUi: installVerticalPlayerConfigHook failed", it)
+            log("PlayerUi: installPlayerWidgetHook failed", it)
         }
     }
 
@@ -268,6 +155,8 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     view.layoutParams = lp
                 }
             }
+            view.isClickable = false
+            view.setOnClickListener(null)
             return
         }
         if (view is ViewGroup) {
@@ -278,12 +167,16 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    /**
-     * 精准识别“转短视频流/看一看”跳转按键（仅限官方配置的跳转 short video 的小入口，严防误伤普通播放控制）
-     */
     private fun isPortraitControl(view: View): Boolean {
+        val className = view.javaClass.name
+        if (className.contains("FullStoryWidget", ignoreCase = true) ||
+            className.contains("GeminiPlayerFullStoryWidget", ignoreCase = true)
+        ) {
+            return true
+        }
+
         if (view is ViewGroup) {
-            if (view::class.java.name.startsWith("android.view.")) return false
+            if (className.startsWith("android.view.")) return false
             if (view.childCount > 3 || (view.width > 300 && view.height > 300)) return false
         }
 
