@@ -23,7 +23,7 @@ fun gitOutput(vararg args: String): String? {
 }
 
 val releaseCode = gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 1
-val releaseName: String by rootProject
+val releaseName: String = rootProject.findProperty("releaseName")?.toString().orEmpty()
 val signingPropertiesFile = rootProject.file("keystore.properties")
 val signingProperties = Properties().apply {
     if (signingPropertiesFile.isFile) {
@@ -94,7 +94,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.bbzq"
-        minSdk = 24
+        minSdk = 28
         targetSdk = 37
         versionCode = releaseCode
         versionName = "v${releaseName}-${releaseCode}"
@@ -102,6 +102,15 @@ android {
 
         ndk {
             abiFilters += abiFiltersFromProperty()
+        }
+    }
+
+    signingConfigs {
+        all {
+            enableV1Signing = false
+            enableV2Signing = false
+            enableV3Signing = true
+            enableV4Signing = false
         }
     }
 

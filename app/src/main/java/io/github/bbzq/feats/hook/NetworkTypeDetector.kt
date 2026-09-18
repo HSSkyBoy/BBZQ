@@ -3,7 +3,6 @@ package io.github.bbzq.feats.hook
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
 import android.os.SystemClock
 import android.telephony.TelephonyManager
 import java.lang.reflect.Field
@@ -26,7 +25,7 @@ object NetworkTypeDetector {
     private fun detectCellular(context: Context): Boolean {
         runCatching {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            val activeNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) cm?.activeNetwork else null
+            val activeNetwork = cm?.activeNetwork
             if (activeNetwork != null) {
                 val caps = cm?.getNetworkCapabilities(activeNetwork)
                 if (caps != null) {

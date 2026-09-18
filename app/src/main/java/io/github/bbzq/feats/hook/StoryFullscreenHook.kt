@@ -250,7 +250,6 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun allowDisplayCutout(window: Window) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val attributes = window.attributes
         attributes.layoutInDisplayCutoutMode =
             WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES

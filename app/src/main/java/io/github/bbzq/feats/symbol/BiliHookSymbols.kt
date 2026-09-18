@@ -2395,10 +2395,5 @@ private fun <T> Iterable<T>.toJsonArray(mapper: (T) -> JSONObject): JSONArray =
 
 internal fun Context.packageVersionCodeLong(): Long {
     val info = packageManager.getPackageInfo(packageName, 0)
-    @Suppress("DEPRECATION")
-    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-        info.longVersionCode
-    } else {
-        info.versionCode.toLong()
-    }
+    return info.longVersionCode
 }
