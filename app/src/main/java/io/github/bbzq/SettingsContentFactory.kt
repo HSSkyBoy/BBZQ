@@ -308,12 +308,6 @@ class SettingsContentFactory(
     private fun homeRecommendRows(): List<View> {
         val rows = mutableListOf<View>()
         rows += createSwitchRow(
-            context.getString(R.string.home_recommend_vertical_av_detail_title),
-            context.getString(R.string.home_recommend_vertical_av_detail_summary),
-            ModuleSettings.KEY_HOME_RECOMMEND_VERTICAL_AV_DETAIL_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
             context.getString(R.string.home_recommend_preload_title),
             context.getString(R.string.home_recommend_preload_summary),
             ModuleSettings.KEY_HOME_RECOMMEND_PRELOAD_ENABLED,
@@ -803,6 +797,12 @@ class SettingsContentFactory(
             context.getString(R.string.story_video_default_launch_title),
             context.getString(R.string.story_video_default_launch_summary),
             ModuleSettings.KEY_STORY_VIDEO_DEFAULT_LAUNCH_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.story_video_as_detail_title),
+            context.getString(R.string.story_video_as_detail_summary),
+            ModuleSettings.KEY_STORY_VIDEO_AS_DETAIL_ENABLED,
             false,
         )
         rows += createSwitchRow(

@@ -56,7 +56,7 @@ fun safeCoerceResult(executable: Executable, value: Any?): Any? {
     return value
 }
 
-fun RoamingEnv.hookBefore(executable: Executable, hooker: Hooker) {
+fun RoamingEnv.hookBefore(executable: Executable, hooker: Hooker): Boolean =
     runCatching {
         executable.isAccessible = true
         xposed.hook(executable)
@@ -79,10 +79,11 @@ fun RoamingEnv.hookBefore(executable: Executable, hooker: Hooker) {
                     chain.proceed(param.args.toTypedArray())
                 }
             }
-    }.onFailure { throwable ->
+        true
+    }.getOrElse { throwable ->
         log("Failed to register hookBefore at ${executable.declaringClass.name}.${executable.name}", throwable)
+        false
     }
-}
 
 fun RoamingEnv.hookAfter(executable: Executable, hooker: Hooker) {
     runCatching {

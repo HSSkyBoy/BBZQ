@@ -1,16 +1,12 @@
-﻿package io.github.bbzq.feats.hook
+package io.github.bbzq.feats.hook
 
 import android.content.pm.ApplicationInfo
-import android.net.Uri
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.ModuleSettingsBridge
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.MethodHookParam
 import io.github.bbzq.feats.RoamingEnv
-import io.github.bbzq.feats.allFields
 import io.github.bbzq.feats.hookAfter
-import io.github.bbzq.feats.setIntField
-import io.github.bbzq.feats.setObjectField
 import io.github.bbzq.feats.symbol.RestoredHomeRecommendFeedSymbols
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -23,7 +19,6 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var titleKeywordsRaw = ""
     private var titleKeywordsCache = emptyList<String>()
     private val methodCache = mutableMapOf<Class<*>, MutableMap<String, Method?>>()
-    private val serializedStringFieldCache = mutableMapOf<Class<*>, MutableMap<String, Field?>>()
     private val recentRecommendFeedDebugLogs =
         object : LinkedHashMap<String, Long>(DEBUG_FEED_LOG_CACHE_SIZE, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
@@ -59,14 +54,7 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 }
                 val result = handleReturnList(param, symbols, currentOptions())
                 if (result != null && (result.removed > 0 || isDebugModule())) {
-                    val parts = buildList {
-                        if (result.removed > 0) {
-                            add("removed ${result.removed} item(s) reasons=${result.reasonSummary()}")
-                        }
-                        if (result.rewrittenVerticalAv > 0) {
-                            add("rewrote ${result.rewrittenVerticalAv} vertical_av item(s)")
-                        }
-                    }.joinToString(separator = " ")
+                    val parts = "removed ${result.removed} item(s) reasons=${result.reasonSummary()}"
                     log("HomeRecommendAd $parts from ${getItems.declaringClass.name}.${getItems.name}")
                 }
             }
@@ -109,7 +97,6 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             removeVerticalAv = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_VERTICAL_AV in blockedItems,
             removeLargeCover = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_LARGE_COVER in blockedItems,
             titleKeywords = if (enabled) currentTitleKeywords() else emptyList(),
-            openVerticalAvInDetail = ModuleSettings.isHomeRecommendVerticalAvDetailEnabled(prefs),
         )
 
     private fun currentTitleKeywords(): List<String> {
@@ -402,32 +389,23 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val items = param.result as? List<*> ?: return null
         if (items.isEmpty()) return null
 
-        val shouldFilter = options.shouldFilter
-        val filtered = if (shouldFilter) ArrayList<Any?>(items.size) else null
+        val filtered = ArrayList<Any?>(items.size)
         val reasons = linkedMapOf<String, Int>()
         var removed = 0
-        var rewrittenVerticalAv = 0
         items.forEach { item ->
-            if (shouldFilter) {
-                val reason = removeReason(item, symbols, options)
-                if (reason != null) {
-                    removed += 1
-                    reasons[reason] = (reasons[reason] ?: 0) + 1
-                    return@forEach
-                }
+            val reason = removeReason(item, symbols, options)
+            if (reason != null) {
+                removed += 1
+                reasons[reason] = (reasons[reason] ?: 0) + 1
+                return@forEach
             }
-            if (options.openVerticalAvInDetail && rewriteVerticalAvToDetail(item, symbols)) {
-                rewrittenVerticalAv += 1
-            }
-            filtered?.add(item)
+            filtered.add(item)
         }
-        if (removed == 0 && rewrittenVerticalAv == 0) return null
+        if (removed == 0) return null
 
-        if (removed > 0 && filtered != null) {
-            param.result = filtered
-            writeBackFilteredItems(param.thisObject, symbols.itemsField, filtered)
-        }
-        return FilterResult(removed, rewrittenVerticalAv, reasons)
+        param.result = filtered
+        writeBackFilteredItems(param.thisObject, symbols.itemsField, filtered)
+        return FilterResult(removed, reasons)
     }
 
     private fun removeReason(item: Any?, symbols: FilterSymbols, options: FilterOptions): String? {
@@ -583,79 +561,6 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun invokeString(method: Method?, target: Any): String? =
         runCatching { method?.invoke(target)?.toString() }.getOrNull()
 
-    private fun rewriteVerticalAvToDetail(item: Any?, symbols: FilterSymbols): Boolean {
-        if (item == null) return false
-        val cardGoto = invokeString(symbols.getCardGoto, item)
-        val goTo = invokeString(symbols.getGoTo, item)
-        val uri = invokeString(symbols.getUri, item)
-        if (cardGoto != VERTICAL_AV_GOTO && goTo != VERTICAL_AV_GOTO && uri?.startsWith(STORY_URI_PREFIX) != true) {
-            return false
-        }
-
-        val detailUri = verticalAvDetailUri(item, uri) ?: return false
-        item.setStringProperty("cardGoto", "card_goto", AV_GOTO)
-        item.setIntField("cardGotoType", AV_GOTO.hashCode())
-        item.setStringProperty("goTo", "goto", AV_GOTO)
-        item.setIntField("gotoType", AV_GOTO.hashCode())
-        item.setStringProperty("uri", "uri", detailUri)
-        item.setObjectField("stringUriCache", null)
-        item.setObjectField("uriCache", null)
-
-        val rewrittenGoTo = invokeString(symbols.getGoTo, item)
-        val rewrittenUri = invokeString(symbols.getUri, item)
-        return rewrittenGoTo == AV_GOTO && rewrittenUri?.startsWith(VIDEO_URI_PREFIX) == true
-    }
-
-    private fun verticalAvDetailUri(item: Any, uri: String?): String? {
-        if (uri?.startsWith(STORY_URI_PREFIX) == true) {
-            val stripped = uri.removePrefix(STORY_URI_PREFIX).trimStart('/')
-            return VIDEO_URI_PREFIX + stripped
-        }
-        val param = invokeStringMethod(item, "getParam")?.takeIf { it.isNotBlank() } ?: return null
-        return VIDEO_URI_PREFIX + Uri.encode(param.trimStart('/'))
-    }
-
-    private fun Any.setStringProperty(fieldName: String, serializedName: String, value: String): Boolean =
-        setObjectField(fieldName, value) || setSerializedNameStringField(serializedName, value)
-
-    private fun Any.setSerializedNameStringField(serializedName: String, value: String): Boolean {
-        val field = serializedStringField(javaClass, serializedName) ?: return false
-        return runCatching {
-            field.set(this, value)
-            true
-        }.getOrDefault(false)
-    }
-
-    private fun serializedStringField(type: Class<*>, serializedName: String): Field? =
-        synchronized(serializedStringFieldCache) {
-            val fields = serializedStringFieldCache.getOrPut(type) { mutableMapOf() }
-            if (fields.containsKey(serializedName)) {
-                fields[serializedName]
-            } else {
-                val field = type.allFields()
-                    .firstOrNull {
-                        it.type == String::class.java &&
-                            it.serializedNameValue() == serializedName
-                    }
-                fields[serializedName] = field
-                field
-            }
-        }
-
-    private fun Field.serializedNameValue(): String? =
-        declaredAnnotations.firstNotNullOfOrNull { annotation ->
-            if (annotation.annotationClass.java.name != GSON_SERIALIZED_NAME) {
-                null
-            } else {
-                runCatching {
-                    annotation.annotationClass.java
-                        .getMethod("value")
-                        .invoke(annotation)
-                        ?.toString()
-                }.getOrNull()
-            }
-        }
-
     private fun invokeStringMethod(target: Any, name: String): String? =
         runCatching {
             target.javaClass.methods
@@ -734,16 +639,13 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val removeVerticalAv: Boolean,
         val removeLargeCover: Boolean,
         val titleKeywords: List<String>,
-        val openVerticalAvInDetail: Boolean,
     ) {
-        val shouldFilter: Boolean = removeAds || removePictures || removeGamePromos || removeLive ||
+        val enabled: Boolean = removeAds || removePictures || removeGamePromos || removeLive ||
             removeKetang || removeVerticalAv || removeLargeCover || titleKeywords.isNotEmpty()
-        val enabled: Boolean = shouldFilter || openVerticalAvInDetail
     }
 
     private data class FilterResult(
         val removed: Int,
-        val rewrittenVerticalAv: Int,
         val reasons: Map<String, Int>,
     ) {
         fun reasonSummary(): String =
@@ -765,9 +667,7 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val LIVE_URI_PART = "live.bilibili.com/"
         private const val KETANG_URI_PART = "/cheese/play/"
         private const val STORY_URI_PREFIX = "bilibili://story/"
-        private const val VIDEO_URI_PREFIX = "bilibili://video/"
         private const val OPUS_URI_PREFIX = "bilibili://opus/"
-        private const val GSON_SERIALIZED_NAME = "com.google.gson.annotations.SerializedName"
         private const val MAX_VALUE_LENGTH = 300
         private const val MAX_LOG_LINE_LENGTH = 3500
         private const val DEBUG_FEED_LOG_CACHE_SIZE = 32

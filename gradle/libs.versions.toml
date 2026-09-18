@@ -4,6 +4,7 @@ agp = "9.2.1"
 libxposedApi = "102.0.0"
 libxposedService = "102.0.0"
 junit = "4.13.2"
+json = "20260814"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 appcompat = "1.7.1"
@@ -19,6 +20,7 @@ shizukuProvider = "13.1.5"
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposedApi" }
 libxposed-service = { module = "io.github.libxposed:service", version.ref = "libxposedService" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+json = { module = "org.json:json", version.ref = "json" }
 ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
