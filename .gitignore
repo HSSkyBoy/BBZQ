@@ -8,7 +8,7 @@
 /app/release
 /app/build
 /.kotlin
-/.idea/caches
-/.idea/*.xml
 keystore.properties
 /signing
+/.idea/
+/Temp/
