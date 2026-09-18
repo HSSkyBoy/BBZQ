@@ -94,7 +94,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.bbzq"
-        minSdk = 24
+        minSdk = 30
         targetSdk = 37
         versionCode = releaseCode
         versionName = "v${releaseName}-${releaseCode}"

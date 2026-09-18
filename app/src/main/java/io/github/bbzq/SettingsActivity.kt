@@ -163,15 +163,6 @@ class SettingsActivity : Activity() {
         return super.dispatchKeyEvent(event)
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (pageStack.size > 1) {
-            navigateBack()
-        } else {
-            finish()
-        }
-    }
-
     // ── In-activity Navigation ────────────────────────────────────────────────
 
     private fun navigateTo(page: String) {
