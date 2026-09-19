@@ -2,7 +2,7 @@
     <!-- 基本資訊 -->
     <string name="app_name">BBZQ</string>
     <string name="settings_title">BBZQ 设置</string>
-    <string name="xposed_description">基于 libxposed API 102 的 BBZQ 模块，提供空降助手、功能增强与组件净化等功能。</string>
+    <string name="xposed_description">基于 Modern API 的 BBZQ 模块，提供空降助手、功能增强与组件净化等功能。</string>
 
     <!-- 介紹頁 -->
     <string name="intro_module_title">模块信息</string>

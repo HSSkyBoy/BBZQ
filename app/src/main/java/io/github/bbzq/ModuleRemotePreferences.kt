@@ -182,8 +182,8 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         }
         thread(name = SYMBOL_REFRESH_THREAD_NAME, isDaemon = true) {
             runCatching {
-                if (currentService.apiVersion < XposedService.API_102) {
-                    fail(callback, "当前框架不支持 API102 远程配置")
+                if (currentService.apiVersion <= 100) {
+                    fail(callback, "当前框架不支持 Modern API 远程配置")
                     return@thread
                 }
                 val requestId = UUID.randomUUID().toString()

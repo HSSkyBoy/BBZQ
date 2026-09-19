@@ -1,14 +1,14 @@
 # BBZQ
-> 使用 `libxposed API 102`、由 Kotlin 全量编写的哔哩哔哩增强 Xposed 模组
+> 使用 `Modern API`、由 Kotlin 全量编写的哔哩哔哩增强 Xposed 模组
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF?logo=kotlin&logoColor=white)
-![API](https://img.shields.io/badge/libxposed-API%20102-orange)
+![API](https://img.shields.io/badge/API-Modern%20API-orange)
 ![License](https://img.shields.io/badge/license-Mulan%20PubL%20v2-blue)
 
 ---
 
 ## 简介
-BBZQ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采用 Kotlin 完整实作，旨在去除不必要内容、优化核心体验，同时提供各类实用功能。	
+BBZQ 是一款适配 Modern API 的哔哩哔哩功能增强模组，采用 Kotlin 完整实作，旨在去除不必要内容、优化核心体验，同时提供各类实用功能。	
 模组通过 `META-INF/xposed/java_init.list` 完成入口注册，核心逻辑入口为 `io.github.bbzq.BbzqModule`；配套设置页面内嵌于哔哩哔哩宿主应用外，方便快捷开关各项功能、调整个性化参数，整体架构便于后续迭代维护与功能扩展。
 
 ---
@@ -22,7 +22,7 @@ BBZQ 是一款适配 libxposed API 102 的哔哩哔哩功能增强模组，采�
 ## 使用方式
 
 1. 安装模组 APK
-2. 在支持 `libxposed API 102` 的 Xposed 框架中启用該模组
+2. 在支持 `Modern API` 的 Xposed 框架中启用該模组
 3. 将哔哩哔哩加入作用域
 4. 重启目标应用
 5. 进入 `我的 → 设置 → 关于哔哩哔哩 → BBZQ 设置`

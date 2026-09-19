@@ -201,7 +201,7 @@ object BiliSymbolResolver {
                     writeCache(prefs, fingerprint, fullSymbols, log)
                     memorySymbols = fullSymbols
                     log("BiliSymbolResolver: async full DexKit scan completed and cached fp=$fingerprint", null)
-                    publishStatus(prefs, fullSymbols, log)
+                    publishStatus(appContext, fullSymbols, log)
                     onSymbolsUpdated?.invoke(fullSymbols)
                 }.onFailure { throwable ->
                     log("BiliSymbolResolver: async full DexKit scan failed", throwable)
@@ -222,7 +222,7 @@ object BiliSymbolResolver {
         memorySymbols = scanned
         log("BiliSymbolResolver scan done fp=$fingerprint", null)
         scanned.formatStatusLines().forEach { line -> log(line, null) }
-        publishStatus(prefs, scanned, log)
+        publishStatus(appContext, scanned, log)
         return scanned
     }
 
@@ -248,7 +248,7 @@ object BiliSymbolResolver {
         memorySymbols = scanned
         log("BiliSymbolResolver force scan done fp=$fingerprint", null)
         scanned.formatStatusLines().forEach { line -> log(line, null) }
-        publishStatus(prefs, scanned, log)
+        publishStatus(appContext, scanned, log)
         return scanned
     }
 
@@ -4107,8 +4107,26 @@ object BiliSymbolResolver {
         }.onFailure { log("BiliSymbolResolver cache write failed", it) }
     }
 
-    private fun publishStatus(
+    internal fun publishStatus(
+        context: Context,
+        symbols: BiliHookSymbols,
+        log: (String, Throwable?) -> Unit,
+    ) {
+        val cachePrefs = context.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE)
+        val settingsPrefs = context.getSharedPreferences(ModuleSettings.PREFS_NAME, Context.MODE_PRIVATE)
+        publishStatusToPrefs(listOf(cachePrefs, settingsPrefs), symbols, log)
+    }
+
+    internal fun publishStatus(
         prefs: SharedPreferences,
+        symbols: BiliHookSymbols,
+        log: (String, Throwable?) -> Unit,
+    ) {
+        publishStatusToPrefs(listOf(prefs), symbols, log)
+    }
+
+    internal fun publishStatusToPrefs(
+        prefsList: List<SharedPreferences>,
         symbols: BiliHookSymbols,
         log: (String, Throwable?) -> Unit,
     ) {
@@ -4144,12 +4162,15 @@ object BiliSymbolResolver {
                 }
             }.trim()
 
-            val editor = prefs.edit()
-                .putString(ModuleSettings.KEY_SYMBOL_SCAN_STATUS_SUMMARY, summary)
-                .putString(ModuleSettings.KEY_SYMBOL_SCAN_STATUS_REPORT, report)
-                .putString(ModuleSettings.KEY_SYMBOL_SCAN_STATUS_UPDATED_AT, System.currentTimeMillis().toString())
-            if (!editor.commit()) {
-                log("BiliSymbolResolver publish status failed: commit returned false", null)
+            val updatedAt = System.currentTimeMillis().toString()
+            prefsList.forEach { targetPrefs ->
+                val editor = targetPrefs.edit()
+                    .putString(ModuleSettings.KEY_SYMBOL_SCAN_STATUS_SUMMARY, summary)
+                    .putString(ModuleSettings.KEY_SYMBOL_SCAN_STATUS_REPORT, report)
+                    .putString(ModuleSettings.KEY_SYMBOL_SCAN_STATUS_UPDATED_AT, updatedAt)
+                if (!editor.commit()) {
+                    log("BiliSymbolResolver publish status failed: commit returned false", null)
+                }
             }
         }.onFailure {
             log("BiliSymbolResolver publish status failed", it)
