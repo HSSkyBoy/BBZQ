@@ -542,6 +542,18 @@ class SettingsContentFactory(
             false,
         )
         rows += createSwitchRow(
+            context.getString(R.string.playback_block_pgc_activity_popup_title),
+            context.getString(R.string.playback_block_pgc_activity_popup_summary),
+            ModuleSettings.KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_block_ai_declared_video_title),
+            context.getString(R.string.playback_block_ai_declared_video_summary),
+            ModuleSettings.KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.playback_block_activity_meta_sticker_title),
             context.getString(R.string.playback_block_activity_meta_sticker_summary),
             ModuleSettings.KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED,

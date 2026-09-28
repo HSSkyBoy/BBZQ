@@ -22,6 +22,8 @@ object ModuleSettings {
     const val KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED = "block_video_detail_banner_ad_enabled"
     const val KEY_PURIFY_VIDEO_MENTION_ENABLED = "purify_video_mention_enabled"
     const val KEY_BLOCK_CHRONOS_PROMOTION_ENABLED = "block_chronos_promotion_enabled"
+    const val KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED = "block_pgc_activity_popup_enabled"
+    const val KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED = "block_ai_declared_video_enabled"
     const val KEY_UNLOCK_VIDEO_FEATURES_ENABLED = "unlock_video_features_enabled"
     const val KEY_UNLOCK_VIDEO_FEATURES_UI_ENABLED = "unlock_video_features_ui_enabled"
     const val KEY_UNLOCK_HIGHEST_BITRATE_ENABLED = "unlock_highest_bitrate_enabled"
@@ -249,6 +251,8 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_VIDEO_MENTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_VIDEO_MENTION_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_CHRONOS_PROMOTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_CHRONOS_PROMOTION_ENABLED, false) },
+        ExportableConfigSpec(KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED, false) },
+        ExportableConfigSpec(KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_VIDEO_FEATURES_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_UNLOCK_VIDEO_FEATURES_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_VIDEO_FEATURES_UI_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_UNLOCK_VIDEO_FEATURES_UI_ENABLED, true)
@@ -558,6 +562,12 @@ object ModuleSettings {
 
     fun isBlockChronosPromotionEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_CHRONOS_PROMOTION_ENABLED, false)
+
+    fun isBlockPgcActivityPopupEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED, false)
+
+    fun isBlockAiDeclaredVideoEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED, false)
 
     fun isAutoLikeVideoDetailEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED, false)

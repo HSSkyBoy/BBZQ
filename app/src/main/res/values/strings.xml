@@ -226,6 +226,12 @@
     <string name="playback_hide_video_mention_summary">屏蔽播放页简介下方的视频提及、推荐提及等联动卡片与弹窗。</string>
     <string name="playback_block_chronos_promotion_title">屏蔽播放互动组件</string>
     <string name="playback_block_chronos_promotion_summary">移除播放器里的投票、预约、打卡、关注引导、商业活动卡、广告浮层和商业跳转按钮。</string>
+    <string name="playback_block_pgc_activity_popup_title">屏蔽影视页自动活动半屏</string>
+    <string name="playback_block_pgc_activity_popup_summary">屏蔽电影、电视剧和番剧播放页在播放器下方自动展开的大会员促销等活动半屏，保留主动点击的活动链接与购买入口。需重启哔哩哔哩后生效。</string>
+    <string name="playback_block_ai_declared_video_title">屏蔽 AI 生成声明视频</string>
+    <string name="playback_block_ai_declared_video_summary">打开带有“含AI生成内容”声明的视频时改为跳转到相关推荐中的其他视频，没有可用视频时显示屏蔽提示；同时移除首页推荐中标记为 AIGC 的视频，以及播放页推荐里已识别的 AI 视频。需重启哔哩哔哩后生效。</string>
+    <string name="ai_declared_redirect_toast">已跳过含 AI 生成声明的视频，为你换成了相关视频</string>
+    <string name="ai_declared_blocked_hint">该视频含 AI 生成声明，已由 BBZQ 屏蔽</string>
     <string name="playback_block_activity_meta_sticker_title">屏蔽"云视听小电视"贴片</string>
     <string name="playback_block_activity_meta_sticker_summary">移除视频播放器左上角的"云视听小电视"推广浮层贴片。</string>
     <string name="playback_skip_reward_title">跳过视频激励广告</string>
