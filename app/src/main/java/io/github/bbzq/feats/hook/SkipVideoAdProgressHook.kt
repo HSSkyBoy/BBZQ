@@ -6,6 +6,7 @@ import android.widget.ProgressBar
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.SkipVideoAdMode
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.BilibiliSponsorBlock
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.allFields
 import io.github.bbzq.feats.allMethods
@@ -33,6 +34,7 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val directorObservers = Collections.synchronizedMap(WeakHashMap<Any, Any>())
     private val hookedProgressDrawMethods = ConcurrentHashMap.newKeySet<String>()
     private val reflectionFailureLogs = ConcurrentHashMap.newKeySet<String>()
+    private val lastResolveTimeByView = Collections.synchronizedMap(WeakHashMap<ProgressBar, Long>())
 
     private var restoredSymbols: RestoredSkipVideoAdProgressSymbols? = null
     private val panelWidgetKtClass: Class<*>?
@@ -130,6 +132,10 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val density = progressBar.resources.displayMetrics.density
         val minWidthPx = 3f * density
         val weakBar = WeakReference(progressBar)
+        var cachedSegmentsPair: Pair<Long, List<BilibiliSponsorBlock.Segment>>? = null
+        var lastSegmentsRef: List<BilibiliSponsorBlock.Segment>? = null
+        var lastDurationMs = 0L
+        var lastModesHash = 0
 
         val segmentsProvider = {
             val bar = weakBar.get()
@@ -138,24 +144,38 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 val currentConfig = ModuleSettings.getSkipVideoAdCache(prefs)
                 if (!currentConfig.enabled) null
                 else {
-                    val state = resolveMarkerState(bar)
+                    val state = resolveMarkerStateThrottled(bar)
                     val durationMs = state?.let { durationForDrawing(bar, it) }
                     if (state != null && durationMs != null && durationMs > 0L) {
-                        val segments = state.segments.filter { segment ->
-                            (currentConfig.modes[segment.category] ?: SkipVideoAdMode.IGNORE) != SkipVideoAdMode.IGNORE
+                        val modesHash = currentConfig.modes.hashCode()
+                        val stateSegments = state.segments
+                        if (cachedSegmentsPair != null &&
+                            lastSegmentsRef === stateSegments &&
+                            lastDurationMs == durationMs &&
+                            lastModesHash == modesHash
+                        ) {
+                            cachedSegmentsPair
+                        } else {
+                            val filtered = stateSegments.filter { segment ->
+                                (currentConfig.modes[segment.category] ?: SkipVideoAdMode.IGNORE) != SkipVideoAdMode.IGNORE
+                            }
+                            val pair = Pair(durationMs, filtered)
+                            lastSegmentsRef = stateSegments
+                            lastDurationMs = durationMs
+                            lastModesHash = modesHash
+                            cachedSegmentsPair = pair
+                            pair
                         }
-                        Pair(durationMs, segments)
                     } else null
                 }
             }
         }
 
-        val onSegmentsDrawn = {
+        val onSegmentsDrawn: (Long) -> Unit = { durationMs ->
             val bar = weakBar.get()
             if (bar != null) {
-                val state = resolveMarkerState(bar)
-                val durationMs = state?.let { durationForDrawing(bar, it) }
-                if (state != null && durationMs != null && durationMs > 0L) {
+                val state = SkipVideoAdState.stateForView(bar)
+                if (state != null && durationMs > 0L) {
                     SkipVideoAdState.markSegmentsDrawn(state.key, bar.markerDetectionPositionMs(durationMs))
                 }
             }
@@ -188,6 +208,23 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
             progressBar.progressDrawable = wrapped
             progressBar.invalidate()
         }
+    }
+
+    private fun resolveMarkerStateThrottled(progressBar: ProgressBar): SkipVideoAdState.TimelineMarkerState? {
+        val existing = SkipVideoAdState.stateForView(progressBar)
+        val now = System.currentTimeMillis()
+        val lastCheck = synchronized(lastResolveTimeByView) { lastResolveTimeByView[progressBar] ?: 0L }
+
+        if (existing != null && existing.durationMs > 0L) {
+            if (now - lastCheck < RESOLVE_THROTTLE_MS) {
+                return existing
+            }
+        }
+
+        synchronized(lastResolveTimeByView) {
+            lastResolveTimeByView[progressBar] = now
+        }
+        return resolveMarkerState(progressBar)
     }
 
     private fun resolveMarkerState(progressBar: ProgressBar): SkipVideoAdState.TimelineMarkerState? {
@@ -665,6 +702,7 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val STORY_DETAIL_DURATION_SCALE = 1000L
         private const val STORY_SEGMENT_REQUEST_DELAY_MS = 3000L
         private const val MIN_PLAYER_SEEK_DURATION_MS = 1000L
+        private const val RESOLVE_THROTTLE_MS = 1000L
         private val VIDEO_DIRECTOR_EVENT_METHODS = setOf(
             "onItemStart",
             "onPlayableParamsChanged",

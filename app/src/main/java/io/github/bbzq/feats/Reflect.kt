@@ -3,6 +3,7 @@ package io.github.bbzq.feats
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.util.concurrent.ConcurrentHashMap
 
 fun ClassLoader.findClassOrNull(name: String): Class<*>? =
     runCatching { Class.forName(name, false, this) }.getOrNull()
@@ -10,42 +11,96 @@ fun ClassLoader.findClassOrNull(name: String): Class<*>? =
 fun String.from(classLoader: ClassLoader): Class<*>? =
     classLoader.findClassOrNull(this)
 
-fun Class<*>.allFields(): Sequence<Field> = sequence {
-    var current: Class<*>? = this@allFields
-    while (current != null) {
-        current.declaredFields.forEach { field ->
-            field.isAccessible = true
-            yield(field)
-        }
-        current = current.superclass
-    }
+private class ReflectSentinel {
+    @JvmField var dummyField: Int = 0
+    fun dummyMethod() {}
 }
 
-fun Class<*>.allMethods(): Sequence<Method> = sequence {
-    val seen = mutableSetOf<String>()
-    var current: Class<*>? = this@allMethods
-    while (current != null) {
-        current.declaredMethods.forEach { method ->
-            val signature = method.name + method.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.name }
-            if (seen.add(signature)) {
-                method.isAccessible = true
-                yield(method)
+private val NULL_FIELD: Field = ReflectSentinel::class.java.getDeclaredField("dummyField")
+private val NULL_METHOD: Method = ReflectSentinel::class.java.getDeclaredMethod("dummyMethod")
+
+private val classFieldsCache = ConcurrentHashMap<Class<*>, List<Field>>()
+private val classMethodsCache = ConcurrentHashMap<Class<*>, List<Method>>()
+
+private data class FieldKey(val clazz: Class<*>, val name: String)
+private val fieldCache = ConcurrentHashMap<FieldKey, Field>()
+
+private data class MethodCallKey(
+    val clazz: Class<*>,
+    val name: String,
+    val argCount: Int,
+    val argTypes: List<Class<*>?>,
+)
+private val methodCallCache = ConcurrentHashMap<MethodCallKey, Method>()
+
+private data class MethodExactKey(
+    val clazz: Class<*>,
+    val name: String,
+    val paramTypes: List<Class<*>>,
+)
+private val methodExactCache = ConcurrentHashMap<MethodExactKey, Method>()
+
+fun Class<*>.allFieldsList(): List<Field> =
+    classFieldsCache.getOrPut(this) {
+        val fields = mutableListOf<Field>()
+        var current: Class<*>? = this
+        while (current != null && current != Any::class.java) {
+            current.declaredFields.forEach { field ->
+                runCatching { field.isAccessible = true }
+                fields.add(field)
             }
+            current = current.superclass
         }
-        current = current.superclass
+        fields
     }
-}
 
-fun Class<*>.methodOrNull(name: String, vararg parameterTypes: Class<*>): Method? =
-    runCatching { getDeclaredMethod(name, *parameterTypes).apply { isAccessible = true } }.getOrNull()
-        ?: allMethods().firstOrNull { it.name == name && it.parameterTypes.contentEquals(parameterTypes) }
+fun Class<*>.allFields(): Sequence<Field> = allFieldsList().asSequence()
+
+fun Class<*>.allMethodsList(): List<Method> =
+    classMethodsCache.getOrPut(this) {
+        val methods = mutableListOf<Method>()
+        val seen = mutableSetOf<String>()
+        var current: Class<*>? = this
+        while (current != null && current != Any::class.java) {
+            current.declaredMethods.forEach { method ->
+                val signature = method.name + method.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.name }
+                if (seen.add(signature)) {
+                    runCatching { method.isAccessible = true }
+                    methods.add(method)
+                }
+            }
+            current = current.superclass
+        }
+        methods
+    }
+
+fun Class<*>.allMethods(): Sequence<Method> = allMethodsList().asSequence()
+
+fun Class<*>.methodOrNull(name: String, vararg parameterTypes: Class<*>): Method? {
+    val key = MethodExactKey(this, name, if (parameterTypes.isEmpty()) emptyList() else parameterTypes.toList())
+    val cached = methodExactCache[key]
+    if (cached != null) {
+        return if (cached === NULL_METHOD) null else cached
+    }
+    val method = runCatching { getDeclaredMethod(name, *parameterTypes).apply { isAccessible = true } }.getOrNull()
+        ?: allMethodsList().firstOrNull { it.name == name && it.parameterTypes.contentEquals(parameterTypes) }
+    methodExactCache[key] = method ?: NULL_METHOD
+    return method
+}
 
 fun Class<*>.methodsNamed(name: String?): Sequence<Method> =
     allMethods().filter { name == null || it.name == name }
 
 fun Class<*>.fieldOrNull(name: String?): Field? {
     if (name == null) return null
-    return allFields().firstOrNull { it.name == name }
+    val key = FieldKey(this, name)
+    val cached = fieldCache[key]
+    if (cached != null) {
+        return if (cached === NULL_FIELD) null else cached
+    }
+    val field = allFieldsList().firstOrNull { it.name == name }
+    fieldCache[key] = field ?: NULL_FIELD
+    return field
 }
 
 fun Any.getObjectField(name: String?): Any? =
@@ -83,25 +138,46 @@ fun Any.setIntField(name: String?, value: Int): Boolean {
 
 fun Any.callMethod(name: String?, vararg args: Any?): Any? {
     if (name == null) return null
-    val method = javaClass.allMethods().firstOrNull { candidate ->
-        candidate.name == name &&
-            candidate.parameterCount == args.size &&
-            candidate.parameterTypes.indices.all { index ->
-                candidate.parameterTypes[index].isAssignableFromBoxed(args[index])
-            }
+    val targetClass = javaClass
+    val argCount = args.size
+    val argTypes = if (argCount == 0) emptyList() else args.map { it?.javaClass }
+    val key = MethodCallKey(targetClass, name, argCount, argTypes)
+    val cached = methodCallCache[key]
+    val method = if (cached != null) {
+        if (cached === NULL_METHOD) null else cached
+    } else {
+        val resolved = targetClass.allMethodsList().firstOrNull { candidate ->
+            candidate.name == name &&
+                candidate.parameterCount == argCount &&
+                candidate.parameterTypes.indices.all { index ->
+                    candidate.parameterTypes[index].isAssignableFromBoxed(args[index])
+                }
+        }
+        methodCallCache[key] = resolved ?: NULL_METHOD
+        resolved
     } ?: return null
     return runCatching { method.invoke(this, *args) }.getOrNull()
 }
 
 fun Class<*>.callStaticMethod(name: String?, vararg args: Any?): Any? {
     if (name == null) return null
-    val method = allMethods().firstOrNull { candidate ->
-        Modifier.isStatic(candidate.modifiers) &&
-            candidate.name == name &&
-            candidate.parameterCount == args.size &&
-            candidate.parameterTypes.indices.all { index ->
-                candidate.parameterTypes[index].isAssignableFromBoxed(args[index])
-            }
+    val argCount = args.size
+    val argTypes = if (argCount == 0) emptyList() else args.map { it?.javaClass }
+    val key = MethodCallKey(this, name, argCount, argTypes)
+    val cached = methodCallCache[key]
+    val method = if (cached != null) {
+        if (cached === NULL_METHOD) null else cached
+    } else {
+        val resolved = allMethodsList().firstOrNull { candidate ->
+            Modifier.isStatic(candidate.modifiers) &&
+                candidate.name == name &&
+                candidate.parameterCount == argCount &&
+                candidate.parameterTypes.indices.all { index ->
+                    candidate.parameterTypes[index].isAssignableFromBoxed(args[index])
+                }
+        }
+        methodCallCache[key] = resolved ?: NULL_METHOD
+        resolved
     } ?: return null
     return runCatching { method.invoke(null, *args) }.getOrNull()
 }
@@ -136,4 +212,3 @@ private fun Class<*>.primitiveWrapper(): Class<*>? = when (this) {
     Char::class.javaPrimitiveType -> Char::class.javaObjectType
     else -> null
 }
-

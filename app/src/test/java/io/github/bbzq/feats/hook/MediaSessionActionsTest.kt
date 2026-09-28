@@ -1,4 +1,4 @@
-package io.github.bbzq.feats.hook
+﻿package io.github.bbzq.feats.hook
 
 import android.media.session.PlaybackState
 import org.junit.Assert.assertEquals

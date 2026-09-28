@@ -308,12 +308,6 @@ class SettingsContentFactory(
     private fun homeRecommendRows(): List<View> {
         val rows = mutableListOf<View>()
         rows += createSwitchRow(
-            context.getString(R.string.home_recommend_vertical_av_detail_title),
-            context.getString(R.string.home_recommend_vertical_av_detail_summary),
-            ModuleSettings.KEY_HOME_RECOMMEND_VERTICAL_AV_DETAIL_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
             context.getString(R.string.home_recommend_preload_title),
             context.getString(R.string.home_recommend_preload_summary),
             ModuleSettings.KEY_HOME_RECOMMEND_PRELOAD_ENABLED,

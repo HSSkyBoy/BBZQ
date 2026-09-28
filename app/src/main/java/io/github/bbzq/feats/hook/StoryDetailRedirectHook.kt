@@ -65,6 +65,8 @@ class StoryDetailRedirectHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     val original = param.args.getOrNull(intentIndex) as? Intent ?: return@register
                     if (!StoryDetailRoutePolicy.isStrictStoryVideoRoute(original.data?.toString())) return@register
                     if (!ModuleSettings.isStoryVideoAsDetailEnabled(prefs)) return@register
+                    val caller = param.args.firstOrNull()
+                    if (isDetailActivity(caller)) return@register
                     when (val rewritten = StoryDetailIntentFactory.rewrite(original, backends)) {
                         is StoryDetailIntentFactory.Rewrite.Applied -> {
                             param.args[intentIndex] = rewritten.intent
@@ -131,6 +133,11 @@ class StoryDetailRedirectHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 " queryKeys=[$queryKeys] extraKeys=[$extraKeys]"
         }.getOrDefault("shape-unavailable")
         log("StoryDetailRedirect kept host intent, reason=$label $shape")
+    }
+
+    private fun isDetailActivity(who: Any?): Boolean {
+        val name = who?.javaClass?.name ?: return false
+        return name.contains("UnitedBizDetailsActivity") || name.contains("VideoDetailsActivity")
     }
 
     private companion object {

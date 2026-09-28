@@ -17,7 +17,7 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
     private val registered = AtomicBoolean(false)
     @Volatile private var appContext: Context? = null
     @Volatile private var service: XposedService? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     data class FrameworkInfo(
         val apiVersion: String,
@@ -78,36 +78,14 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
             val localPrefs = context.moduleSettingsPreferences()
             val remotePrefs = service.remoteSettingsPreferences()
 
-            val localValues = localPrefs.all
-            val remoteValues = remotePrefs.all
+            syncPreferences(localPrefs, remotePrefs)
 
             val localEditor = localPrefs.edit()
             val remoteEditor = remotePrefs.edit()
             var localChanged = false
             var remoteChanged = false
 
-            // 1. Sync remote values to local (especially runtime environment keys and catalogs from host)
-            remoteValues.forEach { (key, value) ->
-                if (value != null && !localValues.containsKey(key)) {
-                    localEditor.putValue(key, value)
-                    localChanged = true
-                } else if (key.startsWith("runtime_") || key.startsWith("known_") || key.startsWith("symbol_scan_")) {
-                    if (value != null && localValues[key] != value) {
-                        localEditor.putValue(key, value)
-                        localChanged = true
-                    }
-                }
-            }
-
-            // 2. Sync local user preferences to remote if remote does not have them yet
-            localValues.forEach { (key, value) ->
-                if (value != null && !remoteValues.containsKey(key)) {
-                    remoteEditor.putValue(key, value)
-                    remoteChanged = true
-                }
-            }
-
-            // 3. Record framework info if available
+            // Record framework info if available
             val fwName = runCatching { service.frameworkName }.getOrNull()?.takeIf { it.isNotBlank() }
             if (fwName != null) {
                 val apiVer = runCatching { service.apiVersion.toString() }.getOrDefault("")
@@ -138,6 +116,46 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         }.onFailure {
             Log.w(TAG, "syncWithRemote failed: ${it.javaClass.simpleName}: ${it.message}")
         }
+    }
+
+    internal fun syncPreferences(
+        localPrefs: SharedPreferences,
+        remotePrefs: SharedPreferences,
+    ): Boolean {
+        val localValues = localPrefs.all
+        val remoteValues = remotePrefs.all
+
+        val localEditor = localPrefs.edit()
+        val remoteEditor = remotePrefs.edit()
+        var localChanged = false
+        var remoteChanged = false
+
+        // 1. Sync remote host-managed values to local
+        remoteValues.forEach { (key, value) ->
+            if (isHostManagedKey(key)) {
+                if (value != null && localValues[key] != value) {
+                    localEditor.putValue(key, value)
+                    localChanged = true
+                }
+            } else if (value != null && !localValues.containsKey(key)) {
+                localEditor.putValue(key, value)
+                localChanged = true
+            }
+        }
+
+        // 2. Sync local user preferences to remote (local is source of truth for user settings)
+        localValues.forEach { (key, value) ->
+            if (!isHostManagedKey(key) && value != null) {
+                if (remoteValues[key] != value) {
+                    remoteEditor.putValue(key, value)
+                    remoteChanged = true
+                }
+            }
+        }
+
+        if (localChanged) localEditor.apply()
+        if (remoteChanged) remoteEditor.apply()
+        return localChanged || remoteChanged
     }
 
     fun applyOperations(operations: List<PreferenceOperation>) {
@@ -182,8 +200,8 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         }
         thread(name = SYMBOL_REFRESH_THREAD_NAME, isDaemon = true) {
             runCatching {
-                if (currentService.apiVersion < XposedService.API_102) {
-                    fail(callback, "当前框架不支持 API102 远程配置")
+                if (currentService.apiVersion <= 100) {
+                    fail(callback, "当前框架不支持 Modern API 远程配置")
                     return@thread
                 }
                 val requestId = UUID.randomUUID().toString()
@@ -278,6 +296,12 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
 
     private fun XposedService.remoteSettingsPreferences(): SharedPreferences =
         getRemotePreferences(ModuleSettings.PREFS_NAME)
+
+    private fun isHostManagedKey(key: String): Boolean =
+        key.startsWith("runtime_") ||
+            key.startsWith("known_") ||
+            key.startsWith("symbol_scan_") ||
+            key.startsWith("host_")
 
     private const val SYMBOL_REFRESH_THREAD_NAME = "BBZQ-SymbolRefresh"
     private const val SERVICE_WAIT_RETRY_MS = 500L

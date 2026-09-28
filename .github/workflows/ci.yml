@@ -82,19 +82,28 @@ jobs:
 
       - name: Restore release keystore
         env:
-          BBZQ_KEYSTORE_BASE64: ${{ secrets.BBZQ_KEYSTORE_BASE64 }}
+          KEY_STORE: ${{ secrets.KEY_STORE || secrets.BBZQ_KEYSTORE_BASE64 }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD || secrets.BBZQ_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ALIAS || secrets.BBZQ_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.BBZQ_KEY_PASSWORD }}
         run: |
-          if [ -n "$BBZQ_KEYSTORE_BASE64" ]; then
+          if [ -n "$KEY_STORE" ]; then
             mkdir -p signing
-            printf '%s' "$BBZQ_KEYSTORE_BASE64" | base64 -d > signing/bbzq-release.jks
+            printf '%s' "$KEY_STORE" | base64 -d > signing/bbzq-key.p12
+            cat <<EOF > signing.properties
+          KEYSTORE_PASSWORD=$KEY_STORE_PASSWORD
+          KEYSTORE_ALIAS=$ALIAS
+          KEYSTORE_ALIAS_PASSWORD=${KEY_PASSWORD:-$KEY_STORE_PASSWORD}
+          KEYSTORE_FILE=signing/bbzq-key.p12
+          EOF
           fi
 
       - name: Export signing env
         env:
-          RELEASE_STORE_FILE: signing/bbzq-release.jks
-          RELEASE_STORE_PASSWORD: ${{ secrets.BBZQ_KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.BBZQ_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.BBZQ_KEY_PASSWORD }}
+          RELEASE_STORE_FILE: signing/bbzq-key.p12
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD || secrets.BBZQ_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ALIAS || secrets.BBZQ_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.BBZQ_KEY_PASSWORD }}
         run: |
           {
             echo "RELEASE_STORE_FILE=$RELEASE_STORE_FILE"

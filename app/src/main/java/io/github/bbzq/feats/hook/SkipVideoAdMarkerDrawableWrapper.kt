@@ -15,7 +15,7 @@ class SkipVideoAdMarkerDrawableWrapper(
     private val minMarkerWidthPx: Float,
     private val segmentsProvider: () -> Pair<Long, List<BilibiliSponsorBlock.Segment>>?,
     private val colorForCategory: (String) -> Int,
-    private val onSegmentsDrawn: (() -> Unit)? = null,
+    private val onSegmentsDrawn: ((durationMs: Long) -> Unit)? = null,
 ) : Drawable(), Drawable.Callback {
 
     private val trackBoundsF = RectF()
@@ -97,7 +97,7 @@ class SkipVideoAdMarkerDrawableWrapper(
         }
 
         canvas.restoreToCount(saveCount)
-        onSegmentsDrawn?.invoke()
+        onSegmentsDrawn?.invoke(durationMs)
     }
 
     override fun setBounds(left: Int, top: Int, right: Int, bottom: Int) {

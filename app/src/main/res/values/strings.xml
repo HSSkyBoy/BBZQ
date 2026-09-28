@@ -2,7 +2,7 @@
     <!-- 基本資訊 -->
     <string name="app_name">BBZQ</string>
     <string name="settings_title">BBZQ 设置</string>
-    <string name="xposed_description">基于 libxposed API 102 的 BBZQ 模块，提供空降助手、功能增强与组件净化等功能。</string>
+    <string name="xposed_description">基于 Modern API 的 BBZQ 模块，提供空降助手、功能增强与组件净化等功能。</string>
 
     <!-- 介紹頁 -->
     <string name="intro_module_title">模块信息</string>
@@ -171,8 +171,6 @@
     <string name="home_recommend_title_keyword_enabled_summary">已配置 %1$d 个关键词：%2$s</string>
     <string name="home_recommend_title_keyword_dialog_title">标题关键词屏蔽</string>
     <string name="home_recommend_title_keyword_hint">使用换行、逗号或分号分隔</string>
-    <string name="home_recommend_vertical_av_detail_title">默认以详情页打开竖屏视频</string>
-    <string name="home_recommend_vertical_av_detail_summary">首页推荐中的竖屏视频点开后默认进入详情页。</string>
     <string name="home_recommend_preload_title">首页推荐预加载</string>
     <string name="home_recommend_preload_summary">扩大首页推荐的原生预取距离，减少滑到底部时的等待。</string>
     <string name="home_recommend_custom_filter_title">首页卡片过滤</string>

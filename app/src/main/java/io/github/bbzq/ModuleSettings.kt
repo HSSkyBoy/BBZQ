@@ -55,7 +55,6 @@ object ModuleSettings {
     const val KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED = "purify_home_recommend_picture_enabled"
     const val KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED = "purify_home_recommend_game_promo_enabled"
     const val KEY_HOME_RECOMMEND_TITLE_KEYWORDS = "home_recommend_title_keywords"
-    const val KEY_HOME_RECOMMEND_VERTICAL_AV_DETAIL_ENABLED = "home_recommend_vertical_av_detail_enabled"
     const val KEY_HOME_RECOMMEND_PRELOAD_ENABLED = "home_recommend_preload_enabled"
     const val KEY_DYNAMIC_PREFERRED_VIDEO_TAB_ENABLED = "dynamic_preferred_video_tab_enabled"
     const val KEY_DYNAMIC_REMOVE_CITY_TAB_ENABLED = "dynamic_remove_city_tab_enabled"
@@ -291,7 +290,6 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_PICTURE_ENABLED, false) },
         ExportableConfigSpec(KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_HOME_RECOMMEND_GAME_PROMO_ENABLED, false) },
-        ExportableConfigSpec(KEY_HOME_RECOMMEND_VERTICAL_AV_DETAIL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HOME_RECOMMEND_VERTICAL_AV_DETAIL_ENABLED, false) },
         ExportableConfigSpec(KEY_HOME_RECOMMEND_PRELOAD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HOME_RECOMMEND_PRELOAD_ENABLED, false) },
         ExportableConfigSpec(KEY_DYNAMIC_PREFERRED_VIDEO_TAB_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_DYNAMIC_PREFERRED_VIDEO_TAB_ENABLED, false)
@@ -312,6 +310,9 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_PURIFY_STORY_VIDEO_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_PURIFY_STORY_VIDEO_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_STORY_VIDEO_DEFAULT_LAUNCH_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_STORY_VIDEO_DEFAULT_LAUNCH_ENABLED, false)
+        },
+        ExportableConfigSpec(KEY_STORY_VIDEO_AS_DETAIL_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_STORY_VIDEO_AS_DETAIL_ENABLED, false)
         },
         ExportableConfigSpec(KEY_STORY_VIDEO_IMMERSIVE_FULLSCREEN_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_STORY_VIDEO_IMMERSIVE_FULLSCREEN_ENABLED, false)
@@ -671,9 +672,6 @@ object ModuleSettings {
             .distinct()
             .take(MAX_HOME_RECOMMEND_TITLE_KEYWORDS)
             .toList()
-
-    fun isHomeRecommendVerticalAvDetailEnabled(prefs: SharedPreferences): Boolean =
-        prefs.getBoolean(KEY_HOME_RECOMMEND_VERTICAL_AV_DETAIL_ENABLED, false)
 
     fun isHomeRecommendPreloadEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_HOME_RECOMMEND_PRELOAD_ENABLED, false)

@@ -346,12 +346,7 @@ object RuntimeEnvironmentInfo {
     }
 
     private fun PackageInfo.longVersionCodeCompat(): Long =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            longVersionCode
-        } else {
-            @Suppress("DEPRECATION")
-            versionCode.toLong()
-        }
+        longVersionCode
 
     private fun readRuntimeString(prefs: SharedPreferences, key: String): String {
         return prefs.getString(key, null)?.takeIf { it.isNotBlank() && it != UNKNOWN } ?: UNKNOWN

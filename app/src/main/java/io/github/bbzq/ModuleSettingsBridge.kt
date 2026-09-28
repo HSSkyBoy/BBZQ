@@ -16,29 +16,27 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
             if (lastLoadTime > 0L && now - lastLoadTime < CACHE_EXPIRATION) return
         }
 
-        val loaded = getAllFromRemotePreferences()
-            .mapNotNull { (key, value) -> value?.let { key to it } }
-            .toMap()
+        val result = fetchRemotePreferences()
         synchronized(cacheLock) {
-            if (loaded.isNotEmpty() || localCache.isEmpty()) {
-                localCache = if (localCache.isEmpty()) loaded else (localCache + loaded)
+            if (!result.isNullOrEmpty() || localCache.isEmpty()) {
+                localCache = if (localCache.isEmpty()) result.orEmpty() else (localCache + result.orEmpty())
             }
             lastLoadTime = now
         }
     }
 
-    private fun getAllFromRemotePreferences(): Map<String, Any?> {
+    private fun fetchRemotePreferences(): Map<String, Any>? {
         val remotePrefs = resolveRemotePreferences() ?: run {
             lastStatus = "remote unavailable"
-            return emptyMap()
+            return null
         }
         return runCatching {
-            remotePrefs.all.mapValues { it.value }
-        }.onSuccess {
+            val all = remotePrefs.all
             lastStatus = "remote ok"
+            all.mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
         }.getOrElse {
             lastStatus = "remote ${it.javaClass.simpleName}: ${it.message}"
-            emptyMap()
+            null
         }
     }
 
