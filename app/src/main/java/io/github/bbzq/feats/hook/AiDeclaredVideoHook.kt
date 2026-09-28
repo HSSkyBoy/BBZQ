@@ -25,7 +25,7 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val guard = AiRedirectGuard()
     private var reply: ReplyShape? = null
     private var detailInstalled = false
-    private var relateInstalled = false
+    private var relatesFeedInstalled = false
     private var homeInstalled = false
 
     override fun startHook() {
@@ -35,30 +35,52 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return
         }
         if (!detailInstalled) detailInstalled = installDetail()
-        if (!relateInstalled) relateInstalled = installRelateCards()
+        if (!relatesFeedInstalled) relatesFeedInstalled = installRelatesFeed()
         if (!homeInstalled) homeInstalled = installHomeFeed()
         isInstalled = detailInstalled && homeInstalled
-        log("startHook: AiDeclaredVideo detail=$detailInstalled relate=$relateInstalled home=$homeInstalled")
+        log("startHook: AiDeclaredVideo detail=$detailInstalled relatesFeed=$relatesFeedInstalled home=$homeInstalled")
     }
 
     private fun installDetail(): Boolean {
-        val mossClass = classLoader.findClassOrNull(MOSS_CLASS)
-        val requestClass = classLoader.findClassOrNull(REQUEST_CLASS)
         val shape = reply ?: ReplyShape.resolve(classLoader)?.also { reply = it }
-        if (mossClass == null || requestClass == null || shape == null) {
-            log("AiDeclaredVideo: ViewMoss structure not found on this host")
+        if (shape == null) {
+            log("AiDeclaredVideo: ViewReply structure not found on this host")
             return false
         }
+        val installed = installMoss(SYNC_METHOD, ASYNC_METHOD, REQUEST_CLASS) { value, request ->
+            process(shape, value, isPassive(request))
+        }
+        if (installed == 0) log("AiDeclaredVideo: no view method matched on ViewMoss")
+        return installed > 0
+    }
 
+    private fun installRelatesFeed(): Boolean {
+        val shape = reply ?: return false
+        val replyClass = classLoader.findClassOrNull(RELATES_FEED_REPLY_CLASS) ?: return false
+        val installed = installMoss(FEED_SYNC_METHOD, FEED_ASYNC_METHOD, RELATES_FEED_REQUEST_CLASS) { value, _ ->
+            if (replyClass.isInstance(value)) stripRelatesFeed(shape, value) else null
+        }
+        if (installed == 0) log("AiDeclaredVideo: no relates feed method matched on ViewMoss")
+        return installed > 0
+    }
+
+    private fun installMoss(
+        syncName: String,
+        asyncName: String,
+        requestClassName: String,
+        transform: (Any, Any?) -> Any?,
+    ): Int {
+        val mossClass = classLoader.findClassOrNull(MOSS_CLASS) ?: return 0
+        val requestClass = classLoader.findClassOrNull(requestClassName) ?: return 0
         var installed = 0
         mossClass.declaredMethods.firstOrNull {
-            it.name == SYNC_METHOD &&
+            it.name == syncName &&
                 it.parameterTypes.contentEquals(arrayOf(requestClass)) &&
                 !Modifier.isStatic(it.modifiers)
         }?.let { sync ->
             env.hookAfter(sync) { param ->
                 val original = param.result ?: return@hookAfter
-                process(shape, original, isPassive(param.args.firstOrNull()))?.let { param.result = it }
+                transform(original, param.args.firstOrNull())?.let { param.result = it }
             }
             installed++
         }
@@ -66,45 +88,20 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val handlerClass = classLoader.findClassOrNull(MOSS_HANDLER)
         if (handlerClass != null && handlerClass.isInterface) {
             mossClass.declaredMethods.firstOrNull {
-                it.name == ASYNC_METHOD &&
+                it.name == asyncName &&
                     it.parameterTypes.contentEquals(arrayOf(requestClass, handlerClass)) &&
                     it.returnType == Void.TYPE &&
                     !Modifier.isStatic(it.modifiers)
             }?.let { async ->
                 env.hookBefore(async) { param ->
                     val delegate = param.args.getOrNull(1) ?: return@hookBefore
-                    val passive = isPassive(param.args.firstOrNull())
-                    param.args[1] = wrapHandler(handlerClass, delegate) { process(shape, it, passive) }
+                    val request = param.args.firstOrNull()
+                    param.args[1] = wrapHandler(handlerClass, delegate) { transform(it, request) }
                 }
                 installed++
             }
         }
-
-        if (installed == 0) {
-            log("AiDeclaredVideo: no view method matched on ViewMoss")
-            return false
-        }
-        return true
-    }
-
-    private fun installRelateCards(): Boolean {
-        val shape = reply ?: return false
-        var installed = 0
-        classLoader.findClassOrNull(RELATES_CLASS)?.methodOrNull("getCardsList")?.let { method ->
-            env.hookAfter(method) { param ->
-                val cards = param.result as? List<*> ?: return@hookAfter
-                retainUnknown(shape, cards, keepNonEmpty = false)?.let { param.result = it }
-            }
-            installed++
-        }
-        classLoader.findClassOrNull(RELATES_FEED_REPLY_CLASS)?.methodOrNull("getRelatesList")?.let { method ->
-            env.hookAfter(method) { param ->
-                val cards = param.result as? List<*> ?: return@hookAfter
-                retainUnknown(shape, cards, keepNonEmpty = true)?.let { param.result = it }
-            }
-            installed++
-        }
-        return installed > 0
+        return installed
     }
 
     private fun installHomeFeed(): Boolean {
@@ -113,7 +110,7 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
         feedSymbols.responseGetItems.forEach { response ->
             env.hookAfter(response.getItems) { param ->
                 val items = param.result as? List<*> ?: return@hookAfter
-                if (items.isEmpty()) return@hookAfter
+                if (items.none { item -> item != null && isAiFeedItem(item, getUri) }) return@hookAfter
                 val filtered = items.filterNot { item -> item != null && isAiFeedItem(item, getUri) }
                 if (filtered.size == items.size) return@hookAfter
                 param.result = filtered
@@ -135,13 +132,20 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return AiDeclaredVideoRegistry.contains(aid)
     }
 
-    private fun retainUnknown(shape: ReplyShape, cards: List<*>, keepNonEmpty: Boolean): List<Any?>? {
-        if (cards.isEmpty() || AiDeclaredVideoRegistry.isEmpty()) return null
-        val retained = cards.filterNot { card -> card != null && shape.isKnownAiCard(card) }
-        if (retained.size == cards.size) return null
-        if (keepNonEmpty && retained.isEmpty()) return null
-        return retained
-    }
+    private fun stripRelatesFeed(shape: ReplyShape, original: Any): Any? = runCatching {
+        if (AiDeclaredVideoRegistry.isEmpty()) return@runCatching null
+        val cards = original.callMethod("getRelatesList") as? List<*> ?: return@runCatching null
+        val retained = shape.retainUnknown(cards) ?: return@runCatching null
+        if (retained.isEmpty()) return@runCatching null
+        val builder = original.callMethod("toBuilder") ?: return@runCatching null
+        builder.callMethod("clearRelates")
+        builder.callMethod("addAllRelates", retained)
+        val updated = builder.callMethod("build") ?: return@runCatching null
+        val readback = updated.callMethod("getRelatesList") as? List<*>
+        if (readback?.size != retained.size) return@runCatching null
+        log("AiDeclaredVideo removed ${cards.size - retained.size} relates feed card(s)")
+        updated
+    }.onFailure { log("AiDeclaredVideo relates feed strip failed, keeping original reply", it) }.getOrNull()
 
     private fun isPassive(request: Any?): Boolean =
         AiDeclaredVideoPolicy.isPassiveRequest(request?.callMethod("getSpmid") as? String)
@@ -149,7 +153,14 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun process(shape: ReplyShape, original: Any, passive: Boolean): Any? = runCatching {
         if (!shape.replyClass.isInstance(original)) return@runCatching null
         val facts = shape.facts(original)
-        if (!facts.declared) return@runCatching null
+        if (!facts.declared) {
+            if (passive || facts.candidates.none { it.isVideo && AiDeclaredVideoRegistry.contains(it.aid) }) {
+                return@runCatching null
+            }
+            val stripped = shape.stripRelates(original) ?: return@runCatching null
+            log("AiDeclaredVideo removed known AI cards from detail relates")
+            return@runCatching stripped
+        }
         AiDeclaredVideoRegistry.add(facts.aid)
         if (passive || shape.hasHostError(original)) return@runCatching null
         val candidate = facts.candidates.firstOrNull {
@@ -256,6 +267,65 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return fact.isVideo && AiDeclaredVideoRegistry.contains(fact.aid)
         }
 
+        fun retainUnknown(cards: List<*>): List<Any>? {
+            if (cards.any { it == null }) return null
+            val retained = cards.filterNotNull().filterNot(::isKnownAiCard)
+            return retained.takeIf { it.size != cards.size }
+        }
+
+        fun stripRelates(reply: Any): Any? {
+            val tab = reply.child("hasTab", "getTab") ?: return null
+            val tabModules = tab.callMethod("getTabModuleList") as? List<*> ?: return null
+            var tabChanged = false
+            val newTabModules = tabModules.map { tabModule ->
+                if (tabModule == null) return null
+                val rebuilt = rebuildTabModule(tabModule)
+                if (rebuilt != null) tabChanged = true
+                rebuilt ?: tabModule
+            }
+            if (!tabChanged) return null
+            val newTab = tab.edit {
+                callMethod("clearTabModule")
+                callMethod("addAllTabModule", newTabModules)
+            } ?: return null
+            return reply.edit { callMethod("setTab", newTab) }
+        }
+
+        private fun rebuildTabModule(tabModule: Any): Any? {
+            val intro = tabModule.child("hasIntroduction", "getIntroduction") ?: return null
+            val modules = intro.callMethod("getModulesList") as? List<*> ?: return null
+            var changed = false
+            val newModules = modules.map { module ->
+                if (module == null) return null
+                val rebuilt = rebuildModule(module)
+                if (rebuilt != null) changed = true
+                rebuilt ?: module
+            }
+            if (!changed) return null
+            val newIntro = intro.edit {
+                callMethod("clearModules")
+                callMethod("addAllModules", newModules)
+            } ?: return null
+            return tabModule.edit { callMethod("setIntroduction", newIntro) }
+        }
+
+        private fun rebuildModule(module: Any): Any? {
+            val relates = module.child("hasRelates", "getRelates") ?: return null
+            val cards = relates.callMethod("getCardsList") as? List<*> ?: return null
+            val retained = retainUnknown(cards) ?: return null
+            val newRelates = relates.edit {
+                callMethod("clearCards")
+                callMethod("addAllCards", retained)
+            } ?: return null
+            return module.edit { callMethod("setRelates", newRelates) }
+        }
+
+        private inline fun Any.edit(block: Any.() -> Unit): Any? {
+            val builder = callMethod("toBuilder") ?: return null
+            builder.block()
+            return builder.callMethod("build")
+        }
+
         private fun candidate(card: Any): AiRelateCandidate {
             val basic = card.child("hasBasicInfo", "getBasicInfo")
             return AiRelateCandidate(
@@ -303,10 +373,12 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val COMMON = "com.bapis.bilibili.app.viewunite.common."
         const val MOSS_CLASS = V1 + "ViewMoss"
         const val REQUEST_CLASS = V1 + "ViewReq"
-        const val RELATES_CLASS = COMMON + "Relates"
+        const val RELATES_FEED_REQUEST_CLASS = V1 + "RelatesFeedReq"
         const val RELATES_FEED_REPLY_CLASS = V1 + "RelatesFeedReply"
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"
         const val SYNC_METHOD = "executeView"
         const val ASYNC_METHOD = "view"
+        const val FEED_SYNC_METHOD = "executeRelatesFeed"
+        const val FEED_ASYNC_METHOD = "relatesFeed"
     }
 }
