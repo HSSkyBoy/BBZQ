@@ -2,6 +2,7 @@ package io.github.bbzq
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import io.github.bbzq.feats.RoamingRuntime
 import io.github.bbzq.utils.ReflectionUtils
@@ -52,7 +53,7 @@ class BbzqModule : XposedModule() {
         this.packageName = packageName
 
         if (attachHookInstalled.compareAndSet(false, true).not()) {
-            maybeStartRuntime(packageName, processName, param.getDefaultClassLoader())
+            maybeStartRuntime(packageName, processName, resolvePackageClassLoader(param))
             return
         }
 
@@ -67,11 +68,11 @@ class BbzqModule : XposedModule() {
                     packageName = packageName,
                     processName = processName,
                     application = application,
-                    classLoader = application.javaClass.classLoader ?: param.getDefaultClassLoader(),
+                    classLoader = application.javaClass.classLoader ?: resolvePackageClassLoader(param),
                 )
             }
 
-        maybeStartRuntime(packageName, processName, param.getDefaultClassLoader())
+        maybeStartRuntime(packageName, processName, resolvePackageClassLoader(param))
     }
 
     private fun startRuntimeOnce(
@@ -129,6 +130,15 @@ class BbzqModule : XposedModule() {
         return runCatching {
             ReflectionUtils.safeInvoke(currentApplicationMethod, null) as? Application
         }.getOrNull()
+    }
+
+    private fun resolvePackageClassLoader(param: PackageLoadedParam): ClassLoader {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return param.getDefaultClassLoader()
+        }
+        return resolveCurrentApplication()?.javaClass?.classLoader
+            ?: Thread.currentThread().contextClassLoader
+            ?: javaClass.classLoader
     }
 
     private fun isFrameworkEnvironmentAbnormal(): Boolean =

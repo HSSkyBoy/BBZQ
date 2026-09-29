@@ -185,13 +185,13 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    private fun trackStoryInsetsController(target: StoryWindowTarget, controller: WindowInsetsController) {
+    private fun trackStoryInsetsController(target: StoryWindowTarget, controller: Any) {
         synchronized(storyInsetsControllerTargets) {
             storyInsetsControllerTargets[controller] = target
         }
     }
 
-    private fun installInsetsControllerWatcher(controller: WindowInsetsController) {
+    private fun installInsetsControllerWatcher(controller: Any) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val controllerClass = controller.javaClass
         synchronized(storyInsetsControllerClasses) {

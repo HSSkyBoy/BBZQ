@@ -648,23 +648,39 @@ class SettingsActivity : Activity() {
         val contentBottom = initialContent.paddingBottom
 
         root.setOnApplyWindowInsetsListener { _, insets ->
-            val safeInsets =
-                insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            val safeInsetTop: Int
+            val safeInsetBottom: Int
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val safeInsets =
+                    insets.getInsets(
+                        WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+                    )
+                safeInsetTop = safeInsets.top
+                safeInsetBottom = safeInsets.bottom
+            } else {
+                val cutout = insets.displayCutout
+                @Suppress("DEPRECATION")
+                safeInsetTop =
+                    maxOf(insets.systemWindowInsetTop, cutout?.safeInsetTop ?: 0)
+                @Suppress("DEPRECATION")
+                safeInsetBottom =
+                    maxOf(insets.systemWindowInsetBottom, cutout?.safeInsetBottom ?: 0)
+            }
             toolbar.setPadding(
                 toolbarLeft,
-                toolbarBaseTop + safeInsets.top,
+                toolbarBaseTop + safeInsetTop,
                 toolbarRight,
                 toolbarBottom,
             )
             // Track bottom inset so future page switches apply it to new ScrollViews
-            currentBottomInset = safeInsets.bottom
+            currentBottomInset = safeInsetBottom
             // Apply to whichever ScrollView is currently shown
             val activeScroll = contentContainer.getChildAt(0) as? ScrollView
             activeScroll?.setPadding(
                 contentLeft,
                 contentTop,
                 contentRight,
-                contentBottom + safeInsets.bottom,
+                contentBottom + safeInsetBottom,
             )
             insets
         }
