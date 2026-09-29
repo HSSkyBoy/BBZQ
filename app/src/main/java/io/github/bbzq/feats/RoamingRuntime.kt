@@ -11,6 +11,8 @@ import kotlin.LazyThreadSafetyMode
 import io.github.bbzq.feats.hook.BottomBarHook
 import io.github.bbzq.feats.hook.DaggerCircularDependencyFixHook
 import io.github.bbzq.feats.hook.AutoLikeHook
+import io.github.bbzq.feats.hook.AiDeclaredVideoHook
+import io.github.bbzq.feats.hook.PgcActivityPopupHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
 import io.github.bbzq.feats.hook.CustomThemeHook
@@ -204,6 +206,8 @@ object RoamingRuntime {
                 ::FakeWifiHook,
                 ::CustomCdnHook,
                 ::ChronosPromotionHook,
+                ::PgcActivityPopupHook,
+                ::AiDeclaredVideoHook,
                 ::SkipVideoAdHook,
                 ::SkipVideoAdProgressHook,
                 ::RewardAdHook,
