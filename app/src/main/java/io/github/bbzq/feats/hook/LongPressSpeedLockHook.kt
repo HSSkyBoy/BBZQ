@@ -53,7 +53,12 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
             it.name == "onLongPress" && it.parameterTypes.contentEquals(arrayOf(MotionEvent::class.java))
         }?.let { method ->
             env.hookBefore(method) { param ->
-                if (ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs) && param.thisObject?.let(states::get)?.locked == true) param.result = true
+                if (!ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs)) return@hookBefore
+                val state = param.thisObject?.let(states::get) ?: return@hookBefore
+                // A fresh physical long-press begins: reset the per-session crossing flag so the
+                // boundary-drag can toggle again, regardless of any stale/recycled MotionEvent refs.
+                state.sessionCrossed = false
+                if (state.locked) param.result = true
             }
         }
         listenerClass.declaredMethods.firstOrNull {
@@ -62,7 +67,10 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 it.parameterTypes.contentEquals(arrayOf(MotionEvent::class.java))
         }?.let { method ->
             env.hookBefore(method) { param ->
-                if (ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs) && param.thisObject?.let(states::get)?.locked == true) param.result = null
+                if (!ModuleSettings.isPlayerLongPressSpeedLockEnabled(prefs)) return@hookBefore
+                val state = param.thisObject?.let(states::get) ?: return@hookBefore
+                state.sessionCrossed = false
+                if (state.locked) param.result = null
             }
         }
     }
@@ -78,22 +86,20 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     val move = args.getOrNull(1) as? MotionEvent ?: return@InvocationHandler false
                     val vertical = kotlin.math.abs(move.y - down.y) >= kotlin.math.abs(move.x - down.x)
                     if (!isLandscape() || !vertical) return@InvocationHandler false
-                    val boundary = lockBoundary()
-                    if (state.handledDownPress === down) {
-                        if (state.locked && move.y < boundary) state.locked = false
-                        return@InvocationHandler false
-                    }
-                    if (move.y < boundary) return@InvocationHandler false
-                    state.handledDownPress = down
-                    if (!state.locked) {
-                        state.locked = true
+                    if (move.y < lockBoundary()) return@InvocationHandler false
+                    // One toggle per long-press session: the flag is cleared by the real
+                    // onLongPress/onLongPressEnd hooks above, not by comparing MotionEvent
+                    // references (those get recycled by the framework and can't be trusted).
+                    if (state.sessionCrossed) return@InvocationHandler false
+                    state.sessionCrossed = true
+                    state.locked = !state.locked
+                    if (state.locked) {
                         Toast.makeText(env.hostContext, "松手锁定倍速", Toast.LENGTH_SHORT).show()
-                        true
                     } else {
-                        state.locked = false
+                        Toast.makeText(env.hostContext, "已解除倍速锁定", Toast.LENGTH_SHORT).show()
                         listener.javaClass.findLongPressEndMethod()?.invoke(listener, move)
-                        true
                     }
+                    true
                 }
                 else -> defaultValue(method)
             }
@@ -164,7 +170,7 @@ class LongPressSpeedLockHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private class LockState(
         var locked: Boolean = false,
         var installed: Boolean = false,
-        var handledDownPress: MotionEvent? = null,
+        var sessionCrossed: Boolean = false,
     )
 
     private class ScrollRegistrar(
