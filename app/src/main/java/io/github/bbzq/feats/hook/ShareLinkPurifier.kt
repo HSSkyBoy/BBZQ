@@ -1,8 +1,6 @@
 ﻿package io.github.bbzq.feats.hook
 
 import android.net.Uri
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 
 internal object ShareLinkPurifier {
@@ -17,32 +15,13 @@ internal object ShareLinkPurifier {
     fun purifyLink(url: String, transformAv: Boolean): String {
         val normalized = url.trim()
         if (normalized.isEmpty()) return url
-        val resolved = resolveShortLink(normalized)
-        return transformUrl(resolved, transformAv)
-    }
-
-    private fun resolveShortLink(url: String): String {
-        if (!url.isBilibiliShortLink()) return url
-        val requestUrl = url.withoutQueryAndFragment()
-        return runCatching {
-            val conn = (URL(requestUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = false
-                connectTimeout = REDIRECT_TIMEOUT_MS
-                readTimeout = REDIRECT_TIMEOUT_MS
-            }
-            try {
-                conn.connect()
-                val location = if (conn.responseCode in REDIRECT_STATUS_CODES) {
-                    conn.getHeaderField("Location")
-                } else {
-                    null
-                }
-                location?.toAbsoluteUrl(conn.url)?.takeIf { it.isNotBlank() } ?: requestUrl
-            } finally {
-                conn.disconnect()
-            }
-        }.getOrDefault(requestUrl)
+        // b23.tv/bili2233.cn short links are left unexpanded on purpose: following the 302
+        // redirect needs a network request, and these hooks can fire on the UI thread (e.g. a
+        // tap on "copy link" in the share panel), so a blocking call here risks an ANR on nearly
+        // every share-link action. Stripping the short link's own tracking query string still
+        // captures most of the privacy benefit without that risk.
+        if (normalized.isBilibiliShortLink()) return normalized.withoutQueryAndFragment()
+        return transformUrl(normalized, transformAv)
     }
 
     private fun transformUrl(url: String, transformAv: Boolean): String {
@@ -96,9 +75,6 @@ internal object ShareLinkPurifier {
         runCatching { Uri.parse(this).buildUpon().query(null).fragment(null).build().toString() }
             .getOrDefault(this)
 
-    private fun String.toAbsoluteUrl(base: URL): String =
-        runCatching { URL(base, this).toString() }.getOrDefault(this)
-
     private fun String.isBilibiliHost(): Boolean =
         this == "bilibili.com" || endsWith(".bilibili.com")
 
@@ -119,7 +95,6 @@ internal object ShareLinkPurifier {
         return result
     }
 
-    private const val REDIRECT_TIMEOUT_MS = 5000
     private const val BV_ID_LENGTH = 12
     private const val BV_MASK = 2251799813685247L
     private const val BV_XOR = 23442827791579L
@@ -130,13 +105,6 @@ internal object ShareLinkPurifier {
 
     private val URL_REGEX = Regex("""https?://\S+""")
     private val KEEP_QUERY_KEYS = listOf("p", TIME)
-    private val REDIRECT_STATUS_CODES = setOf(
-        HttpURLConnection.HTTP_MOVED_PERM,
-        HttpURLConnection.HTTP_MOVED_TEMP,
-        HttpURLConnection.HTTP_SEE_OTHER,
-        307,
-        308,
-    )
     private val TRAILING_PUNCTUATION = setOf(
         ')',
         ']',

@@ -241,7 +241,6 @@ data class ShareSymbols(
     val shareChannelsSetText: MethodDescriptor? = null,
     val shareChannelItemGetJumpLink: MethodDescriptor? = null,
     val shareChannelItemSetJumpLink: MethodDescriptor? = null,
-    val shareClickResultClassName: String? = null,
     val shareBaseInfoClassName: String? = null,
     val shareContentClassName: String? = null,
     val shareContentCopyMethods: List<MethodDescriptor>,
@@ -272,7 +271,6 @@ data class ShareSymbols(
         .putOpt("shareChannelsSetText", shareChannelsSetText?.toJson())
         .putOpt("shareChannelItemGetJumpLink", shareChannelItemGetJumpLink?.toJson())
         .putOpt("shareChannelItemSetJumpLink", shareChannelItemSetJumpLink?.toJson())
-        .putOpt("shareClickResultClassName", shareClickResultClassName)
         .putOpt("shareBaseInfoClassName", shareBaseInfoClassName)
         .putOpt("shareContentClassName", shareContentClassName)
         .put("shareContentCopyMethods", shareContentCopyMethods.toJsonArray { it.toJson() })
@@ -304,7 +302,6 @@ data class ShareSymbols(
             shareChannelsSetText = shareChannelsSetText.restoreOptional(classLoader),
             shareChannelItemGetJumpLink = shareChannelItemGetJumpLink.restoreOptional(classLoader),
             shareChannelItemSetJumpLink = shareChannelItemSetJumpLink.restoreOptional(classLoader),
-            shareClickResultClass = shareClickResultClassName?.let(classLoader::loadClassOrNull),
             shareBaseInfoClass = shareBaseInfoClassName?.let(classLoader::loadClassOrNull),
             shareContentClass = shareContentClassName?.let(classLoader::loadClassOrNull),
             shareContentCopyMethods = shareContentCopyMethods.restoreAvailable(classLoader),
@@ -338,7 +335,6 @@ data class ShareSymbols(
                 ?.let(MethodDescriptor::fromJson),
             shareChannelItemSetJumpLink = obj.optJSONObject("shareChannelItemSetJumpLink")
                 ?.let(MethodDescriptor::fromJson),
-            shareClickResultClassName = obj.optString("shareClickResultClassName").takeIf { it.isNotBlank() },
             shareBaseInfoClassName = obj.optString("shareBaseInfoClassName").takeIf { it.isNotBlank() },
             shareContentClassName = obj.optString("shareContentClassName").takeIf { it.isNotBlank() },
             shareContentCopyMethods = obj.optJSONArray("shareContentCopyMethods").toList {
@@ -378,7 +374,6 @@ data class RestoredShareSymbols(
     val shareChannelsSetText: Method?,
     val shareChannelItemGetJumpLink: Method?,
     val shareChannelItemSetJumpLink: Method?,
-    val shareClickResultClass: Class<*>?,
     val shareBaseInfoClass: Class<*>?,
     val shareContentClass: Class<*>?,
     val shareContentCopyMethods: List<Method>,

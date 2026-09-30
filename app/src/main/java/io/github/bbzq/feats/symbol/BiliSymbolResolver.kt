@@ -49,7 +49,6 @@ object BiliSymbolResolver {
     private const val HP_SHARE = "ShareHook.InstallPoints"
     private const val HP_SHARE_LEGACY = "ShareHook.LegacyShareClickResult"
     private const val HP_SHARE_CHANNELS = "ShareHook.ShareChannels"
-    private const val HP_SHARE_CLICK_RESULT = "ShareHook.ShareClickResult"
     private const val HP_SHARE_BASE_INFO = "ShareHook.ShareBaseInfo"
     private const val HP_SHARE_CONTENT = "ShareHook.ShareContent"
     private const val HP_SHARE_BILI_CONTENT = "ShareHook.ShareBiliContent"
@@ -559,12 +558,6 @@ object BiliSymbolResolver {
             shareChannelItemSetJumpLink,
         ).size
 
-        val shareClickResultScan = findShareClickResultClass(classLoader, bridge)
-        val shareClickResultClass = shareClickResultScan.type
-        val shareClickResultCount = shareClickResultClass?.declaredConstructors
-            ?.count { it.isShareClickResultConstructor() }
-            ?: 0
-
         val shareBaseInfoScan = findShareBaseInfoClass(classLoader, bridge)
         val shareBaseInfoClass = shareBaseInfoScan.type
         val shareBaseInfoCount = shareBaseInfoClass?.declaredConstructors
@@ -619,12 +612,6 @@ object BiliSymbolResolver {
                 "methods=$shareChannelsCount",
             ),
             optionalChildHookPoint(
-                HP_SHARE_CLICK_RESULT,
-                shareClickResultCount > 0,
-                shareClickResultScan.missingReason("share click result class not found"),
-                "constructors=$shareClickResultCount",
-            ),
-            optionalChildHookPoint(
                 HP_SHARE_BASE_INFO,
                 shareBaseInfoCount > 0,
                 shareBaseInfoScan.missingReason("share base info class not found"),
@@ -635,7 +622,7 @@ object BiliSymbolResolver {
             optionalChildHookPoint(HP_SHARE_COPY_CONTENT, copyContentCount > 0, "copy content hooks not found", "methods=$copyContentCount"),
             optionalChildHookPoint(HP_SHARE_COPY_UTILITY, copyUtilityCount > 0, "copy utility hook not found", "methods=$copyUtilityCount"),
         )
-        val total = legacyCount + shareChannelsCount + shareClickResultCount + shareBaseInfoCount +
+        val total = legacyCount + shareChannelsCount + shareBaseInfoCount +
             shareContentCount + shareBiliContentCount + copyContentCount + copyUtilityCount + 1
         val symbols = ShareSymbols(
             legacyGetLink = legacyGetLink?.let(MethodDescriptor::of),
@@ -652,7 +639,6 @@ object BiliSymbolResolver {
             shareChannelsSetText = shareChannelsSetText?.let(MethodDescriptor::of),
             shareChannelItemGetJumpLink = shareChannelItemGetJumpLink?.let(MethodDescriptor::of),
             shareChannelItemSetJumpLink = shareChannelItemSetJumpLink?.let(MethodDescriptor::of),
-            shareClickResultClassName = shareClickResultClass?.name,
             shareBaseInfoClassName = shareBaseInfoClass?.name,
             shareContentClassName = shareContentClass?.name,
             shareContentCopyMethods = shareContentCopyMethods.map(MethodDescriptor::of),
@@ -1726,15 +1712,6 @@ object BiliSymbolResolver {
             .toList()
     }
 
-    private fun findShareClickResultClass(
-        classLoader: ClassLoader,
-        bridge: () -> DexKitBridge?,
-    ): ClassStringScan {
-        return findClassByString(classLoader, bridge, SHARE_CLICK_RESULT_DESCRIPTOR) { type ->
-            type.isShareClickResultType()
-        }
-    }
-
     private fun findShareBaseInfoClass(
         classLoader: ClassLoader,
         bridge: () -> DexKitBridge?,
@@ -1775,27 +1752,6 @@ object BiliSymbolResolver {
                 candidates = candidates.size,
             )
         }
-    }
-
-    private fun Class<*>.isShareClickResultType(): Boolean =
-        declaredConstructors.any { it.isShareClickResultConstructor() }
-
-    private fun java.lang.reflect.Constructor<*>.isShareClickResultConstructor(): Boolean {
-        val params = parameterTypes
-        if (params.size != 13) return false
-        return params[0] == Int::class.javaPrimitiveType &&
-            params[1] == java.lang.Integer::class.java &&
-            params[2] == String::class.java &&
-            params[3] == String::class.java &&
-            params[4] == String::class.java &&
-            params[5] == String::class.java &&
-            params[6] == String::class.java &&
-            params[7] == java.lang.Integer::class.java &&
-            params[8] == String::class.java &&
-            params[9] == String::class.java &&
-            params[10] == String::class.java &&
-            params[11] == String::class.java &&
-            params[12] == java.lang.Boolean::class.java
     }
 
     private fun Class<*>.isShareBaseInfoType(): Boolean =
@@ -4245,7 +4201,6 @@ object BiliSymbolResolver {
     private const val SHARE_LEGACY_RESULT = "com.bilibili.lib.sharewrapper.online.api.ShareClickResult"
     private const val SHARE_CHANNELS = "com.bilibili.lib.sharewrapper.online.api.ShareChannels"
     private const val SHARE_CHANNEL_ITEM = "com.bilibili.lib.sharewrapper.online.api.ShareChannels\$ChannelItem"
-    private const val SHARE_CLICK_RESULT_DESCRIPTOR = "kntr.common.share.core.model.ShareClickResult"
     private const val SHARE_BASE_INFO_TO_STRING = "ShareBaseInfo(title="
     private val SHARE_CONTENT_CLASSES = arrayOf(
         "kntr.common.share.domain.v1.ShareContent",

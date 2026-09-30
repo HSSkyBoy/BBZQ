@@ -25,7 +25,6 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
         var count = 0
         count += hookLegacyShareClickResult(symbols)
         count += hookLegacyShareChannels(symbols)
-        count += hookShareClickResult(symbols)
         count += hookShareBaseInfo(symbols)
         count += hookModernShareContent(symbols)
         count += hookModernCopyContent(symbols)
@@ -99,13 +98,6 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
         count += hookPurifiedStringGetter(symbols.shareChannelItemGetJumpLink, ::purifyLink)
         count += hookPurifiedStringSetter(symbols.shareChannelItemSetJumpLink, ::purifyLink)
         return count
-    }
-
-    private fun hookShareClickResult(symbols: RestoredShareSymbols): Int {
-        val type = symbols.shareClickResultClass ?: return 0
-        return env.hookBeforeAllConstructors(type) { param ->
-            rewriteShareClickResultArgs(param.args)
-        }
     }
 
     private fun hookShareBaseInfo(symbols: RestoredShareSymbols): Int {
@@ -234,19 +226,6 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
         rewriteBiliShareTitle(args, titleIndex = 1, contentIndex = 2, transformAv)
     }
 
-    private fun rewriteShareClickResultArgs(args: MutableList<Any?>) {
-        val transformAv = isMiniProgramEnabled()
-        if (!isShareTransformEnabled(transformAv)) return
-        if (args.size < SHARE_CLICK_RESULT_ARG_COUNT || args[0] !is Int) return
-
-        rewriteStringArg(args, 2, transformAv, ::purifyText)
-        rewriteStringArg(args, 3, transformAv, ::purifyLink)
-        if (transformAv && (args[7] as? Int)?.let { it in MINI_PROGRAM_MODE_VALUES } == true) {
-            args[7] = LINK_MODE_VALUE
-        }
-        rewriteBiliShareTitle(args, titleIndex = 5, contentIndex = 2, transformAv)
-    }
-
     private fun rewriteShareBaseInfoArgs(args: MutableList<Any?>) {
         val transformAv = isMiniProgramEnabled()
         if (!isShareTransformEnabled(transformAv)) return
@@ -263,15 +242,9 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun rewriteLegacyBiliShareTitle(target: Any) {
-        val content = target.getObjectField("content")
-        if (target.getObjectField("title") == BILI_TITLE) {
-            target.setObjectField("title", content)
-            target.setObjectField("content", BBZQ_SHARE_TEXT)
-            return
-        }
-        (content as? String)
-            ?.takeIf { it.startsWith(WATCHED_PREFIX) && !it.contains(BBZQ_SHARE_TEXT) }
-            ?.let { target.setObjectField("content", "$it\n$BBZQ_SHARE_TEXT") }
+        if (target.getObjectField("title") !in APP_NAME_TITLES) return
+        val content = target.getObjectField("content") as? String ?: return
+        target.setObjectField("title", content.take(MAX_TITLE_LENGTH))
     }
 
     private fun rewriteBiliShareTitle(
@@ -281,15 +254,9 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
         transformAv: Boolean,
     ) {
         if (!transformAv || args.size <= maxOf(titleIndex, contentIndex)) return
-        val content = args[contentIndex]
-        if (args[titleIndex] == BILI_TITLE) {
-            args[titleIndex] = content
-            args[contentIndex] = BBZQ_SHARE_TEXT
-            return
-        }
-        (content as? String)
-            ?.takeIf { it.startsWith(WATCHED_PREFIX) && !it.contains(BBZQ_SHARE_TEXT) }
-            ?.let { args[contentIndex] = "$it\n$BBZQ_SHARE_TEXT" }
+        if (args[titleIndex] !in APP_NAME_TITLES) return
+        val content = args[contentIndex] as? String ?: return
+        args[titleIndex] = content.take(MAX_TITLE_LENGTH)
     }
 
     private fun rewriteStringArg(
@@ -326,10 +293,10 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
         isPurifyShareEnabled() || transformAv
 
     private companion object {
-        private const val BILI_TITLE = "\u54d4\u54e9\u54d4\u54e9"
-        private const val BBZQ_SHARE_TEXT = "\u7531 BBZQ \u5206\u4eab"
-        private const val WATCHED_PREFIX = "\u5df2\u89c2\u770b"
-        private const val SHARE_CLICK_RESULT_ARG_COUNT = 13
+        // Generic placeholder titles the app puts on a share card when it has no real title yet
+        // (Simplified/Traditional Chinese, English) -- backfilled from the content instead.
+        private val APP_NAME_TITLES = setOf("\u54d4\u54e9\u54d4\u54e9", "\u55f6\u54e9\u55f6\u54e9", "bilibili")
+        private const val MAX_TITLE_LENGTH = 120
         private const val LINK_MODE_VALUE = 3
         private val MINI_PROGRAM_MODE_VALUES = setOf(6, 7)
     }
