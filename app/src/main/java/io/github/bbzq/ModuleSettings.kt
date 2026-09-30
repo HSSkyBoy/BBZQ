@@ -36,6 +36,8 @@ object ModuleSettings {
     const val KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED = "hide_player_portrait_control_enabled"
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
     const val KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED = "player_long_press_speed_lock_enabled"
+    const val KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED = "player_custom_long_press_speed_enabled"
+    const val KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_VALUE = "player_custom_long_press_speed_value"
     const val KEY_FIX_LIVE_QUALITY_URL_ENABLED = "fix_live_quality_url_enabled"
     const val KEY_FAKE_WIFI_ENABLED = "fake_wifi_enabled"
     const val KEY_DISABLE_HALF_END_PAGE = "disable_half_end_page"
@@ -285,6 +287,9 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_PLAYER_TRIPLE_SPEED_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_PLAYER_TRIPLE_SPEED_ENABLED, false)
         },
+        ExportableConfigSpec(KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED, false)
+        },
         ExportableConfigSpec(KEY_FIX_LIVE_QUALITY_URL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FIX_LIVE_QUALITY_URL_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_CDN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_CDN_ENABLED, false) },
         ExportableConfigSpec(KEY_CDN_WIFI_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CDN_WIFI_ENABLED, false) },
@@ -366,6 +371,9 @@ object ModuleSettings {
         add(ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL, ExportableValueType.INT) { getCommentMinLevel(it) })
         add(ExportableConfigSpec(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, ExportableValueType.INT) { prefs ->
             prefs.getInt(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, 1).coerceIn(1, 12)
+        })
+        add(ExportableConfigSpec(KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_VALUE, ExportableValueType.INT) { prefs ->
+            getPlayerCustomLongPressSpeedTenths(prefs)
         })
         add(ExportableConfigSpec(KEY_PURIFY_STORY_VIDEO_AD_TAGS, ExportableValueType.STRING_SET) {
             it.getStringSet(KEY_PURIFY_STORY_VIDEO_AD_TAGS, defaultStoryVideoAdTags)?.toSet() ?: defaultStoryVideoAdTags
@@ -502,6 +510,21 @@ object ModuleSettings {
 
     fun isPlayerLongPressSpeedLockEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED, false)
+
+    const val MIN_CUSTOM_LONG_PRESS_SPEED_TENTHS = 10
+    const val MAX_CUSTOM_LONG_PRESS_SPEED_TENTHS = 80
+    const val DEFAULT_CUSTOM_LONG_PRESS_SPEED_TENTHS = 30
+
+    fun isPlayerCustomLongPressSpeedEnabled(prefs: SharedPreferences): Boolean =
+        isPlayerTripleSpeedEnabled(prefs) &&
+            prefs.getBoolean(KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED, false)
+
+    fun getPlayerCustomLongPressSpeedTenths(prefs: SharedPreferences): Int =
+        prefs.getInt(KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_VALUE, DEFAULT_CUSTOM_LONG_PRESS_SPEED_TENTHS)
+            .coerceIn(MIN_CUSTOM_LONG_PRESS_SPEED_TENTHS, MAX_CUSTOM_LONG_PRESS_SPEED_TENTHS)
+
+    fun getPlayerCustomLongPressSpeedValue(prefs: SharedPreferences): Float =
+        getPlayerCustomLongPressSpeedTenths(prefs) / 10f
 
     fun isSkipVideoAdEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SKIP_VIDEO_AD_ENABLED, false)

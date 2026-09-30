@@ -385,6 +385,10 @@
     <string name="playback_triple_speed_summary">3 倍速是服务端灰度 A/B 实验，开启后强制进入实验组，倍速菜单新增 3.0X 档位並去除原有的 50 帧限制。需重启哔哩哔哩后生效。</string>
     <string name="playback_long_press_speed_lock_title">长按倍速锁定</string>
     <string name="playback_long_press_speed_lock_summary">仅横屏：长按播放时向下滑可锁定倍速；再次长按并向下滑动可解除。需重启哔哩哔哩后生效。</string>
+    <string name="playback_custom_long_press_speed_title">自定义长按倍速数值</string>
+    <string name="playback_custom_long_press_speed_summary">需先开启“解锁播放器 3 倍速”。开启后可将长按快进使用的倍速替换为下方自定义数值（如 2.5×、4×），不再局限于固定的 3.0 倍速。需重启哔哩哔哩后生效。</string>
+    <string name="playback_custom_long_press_speed_value_title">长按倍速数值</string>
+    <string name="playback_custom_long_press_speed_value_summary">当前：%1$.1f 倍</string>
     <string name="cdn_wifi_priority_title">CDN 设置</string>
     <string name="cdn_wifi_priority_summary_empty">依次使用：备用 URL → 基础 URL（不推荐）</string>
     <string name="cdn_wifi_priority_summary_set">依次使用：备用 URL → %1$s → 基础 URL（不推荐）</string>

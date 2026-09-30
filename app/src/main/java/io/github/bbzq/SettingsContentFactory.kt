@@ -95,6 +95,10 @@ class SettingsContentFactory(
     private lateinit var storyVideoImmersiveFullscreenSwitch: Switch
     private lateinit var storyVideoComponentAlphaSummary: TextView
     private lateinit var storyVideoComponentAlphaSeekBar: SeekBar
+    private lateinit var customLongPressSpeedSwitch: Switch
+    private lateinit var customLongPressSpeedRow: View
+    private lateinit var customLongPressSpeedSummary: TextView
+    private lateinit var customLongPressSpeedSeekBar: SeekBar
     private lateinit var skipVideoAdAutoLikeSwitch: Switch
     private lateinit var blockedCountView: TextView
     private lateinit var customMineComponentHideSwitch: Switch
@@ -601,6 +605,15 @@ class SettingsContentFactory(
             ModuleSettings.KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_custom_long_press_speed_title),
+            context.getString(R.string.playback_custom_long_press_speed_summary),
+            ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED,
+            false,
+        ) {
+            customLongPressSpeedSwitch = it
+        }
+        rows += createCustomLongPressSpeedRow()
         rows += createSwitchRow(
             context.getString(R.string.playback_disable_half_end_page_title),
             context.getString(R.string.playback_disable_half_end_page_summary),
@@ -2148,6 +2161,58 @@ class SettingsContentFactory(
         }
     }
 
+    private fun createCustomLongPressSpeedRow(): View {
+        customLongPressSpeedSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+        }
+        customLongPressSpeedSeekBar = SeekBar(context).apply {
+            max = ModuleSettings.MAX_CUSTOM_LONG_PRESS_SPEED_TENTHS - ModuleSettings.MIN_CUSTOM_LONG_PRESS_SPEED_TENTHS
+            progress = ModuleSettings.getPlayerCustomLongPressSpeedTenths(prefs) - ModuleSettings.MIN_CUSTOM_LONG_PRESS_SPEED_TENTHS
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val tenths = progress + ModuleSettings.MIN_CUSTOM_LONG_PRESS_SPEED_TENTHS
+                    if (!refreshing) {
+                        customLongPressSpeedSummary.text = customLongPressSpeedSummary(tenths)
+                    }
+                    if (fromUser) {
+                        prefs.edit()
+                            .putInt(ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_VALUE, tenths)
+                            .apply()
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            addView(TextView(context).apply {
+                text = context.getString(R.string.playback_custom_long_press_speed_value_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(customLongPressSpeedSummary.apply {
+                setPadding(0, dp(4), 0, dp(8))
+            })
+            addView(customLongPressSpeedSeekBar)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.playback_custom_long_press_speed_value_title),
+                context.getString(R.string.playback_custom_long_press_speed_value_title),
+                ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_VALUE,
+            )
+        }.also {
+            customLongPressSpeedRow = it
+        }
+    }
+
+    private fun customLongPressSpeedSummary(tenths: Int): String =
+        context.getString(R.string.playback_custom_long_press_speed_value_summary, tenths / 10f)
+
     private fun createTagGroup(): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -2522,7 +2587,9 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_SKIP_VIDEO_AD_AUTO_LIKE_ENABLED
 
     private fun shouldRefreshAfterSwitchChanged(key: String): Boolean =
-        key == ModuleSettings.KEY_PURIFY_STORY_VIDEO_AD_ENABLED ||
+        key == ModuleSettings.KEY_PLAYER_TRIPLE_SPEED_ENABLED ||
+            key == ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED ||
+            key == ModuleSettings.KEY_PURIFY_STORY_VIDEO_AD_ENABLED ||
             key == ModuleSettings.KEY_DISABLE_LONG_PRESS_COPY_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_BOTTOM_BAR_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_THEME_ENABLED ||
@@ -2827,6 +2894,23 @@ class SettingsContentFactory(
             val alphaPercent = ModuleSettings.getStoryVideoComponentAlphaPercent(prefs)
             storyVideoComponentAlphaSeekBar.progress = alphaPercent
             storyVideoComponentAlphaSummary.text = storyVideoComponentAlphaSummary(alphaPercent)
+        }
+        val customLongPressSpeedEnabled = prefs.getBoolean(ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED, false)
+        if (::customLongPressSpeedSwitch.isInitialized) {
+            customLongPressSpeedSwitch.isChecked = customLongPressSpeedEnabled
+        }
+        if (::customLongPressSpeedSeekBar.isInitialized) {
+            val tenths = ModuleSettings.getPlayerCustomLongPressSpeedTenths(prefs)
+            customLongPressSpeedSeekBar.progress = tenths - ModuleSettings.MIN_CUSTOM_LONG_PRESS_SPEED_TENTHS
+            customLongPressSpeedSummary.text = customLongPressSpeedSummary(tenths)
+        }
+        if (::customLongPressSpeedRow.isInitialized) {
+            val rowEnabled = customLongPressSpeedEnabled && ModuleSettings.isPlayerTripleSpeedEnabled(prefs)
+            customLongPressSpeedRow.isEnabled = rowEnabled
+            customLongPressSpeedRow.alpha = if (rowEnabled) 1f else 0.45f
+            if (::customLongPressSpeedSeekBar.isInitialized) {
+                customLongPressSpeedSeekBar.isEnabled = rowEnabled
+            }
         }
         if (::skipVideoAdAutoLikeSwitch.isInitialized) {
             skipVideoAdAutoLikeSwitch.isChecked = skipVideoAdAutoLikeEnabled
