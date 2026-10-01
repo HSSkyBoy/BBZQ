@@ -2787,13 +2787,34 @@ object BiliSymbolResolver {
             .flatMap { type -> type.declaredMethods.asSequence() }
             .filter { method -> method.isKmpNumberFormatterMethod() }
             .toList()
-        val methods = (legacyMethods + kmpMethods).distinctBy(Method::toGenericString)
+        // Other call sites inline their own "万"/"亿" formatting; collect compact-count formatters by
+        // their unit strings. The hook only rewrites a result that provably equals the compact form
+        // of its numeric argument, so a loose match here cannot corrupt unrelated text.
+        val heuristicMethods = bridge()?.let { currentBridge ->
+            COMPACT_UNIT_STRINGS.flatMap { unit ->
+                runCatching {
+                    currentBridge.findMethod(
+                        FindMethod.create().matcher(MethodMatcher.create().usingStrings(unit)),
+                    ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                }.getOrDefault(emptyList())
+            }
+        }.orEmpty()
+            .filter { method ->
+                method.returnType == String::class.java &&
+                    method.parameterCount in 1..3 &&
+                    method.parameterTypes[0].let { it == Long::class.javaPrimitiveType || it == Int::class.javaPrimitiveType } &&
+                    !method.declaringClass.name.startsWith("kotlin.") &&
+                    !method.declaringClass.name.startsWith("android")
+            }
+            .onEach { it.isAccessible = true }
+            .take(MAX_HEURISTIC_NUMBER_METHODS)
+        val methods = (legacyMethods + kmpMethods + heuristicMethods).distinctBy(Method::toGenericString)
         if (methods.isEmpty()) return SymbolScanResult.Missing("number formatter methods not found")
 
         val symbols = FullNumberFormatSymbols(
             formatterMethods = methods.map(MethodDescriptor::of),
             evidence = "classes=${formatterClasses.size},legacy=${legacyMethods.size},kmp=${kmpMethods.size}," +
-                "kmpCore=${kmpCoreClass?.name ?: "missing"}",
+                "kmpCore=${kmpCoreClass?.name ?: "missing"},heuristic=${heuristicMethods.size}",
         )
         return SymbolScanResult.Found(
             symbols,
@@ -4436,6 +4457,8 @@ object BiliSymbolResolver {
         "formatLong",
         "formatByEng",
     )
+    private val COMPACT_UNIT_STRINGS = listOf("万", "亿", "萬", "億")
+    private const val MAX_HEURISTIC_NUMBER_METHODS = 120
     private const val KMP_NUMBER_FORMAT_RULE_KEY = "localization.number_format_rule"
     private val KMP_NUMBER_FORMAT_FACADE_NAMES = listOf("kntr.base.localization.NumberFormat_androidKt")
     private val THESEUS_TAB_PAGER_SERVICE = arrayOf(

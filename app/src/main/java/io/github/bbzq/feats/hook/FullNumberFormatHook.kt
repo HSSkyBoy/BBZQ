@@ -15,7 +15,10 @@ class FullNumberFormatHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         val methods = env.symbols?.fullNumberFormat?.restore(classLoader)?.formatterMethods.orEmpty()
         methods.forEach { method ->
-            env.hookBefore(method) { param ->
+            val exactFormatter = method.declaringClass.name.let {
+                it.contains("NumberFormat") || it.startsWith("kntr.base.localization")
+            }
+            if (exactFormatter) env.hookBefore(method) { param ->
                 if (!ModuleSettings.isFullNumberFormatEnabled(prefs)) return@hookBefore
 
                 val rawNumber = when (val value = param.args.firstOrNull()) {
@@ -27,6 +30,13 @@ class FullNumberFormatHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (rawNumber >= 0) {
                     param.result = rawNumber.toString()
                 }
+            }
+            env.hookAfter(method) { param ->
+                if (!ModuleSettings.isFullNumberFormatEnabled(prefs)) return@hookAfter
+                val result = param.result as? String ?: return@hookAfter
+                val rawNumber = (param.args.firstOrNull() as? Number)?.toLong() ?: return@hookAfter
+                val expanded = expandCompact(result, rawNumber)
+                if (expanded != result) param.result = expanded
             }
         }
 
@@ -90,6 +100,17 @@ class FullNumberFormatHook(env: RoamingEnv) : BaseRoamingHook(env) {
         root.setCountText("likes", likes)
     }
 
+    // Only rewrites a "1.2万"-style token when it equals the compact form of the argument.
+    private fun expandCompact(text: String, rawNumber: Long): String {
+        if (rawNumber < COMPACT_MIN) return text
+        return COMPACT_TOKEN.replace(text) { match ->
+            val value = match.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@replace match.value
+            val unit = if (match.groupValues[2] in YI_UNITS) 100_000_000.0 else 10_000.0
+            val approx = value * unit
+            if (approx >= rawNumber * 0.9 && approx <= rawNumber * 1.1) rawNumber.toString() else match.value
+        }
+    }
+
     private fun Any.rootView(): View? = javaClass.methods.firstOrNull {
         it.name == "getView" && it.parameterCount == 0 && View::class.java.isAssignableFrom(it.returnType)
     }?.runCatching { invoke(this@rootView) as? View }?.getOrNull()
@@ -139,6 +160,9 @@ class FullNumberFormatHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }.getOrNull()
 
     private companion object {
+        const val COMPACT_MIN = 10_000L
+        val COMPACT_TOKEN = Regex("""(\d+(?:[.,]\d+)*)\s*([万亿萬億WwＷ])""")
+        val YI_UNITS = setOf("亿", "億")
         val SPACE_HEADER_FRAGMENT_CLASSES = arrayOf(
             "com.bilibili.app.authorspace.ui.SpaceHeaderFragment2",
             "com.bilibili.p4439app.authorspace.ui.SpaceHeaderFragment2",
