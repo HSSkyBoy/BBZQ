@@ -373,7 +373,7 @@ object BiliSymbolResolver {
             scanChronosPromotion(classLoader, ::bridge)
         }
         val fullNumberFormat = scanHookPoint(HP_FULL_NUMBER_FORMAT, hookPoints, scanErrors, log) {
-            scanFullNumberFormat(classLoader)
+            scanFullNumberFormat(classLoader, ::bridge)
         }
         val tripleSpeed = scanHookPoint(HP_TRIPLE_SPEED, hookPoints, scanErrors, log) {
             scanTripleSpeed(classLoader, ::bridge)
@@ -2757,29 +2757,65 @@ object BiliSymbolResolver {
 
     private fun scanFullNumberFormat(
         classLoader: ClassLoader,
+        bridge: () -> DexKitBridge?,
     ): SymbolScanResult<FullNumberFormatSymbols> {
         val formatterClasses = NUMBER_FORMAT_CLASS_NAMES
             .asSequence()
             .mapNotNull { classLoader.loadClassOrNull(it) }
             .distinctBy { it.name }
             .toList()
-        val methods = formatterClasses
+        val legacyMethods = formatterClasses
             .asSequence()
             .flatMap { type -> type.allMethods() }
             .filter { method -> method.isFullNumberFormatterMethod() }
-            .distinctBy(Method::toGenericString)
             .toList()
+        // The KMP formatter (万/亿 threshold rules) backs newer screens; its core class is only
+        // reachable through the remote-config key it reads, so find it by that string.
+        val kmpCoreClass = bridge()?.let { currentBridge ->
+            runCatching {
+                currentBridge.findMethod(
+                    FindMethod.create().matcher(MethodMatcher.create().usingStrings(KMP_NUMBER_FORMAT_RULE_KEY)),
+                ).mapNotNull { runCatching { it.getMethodInstance(classLoader).declaringClass }.getOrNull() }
+                    .distinctBy { it.name }
+                    .singleOrNull()
+            }.getOrNull()
+        }
+        val kmpMethods = (formatterClasses + listOfNotNull(kmpCoreClass))
+            .asSequence()
+            .plus(KMP_NUMBER_FORMAT_FACADE_NAMES.mapNotNull { classLoader.loadClassOrNull(it) })
+            .distinctBy { it.name }
+            .flatMap { type -> type.declaredMethods.asSequence() }
+            .filter { method -> method.isKmpNumberFormatterMethod() }
+            .toList()
+        val methods = (legacyMethods + kmpMethods).distinctBy(Method::toGenericString)
         if (methods.isEmpty()) return SymbolScanResult.Missing("number formatter methods not found")
 
         val symbols = FullNumberFormatSymbols(
             formatterMethods = methods.map(MethodDescriptor::of),
-            evidence = "classes=${formatterClasses.size},methods=${methods.size}",
+            evidence = "classes=${formatterClasses.size},legacy=${legacyMethods.size},kmp=${kmpMethods.size}," +
+                "kmpCore=${kmpCoreClass?.name ?: "missing"}",
         )
         return SymbolScanResult.Found(
             symbols,
             methods.joinToString("|") { "${it.declaringClass.name}.${it.name}" },
             symbols.evidence,
         )
+    }
+
+    // formatNumber(long|int, String, int) is the stable facade; the core class takes
+    // (long, int, boolean) and (int, int) and returns the formatted string directly.
+    private fun Method.isKmpNumberFormatterMethod(): Boolean {
+        if (!Modifier.isStatic(modifiers) || returnType != String::class.java) return false
+        val params = parameterTypes
+        val first = params.firstOrNull()
+        if (first != Long::class.javaPrimitiveType && first != Int::class.javaPrimitiveType) return false
+        val facade = name == "formatNumber" && params.size == 3 &&
+            params[1] == String::class.java && params[2] == Int::class.javaPrimitiveType
+        val coreLong = params.size == 3 && first == Long::class.javaPrimitiveType &&
+            params[1] == Int::class.javaPrimitiveType && params[2] == Boolean::class.javaPrimitiveType
+        val coreInt = params.size == 2 && first == Int::class.javaPrimitiveType &&
+            params[1] == Int::class.javaPrimitiveType
+        return facade || (declaringClass.name !in KMP_NUMBER_FORMAT_FACADE_NAMES && (coreLong || coreInt))
     }
 
     private fun Method.isFullNumberFormatterMethod(): Boolean {
@@ -4394,7 +4430,14 @@ object BiliSymbolResolver {
     private val FULL_NUMBER_FORMAT_METHOD_NAMES = setOf(
         "format",
         "formatWithComma",
+        "formatTitle",
+        "formatStr",
+        "formatWithInter",
+        "formatLong",
+        "formatByEng",
     )
+    private const val KMP_NUMBER_FORMAT_RULE_KEY = "localization.number_format_rule"
+    private val KMP_NUMBER_FORMAT_FACADE_NAMES = listOf("kntr.base.localization.NumberFormat_androidKt")
     private val THESEUS_TAB_PAGER_SERVICE = arrayOf(
         "com.bilibili.ship.theseus.united.page.tab.TheseusTabPagerService",
         "com.bilibili.p5797ship.theseus.united.p5850page.p5861tab.TheseusTabPagerService",
