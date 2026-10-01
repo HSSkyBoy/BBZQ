@@ -44,6 +44,7 @@ import io.github.bbzq.feats.hook.StoryDefaultLaunchHook
 import io.github.bbzq.feats.hook.StoryDetailRedirectHook
 import io.github.bbzq.feats.hook.StoryFullscreenHook
 import io.github.bbzq.feats.hook.StoryPlayerAdHook
+import io.github.bbzq.feats.hook.BackgroundPlayHook
 import io.github.bbzq.feats.hook.BlockUpdateHook
 import io.github.bbzq.feats.hook.VideoCommentHook
 import io.github.bbzq.feats.hook.VideoDetailBannerAdHook
@@ -224,6 +225,7 @@ object RoamingRuntime {
                 ::BlockActivityMetaStickerHook,
                 ::LiveRoomBlurMaskHook,
                 ::LiveReservationHook,
+                ::BackgroundPlayHook,
                 ::LiveRoomVerticalSwipeHook,
                 ::MediaSessionFixHook,
                 ::VideoEndRecommendHook,

@@ -35,6 +35,7 @@ object ModuleSettings {
     const val KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED = "player_transparent_status_bar_enabled"
     const val KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED = "hide_player_portrait_control_enabled"
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
+    const val KEY_DISABLE_BACKGROUND_PLAY_ENABLED = "disable_background_play_enabled"
     const val KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED = "player_long_press_speed_lock_enabled"
     const val KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED = "player_custom_long_press_speed_enabled"
     const val KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_VALUE = "player_custom_long_press_speed_value"
@@ -289,6 +290,9 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_VIDEO_DOWNLOAD_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_VIDEO_DOWNLOAD_ENABLED, false)
         },
+        ExportableConfigSpec(KEY_DISABLE_BACKGROUND_PLAY_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_DISABLE_BACKGROUND_PLAY_ENABLED, false)
+        },
         ExportableConfigSpec(KEY_PLAYER_TRIPLE_SPEED_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_PLAYER_TRIPLE_SPEED_ENABLED, false)
         },
@@ -512,6 +516,9 @@ object ModuleSettings {
 
     fun isHidePlayerPortraitControlEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED, false)
+
+    fun isDisableBackgroundPlayEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_DISABLE_BACKGROUND_PLAY_ENABLED, false)
 
     fun isPlayerTripleSpeedEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_PLAYER_TRIPLE_SPEED_ENABLED, false)
