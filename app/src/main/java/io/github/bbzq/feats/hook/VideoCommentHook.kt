@@ -235,6 +235,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return ReplyCleanupOptions(
             removeQoe = ModuleSettings.isCommentNoQoeEnabled(prefs),
             removeOperation = ModuleSettings.isCommentNoOperationEnabled(prefs),
+            removeHotspot = ModuleSettings.isCommentNoHotspotEnabled(prefs),
             keywords = keywords,
             minLevel = minLevel,
         )
@@ -261,6 +262,10 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 }
             }
 
+            if (options.removeHotspot) {
+                removeHotspotCards(current, methods)
+            }
+
             val children = methods.getRepliesList
                 ?.let { runCatching { it.invoke(current) as? List<*> }.getOrNull() }
                 .orEmpty()
@@ -276,6 +281,20 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 }
             } else {
                 children.filterNotNullTo(pending)
+            }
+        }
+    }
+
+    private fun removeHotspotCards(target: Any, methods: ReplyCleanupMethods) {
+        val getCards = methods.getMixedCardsList ?: return
+        val removeCard = methods.removeMixedCards ?: return
+        val cards = runCatching { getCards.invoke(target) as? List<*> }.getOrNull() ?: return
+        for (index in cards.indices.reversed()) {
+            val card = cards[index] ?: continue
+            val itemCase = noArgMethod(card.javaClass, "getItemCase")
+                ?.let { runCatching { it.invoke(card) }.getOrNull() }
+            if (itemCase?.toString() == HOTSPOT_ITEM_CASE) {
+                runCatching { removeCard.invoke(target, index) }
             }
         }
     }
@@ -336,6 +355,14 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 .filter { it.name in CLEAR_OPERATION_METHOD_NAMES && it.parameterCount == 0 }
                 .distinctBy(Method::toGenericString)
                 .toList(),
+            getMixedCardsList = type.declaredMethods
+                .firstOrNull { it.name == "getMixedCardsList" && it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) },
+            removeMixedCards = type.declaredMethods
+                .firstOrNull {
+                    it.name == "removeMixedCards" && it.parameterCount == 1 &&
+                        it.parameterTypes[0] == Int::class.javaPrimitiveType
+                }
+                ?.apply { isAccessible = true },
             getRepliesList = type.declaredMethods
                 .firstOrNull { it.name == "getRepliesList" && it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) },
             removeReplies = type.declaredMethods
@@ -433,6 +460,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private companion object {
+        private const val HOTSPOT_ITEM_CASE = "HOTSPOT"
         private val CLEAR_OPERATION_METHOD_NAMES = setOf("clearOperation", "clearOperationV2")
         private val replyCleanupMethods = ConcurrentHashMap<Class<*>, ReplyCleanupMethods>()
         private val noArgMethodCache = ConcurrentHashMap<String, MethodLookup>()
@@ -453,16 +481,19 @@ private data class PublishDialogIntentFields(
 private data class ReplyCleanupOptions(
     val removeQoe: Boolean,
     val removeOperation: Boolean,
+    val removeHotspot: Boolean,
     val keywords: List<String>,
     val minLevel: Int,
 ) {
     val filtersActive: Boolean get() = keywords.isNotEmpty() || minLevel > 0
-    val active: Boolean get() = removeQoe || removeOperation || filtersActive
+    val active: Boolean get() = removeQoe || removeOperation || removeHotspot || filtersActive
 }
 
 private data class ReplyCleanupMethods(
     val clearQoe: Method?,
     val clearOperations: List<Method>,
+    val getMixedCardsList: Method?,
+    val removeMixedCards: Method?,
     val getRepliesList: Method?,
     val removeReplies: Method?,
 )

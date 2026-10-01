@@ -346,6 +346,8 @@
     <string name="comment_no_qoe_summary">屏蔽评论区体验反馈和问卷弹窗。</string>
     <string name="comment_no_operation_title">移除评论区运营推广</string>
     <string name="comment_no_operation_summary">隐藏评论区顶部的运营活动和推广横幅。</string>
+    <string name="comment_no_hotspot_title">移除评论区热点讨论</string>
+    <string name="comment_no_hotspot_summary">隐藏评论区中穿插的热点讨论卡片。</string>
     <string name="comment_keyword_filter_title">按关键词屏蔽评论</string>
     <string name="comment_keyword_filter_summary">评论正文包含设定关键词时，隐藏该评论及其楼中楼。</string>
     <string name="comment_keyword_row_title">评论屏蔽关键词</string>

@@ -721,6 +721,12 @@ class SettingsContentFactory(
                 ModuleSettings.KEY_COMMENT_NO_OPERATION,
                 false,
             ),
+            createSwitchRow(
+                context.getString(R.string.comment_no_hotspot_title),
+                context.getString(R.string.comment_no_hotspot_summary),
+                ModuleSettings.KEY_COMMENT_NO_HOTSPOT,
+                false,
+            ),
         )
     }
 

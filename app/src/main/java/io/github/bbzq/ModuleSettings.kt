@@ -125,6 +125,7 @@ object ModuleSettings {
     const val KEY_COMMENT_NO_EMPTY_PAGE = "vid_comment_no_empty_page"
     const val KEY_COMMENT_NO_QOE = "vid_comment_no_qoe"
     const val KEY_COMMENT_NO_OPERATION = "vid_comment_no_operation"
+    const val KEY_COMMENT_NO_HOTSPOT = "vid_comment_no_hotspot"
     const val KEY_COMMENT_KEYWORD_FILTER_ENABLED = "vid_comment_keyword_filter_enabled"
     const val KEY_COMMENT_KEYWORDS = "vid_comment_keywords"
     const val KEY_COMMENT_MIN_LEVEL_ENABLED = "vid_comment_min_level_enabled"
@@ -360,6 +361,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_COMMENT_NO_EMPTY_PAGE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_EMPTY_PAGE, false) },
         ExportableConfigSpec(KEY_COMMENT_NO_QOE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_QOE, false) },
         ExportableConfigSpec(KEY_COMMENT_NO_OPERATION, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_OPERATION, false) },
+        ExportableConfigSpec(KEY_COMMENT_NO_HOTSPOT, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_HOTSPOT, false) },
         ExportableConfigSpec(KEY_COMMENT_KEYWORD_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_KEYWORD_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_MIN_LEVEL_ENABLED, false) },
         ExportableConfigSpec(KEY_MINE_REMOVE_VIP, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_REMOVE_VIP, false) },
@@ -1027,6 +1029,9 @@ object ModuleSettings {
 
     fun isCommentNoOperationEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_COMMENT_NO_OPERATION, false)
+
+    fun isCommentNoHotspotEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_COMMENT_NO_HOTSPOT, false)
 
     fun isCommentKeywordFilterEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_COMMENT_KEYWORD_FILTER_ENABLED, false)
