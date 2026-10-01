@@ -84,7 +84,6 @@ object MediaMuxerUtil {
             var videoEos = false
             var audioEos = false
 
-            var lastVideoPts = -1L
             var lastAudioPts = -1L
 
             while (!videoEos || !audioEos) {
@@ -97,21 +96,18 @@ object MediaMuxerUtil {
                         videoEos = true
                     } else {
                         val samplePts = videoExtractor.sampleTime
-                        if (samplePts >= lastVideoPts) {
-                            videoBufferInfo.offset = 0
-                            videoBufferInfo.size = sampleSize
-                            videoBufferInfo.presentationTimeUs = samplePts
-                            val sampleKind = MuxSamplePolicy.classify(videoExtractor.sampleFlags)
-                            if (sampleKind == MuxSampleKind.UNSUPPORTED) {
-                                Log.e(TAG, "mux: Unsupported video sample flags")
-                                return false
-                            }
-                            videoBufferInfo.flags = if (sampleKind == MuxSampleKind.KEY_FRAME) {
-                                MediaCodec.BUFFER_FLAG_KEY_FRAME
-                            } else 0
-                            muxer.writeSampleData(outVideoTrackIndex, videoBuffer, videoBufferInfo)
-                            lastVideoPts = samplePts
+                        videoBufferInfo.offset = 0
+                        videoBufferInfo.size = sampleSize
+                        videoBufferInfo.presentationTimeUs = samplePts
+                        val sampleKind = MuxSamplePolicy.classify(videoExtractor.sampleFlags)
+                        if (sampleKind == MuxSampleKind.UNSUPPORTED) {
+                            Log.e(TAG, "mux: Unsupported video sample flags")
+                            return false
                         }
+                        videoBufferInfo.flags = if (sampleKind == MuxSampleKind.KEY_FRAME) {
+                            MediaCodec.BUFFER_FLAG_KEY_FRAME
+                        } else 0
+                        muxer.writeSampleData(outVideoTrackIndex, videoBuffer, videoBufferInfo)
                         videoExtractor.advance()
                     }
                 } else if (!audioEos) {
