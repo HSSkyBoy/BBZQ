@@ -57,6 +57,7 @@ import io.github.bbzq.feats.hook.LongPressSpeedLockHook
 import io.github.bbzq.feats.hook.ReadEraHook
 import io.github.bbzq.feats.hook.BlockActivityMetaStickerHook
 import io.github.bbzq.feats.hook.WoMicHook
+import io.github.bbzq.feats.hook.LiveReservationHook
 import io.github.bbzq.feats.hook.LiveRoomBlurMaskHook
 import io.github.bbzq.feats.hook.LiveRoomVerticalSwipeHook
 import io.github.bbzq.feats.hook.MediaSessionFixHook
@@ -222,6 +223,7 @@ object RoamingRuntime {
                 ::CustomThemeHook,
                 ::BlockActivityMetaStickerHook,
                 ::LiveRoomBlurMaskHook,
+                ::LiveReservationHook,
                 ::LiveRoomVerticalSwipeHook,
                 ::MediaSessionFixHook,
                 ::VideoEndRecommendHook,

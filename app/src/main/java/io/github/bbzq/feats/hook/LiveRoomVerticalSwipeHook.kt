@@ -24,8 +24,6 @@ class LiveRoomVerticalSwipeHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return
         }
 
-        // 翻页容器内部是 RecyclerView 子类，其 onInterceptTouchEvent/onTouchEvent 由“用户输入开关”控制；
-        // 直接让它们恒为 false，与宿主自身禁止滑动时的状态一致，程序化翻页（smoothScrollToPosition）不受影响。
         val innerClass = pagerClass.declaredFields
             .map { it.type }
             .firstOrNull { it != recyclerClass && recyclerClass.isAssignableFrom(it) }
