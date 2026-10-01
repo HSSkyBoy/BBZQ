@@ -222,6 +222,8 @@
     <string name="search_hot_clean_summary">移除搜索界面的热搜榜和猜你想搜推荐，仅保留搜索历史记录。</string>
     <string name="search_suggest_clean_title">隐藏搜索联想词</string>
     <string name="search_suggest_clean_summary">在搜索框输入文字时不展示搜索联想词和卡片推荐。</string>
+    <string name="search_result_ad_block_title">屏蔽搜索结果广告</string>
+    <string name="search_result_ad_block_summary">移除综合搜索结果中的广告推广卡片和相关商品卡片。</string>
 
     <!-- 播放页 -->
     <string name="playback_hide_banner_title">屏蔽视频页广告</string>

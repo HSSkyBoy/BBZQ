@@ -110,6 +110,7 @@ object ModuleSettings {
     const val KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED = "hide_home_search_default_word_enabled"
     const val KEY_SEARCH_HOT_CLEAN_ENABLED = "search_hot_clean_enabled"
     const val KEY_SEARCH_SUGGEST_CLEAN_ENABLED = "search_suggest_clean_enabled"
+    const val KEY_SEARCH_RESULT_AD_BLOCK_ENABLED = "search_result_ad_block_enabled"
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
     const val KEY_LAST_ACCESS_KEY = "last_access_key"
@@ -349,6 +350,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, false) },
         ExportableConfigSpec(KEY_SEARCH_HOT_CLEAN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEARCH_HOT_CLEAN_ENABLED, false) },
         ExportableConfigSpec(KEY_SEARCH_SUGGEST_CLEAN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEARCH_SUGGEST_CLEAN_ENABLED, false) },
+        ExportableConfigSpec(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_COMMENT_GIF_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_UNLOCK_COMMENT_GIF_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_DESKTOP_ICON, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_DESKTOP_ICON, false) },
@@ -993,6 +995,9 @@ object ModuleSettings {
 
     fun isSearchSuggestCleanEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SEARCH_SUGGEST_CLEAN_ENABLED, false)
+
+    fun isSearchResultAdBlockEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, false)
 
     fun isFullNumberFormatEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false)

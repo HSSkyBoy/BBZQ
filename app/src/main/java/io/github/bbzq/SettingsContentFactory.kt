@@ -475,6 +475,12 @@ class SettingsContentFactory(
             ModuleSettings.KEY_SEARCH_SUGGEST_CLEAN_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.search_result_ad_block_title),
+            context.getString(R.string.search_result_ad_block_summary),
+            ModuleSettings.KEY_SEARCH_RESULT_AD_BLOCK_ENABLED,
+            false,
+        )
         return rows
     }
 
