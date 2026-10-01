@@ -249,6 +249,8 @@
     <string name="playback_disable_all_end_page_title">去除全部结束推荐</string>
     <string name="playback_disable_all_end_page_summary">视频播完时去除半屏、横屏全屏、竖屏全屏的所有结束推荐页，干净定格在视频末尾。</string>
     <string name="playback_fix_media_session_card_title">修复系统媒体卡片与封面</string>
+    <string name="split_screen_fullscreen_title">分屏下允许全屏播放</string>
+    <string name="split_screen_fullscreen_summary">解除分屏模式下点击播放器全屏按钮提示“暂不支持全屏播放”的限制。需重启哔哩哔哩后生效。</string>
     <string name="disable_background_play_title">强制关闭后台听视频</string>
     <string name="disable_background_play_summary">无论云端同步或其他入口如何开启，都不再允许锁屏或切到后台后继续播放视频声音。</string>
     <string name="playback_fix_media_session_card_summary">修复后台听视频时封面背景模糊变纯色、以及媒体卡片从系统媒体中心消失的问题。</string>

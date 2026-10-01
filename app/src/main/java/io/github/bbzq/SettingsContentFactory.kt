@@ -512,6 +512,12 @@ class SettingsContentFactory(
             false,
         )
         rows += createSwitchRow(
+            context.getString(R.string.split_screen_fullscreen_title),
+            context.getString(R.string.split_screen_fullscreen_summary),
+            ModuleSettings.KEY_SPLIT_SCREEN_FULLSCREEN_ENABLED,
+            false,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.video_detail_relate_custom_filter_title),
             context.getString(R.string.video_detail_relate_custom_filter_summary),
             ModuleSettings.KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED,
