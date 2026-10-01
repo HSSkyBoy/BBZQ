@@ -525,6 +525,12 @@ class SettingsContentFactory(
             ModuleSettings.KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED,
             false,
         )
+        rows += createSwitchRow(
+            context.getString(R.string.disable_live_room_vertical_swipe_title),
+            context.getString(R.string.disable_live_room_vertical_swipe_summary),
+            ModuleSettings.KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED,
+            false,
+        )
         rows += createVideoDetailRelateTitleKeywordRow()
         val relateTypes = videoDetailRelateTypes()
         if (relateTypes.isEmpty()) {

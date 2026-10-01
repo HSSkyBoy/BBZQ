@@ -94,6 +94,7 @@ object ModuleSettings {
     const val KEY_BLOCK_LIVE_RESERVATION_ENABLED = "block_live_reservation_enabled"
     const val KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED = "block_live_room_qoe_popup_enabled"
     const val KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED = "remove_live_room_blur_mask_enabled"
+    const val KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED = "disable_live_room_vertical_swipe_enabled"
     const val KEY_DISABLE_LONG_PRESS_COPY_ENABLED = "disable_long_press_copy_enabled"
     const val KEY_ENHANCE_LONG_PRESS_COPY_ENABLED = "enhance_long_press_copy_enabled"
     const val KEY_CUSTOM_BOTTOM_BAR_ENABLED = "custom_bottom_bar_enabled"
@@ -334,6 +335,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_BLOCK_LIVE_RESERVATION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_LIVE_RESERVATION_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED, false) },
         ExportableConfigSpec(KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED, false) },
+        ExportableConfigSpec(KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED, false) },
         ExportableConfigSpec(KEY_DISABLE_LONG_PRESS_COPY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_DISABLE_LONG_PRESS_COPY_ENABLED, false) },
         ExportableConfigSpec(KEY_ENHANCE_LONG_PRESS_COPY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_ENHANCE_LONG_PRESS_COPY_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_BOTTOM_BAR_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_BOTTOM_BAR_ENABLED, false) },
@@ -942,6 +944,9 @@ object ModuleSettings {
 
     fun isRemoveLiveRoomBlurMaskEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED, false)
+
+    fun isDisableLiveRoomVerticalSwipeEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED, false)
 
     fun isDisableLongPressCopyEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_DISABLE_LONG_PRESS_COPY_ENABLED, false)
