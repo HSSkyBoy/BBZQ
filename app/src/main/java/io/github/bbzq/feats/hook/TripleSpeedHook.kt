@@ -6,7 +6,6 @@ import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.hookAfter
-import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 
 class TripleSpeedHook(env: RoamingEnv) : BaseRoamingHook(env) {
@@ -34,11 +33,6 @@ class TripleSpeedHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 return
             }
 
-        val speedField = findSpeedField(experimentClass)
-        if (speedField == null) {
-            log("startHook: TripleSpeed, custom long-press speed field not found; custom multiplier unavailable")
-        }
-
         env.hookAfter(readerMethod) { param ->
             if (!ModuleSettings.isPlayerTripleSpeedEnabled(prefs)) return@hookAfter
             val result = param.result ?: return@hookAfter
@@ -46,8 +40,15 @@ class TripleSpeedHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 .firstOrNull { it.type == experimentClass } ?: return@hookAfter
             field.isAccessible = true
             if (field.get(result) !== target) field.set(result, target)
-            applyCustomSpeed(speedField, target)
         }
+
+        symbols?.longPressSpeedMethod?.let { speedMethod ->
+            env.hookBefore(speedMethod) { param ->
+                if (!ModuleSettings.isPlayerCustomLongPressSpeedEnabled(prefs)) return@hookBefore
+                param.result = ModuleSettings.getPlayerCustomLongPressSpeedValue(prefs)
+            }
+            log("startHook: TripleSpeed, custom long-press speed at ${speedMethod.declaringClass.name}.${speedMethod.name}")
+        } ?: log("startHook: TripleSpeed, long-press speed method unavailable; custom multiplier disabled")
 
         symbols?.qualitySpeedResetMethod?.let { resetMethod ->
             env.hookBefore(resetMethod) { param ->
@@ -76,20 +77,6 @@ class TripleSpeedHook(env: RoamingEnv) : BaseRoamingHook(env) {
         } ?: return null
         field.isAccessible = true
         return runCatching { field.getInt(constant) }.getOrNull()
-    }
-
-    // The float field alongside the int group id read by readEnumValue carries the applied speed.
-    private fun findSpeedField(experimentClass: Class<*>): Field? =
-        experimentClass.declaredFields.firstOrNull {
-            !Modifier.isStatic(it.modifiers) && it.type == Float::class.javaPrimitiveType
-        }?.apply { isAccessible = true }
-
-    private fun applyCustomSpeed(speedField: Field?, target: Any) {
-        if (speedField == null || !ModuleSettings.isPlayerCustomLongPressSpeedEnabled(prefs)) return
-        val desired = ModuleSettings.getPlayerCustomLongPressSpeedValue(prefs)
-        runCatching {
-            if (speedField.getFloat(target) != desired) speedField.setFloat(target, desired)
-        }.onFailure { log("TripleSpeed: failed to apply custom long-press speed", it) }
     }
 
     private companion object {

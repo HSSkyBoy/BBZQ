@@ -1960,10 +1960,12 @@ data class TripleSpeedSymbols(
     val experimentReaderMethod: MethodDescriptor,
     val qualitySpeedResetMethod: MethodDescriptor? = null,
     val highFrameRateSpeedGuardMethod: MethodDescriptor? = null,
+    val longPressSpeedMethod: MethodDescriptor? = null,
     val evidence: String,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("experimentReaderMethod", experimentReaderMethod.toJson())
+        .putOpt("longPressSpeedMethod", longPressSpeedMethod?.toJson())
         .putOpt("qualitySpeedResetMethod", qualitySpeedResetMethod?.toJson())
         .putOpt("highFrameRateSpeedGuardMethod", highFrameRateSpeedGuardMethod?.toJson())
         .put("evidence", evidence)
@@ -1974,6 +1976,7 @@ data class TripleSpeedSymbols(
             experimentReaderMethod = method,
             qualitySpeedResetMethod = qualitySpeedResetMethod.restoreOptional(classLoader),
             highFrameRateSpeedGuardMethod = highFrameRateSpeedGuardMethod.restoreOptional(classLoader),
+            longPressSpeedMethod = longPressSpeedMethod.restoreOptional(classLoader),
         )
     }
 
@@ -1983,6 +1986,7 @@ data class TripleSpeedSymbols(
             qualitySpeedResetMethod = obj.optJSONObject("qualitySpeedResetMethod")?.let(MethodDescriptor::fromJson),
             highFrameRateSpeedGuardMethod = obj.optJSONObject("highFrameRateSpeedGuardMethod")
                 ?.let(MethodDescriptor::fromJson),
+            longPressSpeedMethod = obj.optJSONObject("longPressSpeedMethod")?.let(MethodDescriptor::fromJson),
             evidence = obj.optString("evidence", "-"),
         )
     }
@@ -1992,6 +1996,7 @@ data class RestoredTripleSpeedSymbols(
     val experimentReaderMethod: Method,
     val qualitySpeedResetMethod: Method?,
     val highFrameRateSpeedGuardMethod: Method?,
+    val longPressSpeedMethod: Method?,
 )
 
 data class CustomSkinSymbols(

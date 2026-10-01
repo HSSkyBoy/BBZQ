@@ -146,7 +146,7 @@ object BiliSymbolResolver {
     private const val HP_VIDEO_QUALITY = "VideoQualityHook.QualityStrategy"
     private const val PLAY_SPEED_EXPERIMENT_PREF_KEY = "sp_play_speed_experiment"
     private const val HIGH_FRAME_RATE_SPEED_RESET_LOG = "reset 3x speed because target quality"
-    private const val PLAY_SPEED_UTILS_CLASS = "com.bilibili.playerbizcommonv2.utils.D"
+    private const val PLAY_SPEED_ARCHIVE_INFO_KEY = "united_player_archive_info"
 
     @Volatile
     private var memorySymbols: BiliHookSymbols? = null
@@ -1453,24 +1453,42 @@ object BiliSymbolResolver {
             qualityResetCandidates.isEmpty() -> null
             else -> null
         }
-        val highFrameRateSpeedGuard = classLoader.loadClassOrNull(PLAY_SPEED_UTILS_CLASS)
-            ?.declaredMethods
-            ?.firstOrNull {
+        val longPressSpeed = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create()
+                    .matcher(MethodMatcher.create().usingStrings(PLAY_SPEED_ARCHIVE_INFO_KEY)),
+            )
+        }.getOrNull()
+            ?.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+            ?.filter {
                 Modifier.isStatic(it.modifiers) &&
-                    it.name == "c" &&
+                    it.parameterCount == 1 &&
+                    it.parameterTypes[0] != String::class.java &&
+                    it.returnType == Float::class.javaPrimitiveType
+            }
+            ?.distinctBy(Method::toGenericString)
+            ?.singleOrNull()
+            ?.apply { isAccessible = true }
+        val highFrameRateSpeedGuard = longPressSpeed?.declaringClass
+            ?.declaredMethods
+            ?.filter {
+                Modifier.isStatic(it.modifiers) &&
                     it.parameterCount == 1 &&
                     it.parameterTypes[0] == Float::class.javaPrimitiveType &&
                     it.returnType == Boolean::class.javaPrimitiveType
             }
+            ?.singleOrNull()
             ?.apply { isAccessible = true }
         val symbols = TripleSpeedSymbols(
             experimentReaderMethod = MethodDescriptor.of(reader),
             qualitySpeedResetMethod = qualityReset?.let(MethodDescriptor::of),
             highFrameRateSpeedGuardMethod = highFrameRateSpeedGuard?.let(MethodDescriptor::of),
+            longPressSpeedMethod = longPressSpeed?.let(MethodDescriptor::of),
             evidence = "${reader.declaringClass.name}.${reader.name},strings=${methodData.size}," +
                 "qualityReset=${qualityReset?.let { "${it.declaringClass.name}.${it.name}" } ?: "missing"}," +
                 "qualityStrings=${qualityResetData.size}," +
-                "highFrameGuard=${highFrameRateSpeedGuard?.let { "${it.declaringClass.name}.${it.name}" } ?: "missing"}",
+                "highFrameGuard=${highFrameRateSpeedGuard?.let { "${it.declaringClass.name}.${it.name}" } ?: "missing"}," +
+                "longPressSpeed=${longPressSpeed?.let { "${it.declaringClass.name}.${it.name}" } ?: "missing"}",
         )
         return SymbolScanResult.Found(symbols, symbols.evidence, symbols.evidence)
     }
