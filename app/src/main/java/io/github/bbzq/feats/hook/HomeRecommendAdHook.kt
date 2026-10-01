@@ -94,6 +94,7 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             removeGamePromos = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_GAME_PROMO in blockedItems,
             removeLive = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_LIVE in blockedItems,
             removeKetang = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_KETANG in blockedItems,
+            removeBangumi = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_BANGUMI in blockedItems,
             removeVerticalAv = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_VERTICAL_AV in blockedItems,
             removeLargeCover = enabled && ModuleSettings.HOME_RECOMMEND_FILTER_LARGE_COVER in blockedItems,
             titleKeywords = if (enabled) currentTitleKeywords() else emptyList(),
@@ -423,6 +424,7 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (options.removeGamePromos && isGamePromoCard(item, holderType, symbols)) return "game_promo"
         if (options.removeLive && isLiveCard(item, symbols)) return "live"
         if (options.removeKetang && isKetangCard(item, symbols)) return "ketang"
+        if (options.removeBangumi && isBangumiCard(item, symbols)) return "bangumi"
         if (options.removeVerticalAv && isVerticalAvCard(item, symbols)) return "vertical_av"
         if (options.removeLargeCover && isLargeCoverCard(item, holderType, symbols)) return "large_cover"
         return null
@@ -474,6 +476,15 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return cardGoto == KETANG_GOTO ||
             goTo == KETANG_GOTO ||
             uri?.contains(KETANG_URI_PART) == true
+    }
+
+    private fun isBangumiCard(item: Any, symbols: FilterSymbols): Boolean {
+        val cardGoto = invokeString(symbols.getCardGoto, item)
+        val goTo = invokeString(symbols.getGoTo, item)
+        val uri = invokeString(symbols.getUri, item)
+        return cardGoto in BANGUMI_GOTOS ||
+            goTo in BANGUMI_GOTOS ||
+            uri?.startsWith(PGC_URI_PREFIX) == true
     }
 
     private fun isVerticalAvCard(item: Any, symbols: FilterSymbols): Boolean {
@@ -636,12 +647,13 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val removeGamePromos: Boolean,
         val removeLive: Boolean,
         val removeKetang: Boolean,
+        val removeBangumi: Boolean,
         val removeVerticalAv: Boolean,
         val removeLargeCover: Boolean,
         val titleKeywords: List<String>,
     ) {
         val enabled: Boolean = removeAds || removePictures || removeGamePromos || removeLive ||
-            removeKetang || removeVerticalAv || removeLargeCover || titleKeywords.isNotEmpty()
+            removeKetang || removeBangumi || removeVerticalAv || removeLargeCover || titleKeywords.isNotEmpty()
     }
 
     private data class FilterResult(
@@ -661,6 +673,8 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val AV_GOTO = "av"
         private const val LIVE_GOTO = "live"
         private const val KETANG_GOTO = "ketang"
+        private val BANGUMI_GOTOS = setOf("bangumi", "bangumi_rcmd")
+        private const val PGC_URI_PREFIX = "bilibili://pgc/"
         private const val VERTICAL_AV_GOTO = "vertical_av"
         private const val INLINE_AV_V2_GOTO = "inline_av_v2"
         private const val LARGE_COVER_PREFIX = "large_cover"

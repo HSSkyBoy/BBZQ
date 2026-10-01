@@ -143,6 +143,7 @@ object ModuleSettings {
     const val HOME_RECOMMEND_FILTER_GAME_PROMO = "game_promo"
     const val HOME_RECOMMEND_FILTER_LIVE = "live"
     const val HOME_RECOMMEND_FILTER_KETANG = "ketang"
+    const val HOME_RECOMMEND_FILTER_BANGUMI = "bangumi"
     const val HOME_RECOMMEND_FILTER_VERTICAL_AV = "vertical_av"
     const val HOME_RECOMMEND_FILTER_LARGE_COVER = "large_cover"
 
@@ -152,6 +153,7 @@ object ModuleSettings {
         HOME_RECOMMEND_FILTER_GAME_PROMO,
         HOME_RECOMMEND_FILTER_LIVE,
         HOME_RECOMMEND_FILTER_KETANG,
+        HOME_RECOMMEND_FILTER_BANGUMI,
         HOME_RECOMMEND_FILTER_VERTICAL_AV,
         HOME_RECOMMEND_FILTER_LARGE_COVER,
     )

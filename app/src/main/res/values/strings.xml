@@ -189,6 +189,8 @@
     <string name="home_recommend_filter_live_summary">直播间推荐卡片。</string>
     <string name="home_recommend_filter_ketang_title">课堂</string>
     <string name="home_recommend_filter_ketang_summary">课堂、课程和 cheese 播放页卡片。</string>
+    <string name="home_recommend_filter_bangumi_title">番剧</string>
+    <string name="home_recommend_filter_bangumi_summary">番剧推荐卡片。</string>
     <string name="home_recommend_filter_vertical_av_title">竖屏视频</string>
     <string name="home_recommend_filter_vertical_av_summary">默认进入 story/vertical_av 的竖屏视频卡片。</string>
     <string name="home_recommend_filter_large_cover_title">大屏视频</string>

@@ -3113,6 +3113,11 @@ class SettingsContentFactory(
             context.getString(R.string.home_recommend_filter_ketang_summary),
         )
         items += HomeRecommendItem(
+            ModuleSettings.HOME_RECOMMEND_FILTER_BANGUMI,
+            context.getString(R.string.home_recommend_filter_bangumi_title),
+            context.getString(R.string.home_recommend_filter_bangumi_summary),
+        )
+        items += HomeRecommendItem(
             ModuleSettings.HOME_RECOMMEND_FILTER_VERTICAL_AV,
             context.getString(R.string.home_recommend_filter_vertical_av_title),
             context.getString(R.string.home_recommend_filter_vertical_av_summary),
