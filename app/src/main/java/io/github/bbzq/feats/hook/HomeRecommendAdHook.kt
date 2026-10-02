@@ -11,6 +11,7 @@ import io.github.bbzq.feats.symbol.RestoredHomeRecommendFeedSymbols
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.net.URI
 import java.util.LinkedHashMap
 
 class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
@@ -478,13 +479,51 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             uri?.contains(KETANG_URI_PART) == true
     }
 
+    /**
+     * 番剧影视（PGC）判定，移植自 Innocent 的 `HomeExtraCardPolicy`。
+     *
+     * 只采用公开协议里能交叉验证的证据：卡片类型 token、明确的正片播放路由，
+     * 以及 playerArgs 里的 ep / season 正片凭据。证据不足时一律放行，
+     * 不按标题文案或外观模板猜测，避免误删普通 UGC 视频。
+     */
     private fun isBangumiCard(item: Any, symbols: FilterSymbols): Boolean {
-        val cardGoto = invokeString(symbols.getCardGoto, item)
-        val goTo = invokeString(symbols.getGoTo, item)
+        val tokens = listOfNotNull(
+            invokeString(symbols.getCardType, item),
+            invokeString(symbols.getCardGoto, item),
+            invokeString(symbols.getGoTo, item),
+        ).mapNotNull(::normalizeCardToken)
         val uri = invokeString(symbols.getUri, item)
-        return cardGoto in BANGUMI_GOTOS ||
-            goTo in BANGUMI_GOTOS ||
-            uri?.startsWith(PGC_URI_PREFIX) == true
+        // 显式 UGC 类型不凭一个外观模板猜成正片；真正的番剧播放路由仍可独立确认。
+        val ugc = tokens.any { it == BANGUMI_UGC_TOKEN }
+        if ((!ugc && tokens.any { it in PGC_CARD_TOKENS }) || isPgcPlaybackUri(uri)) return true
+        val playerArgs = callNoArg(item, "getPlayerArgs")
+        return isPositive(fieldValue(playerArgs, "epid")) ||
+            isPositive(fieldValue(playerArgs, "pgcSeasonId"))
+    }
+
+    private fun normalizeCardToken(raw: String?): String? = raw
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.uppercase()
+        ?.removePrefix("CARD_TYPE_")
+        ?.removePrefix("RELATE_CARD_TYPE_")
+
+    private fun isPositive(value: Any?): Boolean = value.asIntOrNull()?.let { it > 0 } == true
+
+    /** 只认 ep / ss / season 这三类正片路由，避免把番剧首页或活动页当成影视卡。 */
+    private fun isPgcPlaybackUri(raw: String?): Boolean {
+        if (raw.isNullOrBlank() || raw.length > MAX_URI_LENGTH) return false
+        val uri = runCatching { URI(raw.trim()) }.getOrNull() ?: return false
+        if (uri.rawUserInfo != null || uri.port != -1) return false
+        val scheme = uri.scheme?.lowercase() ?: return false
+        val host = uri.host?.lowercase() ?: return false
+        val path = uri.rawPath.orEmpty()
+        return when {
+            scheme == "bilibili" && (host == "bangumi" || host == "pgc") -> PGC_PLAYBACK_PATH.matches(path)
+            (scheme == "http" || scheme == "https") && host in PGC_WEB_HOSTS && path.startsWith("/bangumi/") ->
+                PGC_PLAYBACK_PATH.matches(path.removePrefix("/bangumi"))
+            else -> false
+        }
     }
 
     private fun isVerticalAvCard(item: Any, symbols: FilterSymbols): Boolean {
@@ -673,8 +712,6 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val AV_GOTO = "av"
         private const val LIVE_GOTO = "live"
         private const val KETANG_GOTO = "ketang"
-        private val BANGUMI_GOTOS = setOf("bangumi", "bangumi_rcmd")
-        private const val PGC_URI_PREFIX = "bilibili://pgc/"
         private const val VERTICAL_AV_GOTO = "vertical_av"
         private const val INLINE_AV_V2_GOTO = "inline_av_v2"
         private const val LARGE_COVER_PREFIX = "large_cover"
@@ -682,6 +719,11 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val KETANG_URI_PART = "/cheese/play/"
         private const val STORY_URI_PREFIX = "bilibili://story/"
         private const val OPUS_URI_PREFIX = "bilibili://opus/"
+        private const val BANGUMI_UGC_TOKEN = "BANGUMI_UGC"
+        private const val MAX_URI_LENGTH = 4096
+        private val PGC_CARD_TOKENS = setOf("BANGUMI", "BANGUMI_AV", "BANGUMI_P", "BANGUMI_RCMD", "PGC")
+        private val PGC_WEB_HOSTS = setOf("bilibili.com", "www.bilibili.com", "m.bilibili.com")
+        private val PGC_PLAYBACK_PATH = Regex("^/(?:play/(?:ep|ss)[1-9][0-9]*|season/[1-9][0-9]*)/?$")
         private const val MAX_VALUE_LENGTH = 300
         private const val MAX_LOG_LINE_LENGTH = 3500
         private const val DEBUG_FEED_LOG_CACHE_SIZE = 32
