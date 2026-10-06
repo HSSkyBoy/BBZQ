@@ -2,6 +2,8 @@ package io.github.bbzq
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.bbzq.feats.ResolverRegion
+import io.github.bbzq.feats.ResolverServers
 
 object ModuleSettings {
     const val PREFS_NAME = "bbzq_settings"
@@ -120,6 +122,10 @@ object ModuleSettings {
     const val KEY_SEA_RESOLVER_MODE = "sea_resolver_mode"
     const val KEY_SEA_RESOLVER_SEND_ACCESS_KEY = "sea_resolver_send_access_key"
     const val KEY_SEA_RESOLVER_SERVER = "sea_resolver_server"
+    const val KEY_RESOLVER_SERVER_HK = "resolver_server_hk"
+    const val KEY_RESOLVER_SERVER_TW = "resolver_server_tw"
+    const val KEY_RESOLVER_SERVER_CN = "resolver_server_cn"
+    const val KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS = "sea_unlock_relax_play_limits"
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
     const val KEY_LAST_ACCESS_KEY = "last_access_key"
@@ -370,6 +376,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_SEA_UNLOCK_SEARCH_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_SEARCH_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_PLAY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_PLAY_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_DETAIL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true) },
+        ExportableConfigSpec(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, true) },
         ExportableConfigSpec(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_COMMENT_GIF_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_UNLOCK_COMMENT_GIF_ENABLED, false) },
@@ -418,9 +425,11 @@ object ModuleSettings {
         add(ExportableConfigSpec(KEY_CUSTOM_CDN_HOST, ExportableValueType.STRING) { prefs ->
             getCustomCdnHost(prefs)
         })
-        add(ExportableConfigSpec(KEY_SEA_RESOLVER_SERVER, ExportableValueType.STRING) { prefs ->
-            getSeaResolverBaseUrl(prefs)
-        })
+        ResolverRegion.values().forEach { region ->
+            add(ExportableConfigSpec(region.prefKey, ExportableValueType.STRING) { prefs ->
+                normalizeResolverBaseUrl(prefs.getString(region.prefKey, null))
+            })
+        }
         add(ExportableConfigSpec(KEY_SEA_RESOLVER_MODE, ExportableValueType.STRING) { prefs ->
             getSeaResolverMode(prefs)
         })
@@ -1032,7 +1041,7 @@ object ModuleSettings {
         prefs.getBoolean(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, false)
 
     fun isSeaBangumiUnlockEnabled(prefs: SharedPreferences): Boolean =
-        prefs.getBoolean(KEY_SEA_BANGUMI_UNLOCK_ENABLED, false) && getSeaResolverBaseUrl(prefs) != null
+        prefs.getBoolean(KEY_SEA_BANGUMI_UNLOCK_ENABLED, false) && ResolverServers.configured(prefs).isNotEmpty()
 
     fun isSeaBangumiSearchEnabled(prefs: SharedPreferences): Boolean =
         isSeaBangumiUnlockEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_SEARCH_ENABLED, true)
@@ -1056,8 +1065,9 @@ object ModuleSettings {
     fun isSeaResolverSendAccessKeyEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false)
 
-    fun getSeaResolverBaseUrl(prefs: SharedPreferences): String? =
-        normalizeResolverBaseUrl(prefs.getString(KEY_SEA_RESOLVER_SERVER, null))
+    /** Clears the substituted reply's ability switches (mini window, background play, cast...). */
+    fun isSeaRelaxPlayLimitsEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, true)
 
     /** Keeps an explicit http:// for self-hosted resolvers; anything else is served over https. */
     fun normalizeResolverBaseUrl(value: String?): String? {

@@ -82,6 +82,27 @@ class SeaBangumiPlayCodecTest {
     }
 
     @Test
+    fun relaxPlayLimitsAlsoDropsPlayConf() {
+        val original = ProtoWriter().apply {
+            message(2, byteArrayOf(0x08, 0x01))
+            message(7, byteArrayOf(0x0A, 0x00))
+        }.toByteArray()
+        val result = JSONObject(playurl).getJSONObject("result")
+
+        val kept = fields(SeaBangumiPlayCodec.buildReply(original, result)!!)
+        val relaxed = fields(SeaBangumiPlayCodec.buildReply(original, result, relaxPlayLimits = true)!!)
+
+        assertEquals(listOf(1, 2, 7), kept.map { it.first })
+        assertEquals(listOf(1, 7), relaxed.map { it.first })
+    }
+
+    @Test
+    fun answerCodeReadsTheEnvelope() {
+        assertEquals(-10493, SeaBangumiPlayCodec.answerCode("""{"code":-10493,"message":"x"}"""))
+        assertNull(SeaBangumiPlayCodec.answerCode("not json"))
+    }
+
+    @Test
     fun buildReplyRejectsMalformedOriginal() {
         assertNull(SeaBangumiPlayCodec.buildReply(byteArrayOf(0x0A, 0x7F), JSONObject(playurl).getJSONObject("result")))
     }

@@ -19,9 +19,14 @@ class SeaResolverClient(
         params: List<Pair<String, String>>,
         headers: Headers = Headers.Builder().build(),
         timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
+        encodedQuery: String? = null,
     ): String? {
         val url = base.newBuilder().addPathSegments(path.trimStart('/')).apply {
-            params.forEach { (name, value) -> addQueryParameter(name, value) }
+            if (encodedQuery != null) {
+                encodedQuery(encodedQuery)
+            } else {
+                params.forEach { (name, value) -> addQueryParameter(name, value) }
+            }
         }.build()
         val request = Request.Builder().url(url).headers(headers).get().build()
         return runCatching {
@@ -40,15 +45,24 @@ class SeaResolverClient(
         }
     }
 
-    /** Round-trip time of the resolver's health endpoint in milliseconds, or null if unreachable. */
+    /**
+     * Round-trip time in milliseconds, or null if unreachable. Some servers do not expose the health
+     * endpoint, so a tiny playurl request is the fallback.
+     */
     fun ping(): Long? {
         val started = System.nanoTime()
-        get("healthz", emptyList(), timeoutMillis = PING_TIMEOUT_MILLIS) ?: return null
-        return (System.nanoTime() - started) / 1_000_000
+        val answered = get("healthz", emptyList(), timeoutMillis = PING_TIMEOUT_MILLIS) != null ||
+            get(
+                "pgc/player/web/playurl",
+                listOf("ep_id" to PING_EPISODE, "qn" to "16", "fnval" to "1", "fnver" to "0"),
+                timeoutMillis = PING_TIMEOUT_MILLIS,
+            ) != null
+        return if (answered) (System.nanoTime() - started) / 1_000_000 else null
     }
 
     private companion object {
         const val PING_TIMEOUT_MILLIS = 8_000L
+        const val PING_EPISODE = "733316"
         const val DEFAULT_TIMEOUT_MILLIS = 6_000L
 
         val httpClient: OkHttpClient by lazy {

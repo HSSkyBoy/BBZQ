@@ -2,6 +2,9 @@ package io.github.bbzq.feats.hook
 
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.ResolverRegion
+import io.github.bbzq.feats.ResolverServer
+import io.github.bbzq.feats.ResolverServers
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.callStaticMethod
@@ -20,6 +23,9 @@ import java.lang.reflect.Proxy
 class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var interceptorClass: Class<*>? = null
     private var httpUrlClass: Class<*>? = null
+
+    /** Region that last served a path, asked first next time. */
+    private val servedBy = java.util.concurrent.ConcurrentHashMap<String, ResolverRegion>()
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -96,42 +102,49 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val url = request.callMethod("url") ?: return null
         val path = url.callMethod("encodedPath") as? String ?: return null
         if (!SeaBangumiDetailPolicy.isPgcPath(path)) return null
-        val baseUrl = ModuleSettings.getSeaResolverBaseUrl(prefs) ?: return null
-        val resolverHost = httpUrlClass!!.callStaticMethod("parse", baseUrl)?.callMethod("host") as? String
-        if (url.callMethod("host") == resolverHost) return null
+        val servers = ResolverServers.configured(prefs)
+        if (servers.isEmpty()) return null
+        val host = url.callMethod("host") as? String
+        if (servers.any { parseUrl(it.baseUrl)?.callMethod("host") == host }) return null
 
         val prefix = original.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String
             ?: return null
         if (!SeaBangumiDetailPolicy.isRegionRefusal(prefix)) return null
 
         val query = url.callMethod("encodedQuery") as? String
-        val target = httpUrlClass!!.callStaticMethod("parse", SeaBangumiDetailPolicy.replayUrl(baseUrl, path, query))
-            ?: return null
+        for (server in ResolverServers.preferring(servers, servedBy[path])) {
+            val replay = replayOn(chain, request, server, path, query) ?: continue
+            servedBy[path] = server.region
+            original.callMethod("close")
+            log("SeaBangumiDetail: ${server.region} served $path")
+            return replay
+        }
+        log("SeaBangumiDetail: no resolver could serve $path")
+        return null
+    }
+
+    /** The replay response if this server answered with data; otherwise it is closed and null returned. */
+    private fun replayOn(chain: Any, request: Any, server: ResolverServer, path: String, query: String?): Any? {
+        val target = parseUrl(SeaBangumiDetailPolicy.replayUrl(server.baseUrl, path, query)) ?: return null
         val replayRequest = request.callMethod("newBuilder")?.run {
             callMethod("url", target)
             callMethod("build")
         } ?: return null
-        val replay = proceed(chain, replayRequest) ?: return null
+        val replay = runCatching { proceed(chain, replayRequest) }
+            .onFailure { log("SeaBangumiDetail: ${server.region} request failed", it) }
+            .getOrNull() ?: return null
+        val prefix = replay.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String ?: ""
         val accepted = replay.callMethod("isSuccessful") == true &&
-            !SeaBangumiDetailPolicy.isRegionRefusal(
-                replay.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String ?: "",
-            ) && !looksLikeErrorEnvelope(replay)
+            !SeaBangumiDetailPolicy.isRegionRefusal(prefix) &&
+            Regex("\"code\"\\s*:\\s*0\\b").containsMatchIn(prefix)
         if (!accepted) {
             replay.callMethod("close")
-            log("SeaBangumiDetail: resolver could not serve $path")
             return null
         }
-        original.callMethod("close")
-        log("SeaBangumiDetail: served $path through the resolver")
         return replay
     }
 
-    /** A non-zero `code` on the replay means the resolver relayed another failure, not data. */
-    private fun looksLikeErrorEnvelope(response: Any): Boolean {
-        val prefix = response.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String
-            ?: return true
-        return !Regex("\"code\"\\s*:\\s*0\\b").containsMatchIn(prefix)
-    }
+    private fun parseUrl(value: String): Any? = httpUrlClass!!.callStaticMethod("parse", value)
 
     private companion object {
         const val CLIENT_BUILDER = "okhttp3.OkHttpClient\$Builder"

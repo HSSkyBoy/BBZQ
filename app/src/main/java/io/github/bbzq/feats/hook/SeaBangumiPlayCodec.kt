@@ -9,6 +9,7 @@ import org.json.JSONObject
  */
 internal object SeaBangumiPlayCodec {
     private const val REPLY_VIDEO_INFO = 1
+    private const val REPLY_PLAY_CONF = 2
     private const val REPLY_VIEW_INFO = 5
 
     /** Region wording used by Bilibili's blocking dialogs and errors, in both scripts. */
@@ -17,6 +18,9 @@ internal object SeaBangumiPlayCodec {
 
     fun isRegionBlocked(code: Int, message: String?): Boolean =
         code in REGION_CODES || (message != null && REGION_WORDING.containsMatchIn(message))
+
+    /** The top-level `code` of a resolver answer, for logs; null if the body is not JSON. */
+    fun answerCode(body: String): Int? = runCatching { JSONObject(body).optInt("code") }.getOrNull()
 
     /** The `result` object of a successful playurl answer that carries at least one DASH video. */
     fun playableResult(body: String): JSONObject? {
@@ -29,11 +33,15 @@ internal object SeaBangumiPlayCodec {
 
     /**
      * Builds a reply from the official [original] one, swapping in the resolver streams and
-     * dropping the blocking `view_info` dialog. Returns null if [original] is not well-formed.
+     * dropping the blocking `view_info` dialog. With [relaxPlayLimits] the `play_conf` ability
+     * switches (mini window, background play, cast...) are dropped too, which enables them all.
+     * Returns null if [original] is not well-formed.
      */
-    fun buildReply(original: ByteArray, result: JSONObject): ByteArray? {
+    fun buildReply(original: ByteArray, result: JSONObject, relaxPlayLimits: Boolean = false): ByteArray? {
         val videoInfo = encodeVideoInfo(result) ?: return null
-        val rest = ProtoWire.dropFields(original, setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO)) ?: return null
+        val dropped = if (relaxPlayLimits) setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO, REPLY_PLAY_CONF)
+        else setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO)
+        val rest = ProtoWire.dropFields(original, dropped) ?: return null
         return ProtoWriter().apply {
             message(REPLY_VIDEO_INFO, videoInfo)
             raw(rest)

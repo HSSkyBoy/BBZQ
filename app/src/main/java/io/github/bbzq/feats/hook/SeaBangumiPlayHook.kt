@@ -4,6 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.ResolverRegion
+import io.github.bbzq.feats.ResolverServers
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.SeaResolverClient
 import io.github.bbzq.feats.callMethod
@@ -15,6 +17,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -25,6 +28,9 @@ import java.util.concurrent.Executors
 class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val executor by lazy { Executors.newCachedThreadPool() }
     private var replyClass: Class<*>? = null
+
+    /** Region that last served an episode, asked first next time. */
+    private val servedBy = ConcurrentHashMap<Long, ResolverRegion>()
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -128,7 +134,8 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun resolve(request: Any, original: Any?): Any? {
         val (epId, seasonId) = resolveTarget(request) ?: return null
-        val baseUrl = ModuleSettings.getSeaResolverBaseUrl(prefs) ?: return null
+        val servers = ResolverServers.preferring(ResolverServers.configured(prefs), servedBy[epId])
+        if (servers.isEmpty()) return null
         val params = mutableListOf(
             "ep_id" to epId.toString(),
             "qn" to (request.callMethod("getQn").asLong().takeIf { it > 0 } ?: DEFAULT_QN).toString(),
@@ -140,22 +147,36 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
             prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)?.takeIf { it.isNotBlank() }
                 ?.let { params += "access_key" to it }
         }
-        val body = SeaResolverClient(baseUrl, ::log).get(PLAYURL_PATH, params, timeoutMillis = PLAY_TIMEOUT_MILLIS)
-            ?: return null
-        return runCatching {
-            val result = SeaBangumiPlayCodec.playableResult(body) ?: run {
-                log("SeaBangumiPlay: resolver had no playable stream for ep $epId")
-                return@runCatching null
+        val started = System.currentTimeMillis()
+        for (server in servers) {
+            if (System.currentTimeMillis() - started > TOTAL_BUDGET_MILLIS) {
+                log("SeaBangumiPlay: out of time before asking ${server.region}")
+                break
             }
-            val originalBytes = (original?.callMethod("toByteArray") as? ByteArray) ?: ByteArray(0)
-            val bytes = SeaBangumiPlayCodec.buildReply(originalBytes, result) ?: return@runCatching null
-            replyClass!!.getMethod("parseFrom", ByteArray::class.java).invoke(null, bytes).also {
-                log("SeaBangumiPlay: substituted resolver streams for ep $epId season $seasonId")
+            val body = SeaResolverClient(server.baseUrl, ::log)
+                .get(PLAYURL_PATH, params, timeoutMillis = PLAY_TIMEOUT_MILLIS) ?: continue
+            val reply = runCatching {
+                val result = SeaBangumiPlayCodec.playableResult(body)
+                if (result == null) {
+                    // A code such as -10493 only means "not available in this region": try the next one.
+                    log("SeaBangumiPlay: ${server.region} has no stream for ep $epId (code ${SeaBangumiPlayCodec.answerCode(body)})")
+                    return@runCatching null
+                }
+                val originalBytes = (original?.callMethod("toByteArray") as? ByteArray) ?: ByteArray(0)
+                val relax = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs)
+                val bytes = SeaBangumiPlayCodec.buildReply(originalBytes, result, relax) ?: return@runCatching null
+                replyClass!!.getMethod("parseFrom", ByteArray::class.java).invoke(null, bytes)
+            }.getOrElse {
+                log("SeaBangumiPlay: could not build the substitute reply from ${server.region}", it)
+                null
             }
-        }.getOrElse {
-            log("SeaBangumiPlay: could not build the substitute reply", it)
-            null
+            if (reply != null) {
+                servedBy[epId] = server.region
+                log("SeaBangumiPlay: ${server.region} served ep $epId season $seasonId")
+                return reply
+            }
         }
+        return null
     }
 
     private fun resolveTarget(request: Any): Pair<Long, Long>? {
@@ -253,6 +274,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val PLAYURL_PATH = "pgc/player/web/playurl"
         const val DEFAULT_QN = 80L
         const val DEFAULT_FNVAL = 4048L
-        const val PLAY_TIMEOUT_MILLIS = 10_000L
+        const val PLAY_TIMEOUT_MILLIS = 6_000L
+        const val TOTAL_BUDGET_MILLIS = 15_000L
     }
 }

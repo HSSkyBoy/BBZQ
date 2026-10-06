@@ -6,6 +6,10 @@ import android.os.SystemClock
 import android.util.Base64
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.AppSignature
+import io.github.bbzq.feats.ResolverRegion
+import io.github.bbzq.feats.ResolverServer
+import io.github.bbzq.feats.ResolverServers
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.SeaResolverClient
 import io.github.bbzq.feats.callMethod
@@ -30,7 +34,7 @@ import java.util.concurrent.TimeUnit
  * official request, so the wait only covers whatever the resolver takes beyond it.
  */
 class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
-    private val executor by lazy { Executors.newFixedThreadPool(2) }
+    private val executor by lazy { Executors.newCachedThreadPool() }
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -100,37 +104,67 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun query(keyword: String): Pending? {
-        val baseUrl = ModuleSettings.getSeaResolverBaseUrl(prefs) ?: return null
-        val headers = identityHeaders()
-        val task = FutureTask { fetch(baseUrl, keyword, headers) }
-        executor.execute(task)
-        return Pending(task, SystemClock.uptimeMillis() + WAIT_MILLIS)
+        val servers = ResolverServers.configured(prefs)
+        if (servers.isEmpty()) return null
+        val host = readHostIdentity()
+        val deadline = SystemClock.uptimeMillis() + WAIT_MILLIS
+        val tasks = servers.map { server ->
+            executor.submit<List<JSONObject>> { fetch(server, keyword, host) }
+        }
+        val combined = FutureTask {
+            val seen = HashSet<Long>()
+            tasks.flatMap { task ->
+                val left = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0)
+                runCatching { task.get(left, TimeUnit.MILLISECONDS) }.getOrElse {
+                    task.cancel(true)
+                    emptyList()
+                }
+            }.filter { seen.add(it.optLong("season_id")) }
+        }
+        executor.execute(combined)
+        return Pending(combined, deadline)
     }
 
-    private fun fetch(baseUrl: String, keyword: String, headers: Headers): List<JSONObject> {
-        val body = SeaResolverClient(baseUrl, ::log).get(
+    /** One region's hits through the app's signed search API; the SEA server also gets its region hint. */
+    private fun fetch(server: ResolverServer, keyword: String, host: HostIdentity?): List<JSONObject> {
+        val params = mutableMapOf(
+            "build" to (host?.identity?.build ?: 0).toString(),
+            "mobi_app" to (host?.identity?.mobiApp ?: "android"),
+            "platform" to "android",
+            "ts" to (System.currentTimeMillis() / 1000).toString(),
+            "keyword" to keyword,
+            "search_type" to "media_bangumi",
+            "type" to BANGUMI_SEARCH_TYPE.toString(),
+            "page" to "1",
+            "pagesize" to "20",
+        )
+        host?.identity?.buvid?.takeIf { it.isNotEmpty() }?.let { params["buvid"] = it }
+        val headers = identityHeaders(host).newBuilder().apply {
+            if (server.region == ResolverRegion.SEA) add("x-resolver-mode", ModuleSettings.getSeaResolverMode(prefs))
+        }.build()
+        val body = SeaResolverClient(server.baseUrl, ::log).get(
             SEARCH_PATH,
-            listOf(
-                "search_type" to "media_bangumi",
-                "type" to BANGUMI_SEARCH_TYPE.toString(),
-                "keyword" to keyword,
-                "resolver_mode" to ModuleSettings.getSeaResolverMode(prefs),
-            ),
+            emptyList(),
             headers,
             WAIT_MILLIS,
+            encodedQuery = AppSignature.signedQuery(params),
         ) ?: return emptyList()
         return runCatching { SeaBangumiSearchCodec.parseMatches(body) }.getOrElse {
-            log("SeaBangumiSearch: resolver answer was not valid JSON", it)
+            log("SeaBangumiSearch: ${server.region} answer was not valid JSON", it)
             emptyList()
         }
     }
 
-    /** Mirrors the identity headers the host's own Moss requests carry, minus the access key. */
-    private fun identityHeaders(): Headers {
-        val builder = Headers.Builder()
-        runCatching {
-            val helper = classLoader.findClassOrNull(RUNTIME_HELPER)?.getStaticObjectField("INSTANCE") ?: return@runCatching
-            val identity = SeaBangumiSearchCodec.ClientIdentity(
+    private class HostIdentity(
+        val identity: SeaBangumiSearchCodec.ClientIdentity,
+        val network: ByteArray,
+        val userAgent: String?,
+    )
+
+    private fun readHostIdentity(): HostIdentity? = runCatching {
+        val helper = classLoader.findClassOrNull(RUNTIME_HELPER)?.getStaticObjectField("INSTANCE") ?: return@runCatching null
+        HostIdentity(
+            identity = SeaBangumiSearchCodec.ClientIdentity(
                 appId = helper.callMethod("appId") as? Int ?: 1,
                 build = helper.callMethod("build") as? Int ?: 0,
                 buvid = helper.callMethod("buvid") as? String ?: "",
@@ -141,17 +175,23 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 brand = Build.BRAND.orEmpty(),
                 model = Build.MODEL.orEmpty(),
                 osver = Build.VERSION.RELEASE.orEmpty(),
-            )
-            builder.add("x-bili-device-bin", encode(SeaBangumiSearchCodec.encodeDevice(identity)))
-            builder.add("x-bili-metadata-bin", encode(SeaBangumiSearchCodec.encodeMetadata(identity)))
-            val network = helper.callMethod("reqNetwork")?.callMethod("toByteArray") as? ByteArray
-                ?: SeaBangumiSearchCodec.encodeNetwork(helper.callMethod("net") as? Int ?: 0)
-            builder.add("x-bili-network-bin", encode(network))
-            if (identity.buvid.isNotEmpty()) builder.addUnsafeNonAscii("buvid", identity.buvid)
-            (helper.callMethod("ua") as? String)?.takeIf { it.isNotBlank() }?.let {
-                builder.addUnsafeNonAscii("User-Agent", it)
-            }
-        }.onFailure { log("SeaBangumiSearch: could not read host identity", it) }
+            ),
+            network = helper.callMethod("reqNetwork")?.callMethod("toByteArray") as? ByteArray
+                ?: SeaBangumiSearchCodec.encodeNetwork(helper.callMethod("net") as? Int ?: 0),
+            userAgent = (helper.callMethod("ua") as? String)?.takeIf { it.isNotBlank() },
+        )
+    }.onFailure { log("SeaBangumiSearch: could not read host identity", it) }.getOrNull()
+
+    /** Mirrors the identity headers the host's own Moss requests carry, minus the access key. */
+    private fun identityHeaders(host: HostIdentity?): Headers {
+        val builder = Headers.Builder()
+        if (host != null) {
+            builder.add("x-bili-device-bin", encode(SeaBangumiSearchCodec.encodeDevice(host.identity)))
+            builder.add("x-bili-metadata-bin", encode(SeaBangumiSearchCodec.encodeMetadata(host.identity)))
+            builder.add("x-bili-network-bin", encode(host.network))
+            if (host.identity.buvid.isNotEmpty()) builder.addUnsafeNonAscii("buvid", host.identity.buvid)
+            host.userAgent?.let { builder.addUnsafeNonAscii("User-Agent", it) }
+        }
         return builder.build()
     }
 

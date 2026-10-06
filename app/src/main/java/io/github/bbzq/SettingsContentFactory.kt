@@ -30,6 +30,8 @@ import android.widget.TextView
 import android.widget.Toast
 import io.github.bbzq.DesktopIconHelper
 import io.github.bbzq.R
+import io.github.bbzq.feats.ResolverRegion
+import io.github.bbzq.feats.ResolverServers
 import okhttp3.Call
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -89,14 +91,15 @@ class SettingsContentFactory(
     private lateinit var homeRecommendTitleKeywordRow: View
     private lateinit var homeRecommendTabSwitch: Switch
     private lateinit var homeRecommendTitleKeywordSummaryView: TextView
-    private lateinit var seaResolverServerRow: View
+    private val seaServerRows = mutableMapOf<ResolverRegion, View>()
+    private val seaServerSummaries = mutableMapOf<ResolverRegion, TextView>()
+    private lateinit var seaRelaxSwitch: Switch
     private lateinit var seaResolverModeRow: View
     private lateinit var seaResolverModeSummaryView: TextView
     private lateinit var seaSearchSwitch: Switch
     private lateinit var seaPlaySwitch: Switch
     private lateinit var seaDetailSwitch: Switch
     private lateinit var seaAccessKeySwitch: Switch
-    private lateinit var seaResolverServerSummaryView: TextView
     private lateinit var hideAllHomeComponentsSwitch: Switch
     private lateinit var customHomeComponentHideSwitch: Switch
     private lateinit var storyVideoAdSwitch: Switch
@@ -517,12 +520,12 @@ class SettingsContentFactory(
     }
 
     private fun seaUnlockEntrySummary(): String {
-        val server = ModuleSettings.getSeaResolverBaseUrl(prefs)
+        val servers = ResolverServers.configured(prefs)
         return when {
             !prefs.getBoolean(ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED, false) ->
                 context.getString(R.string.sea_unlock_entry_off_summary)
-            server == null -> context.getString(R.string.sea_unlock_entry_no_server_summary)
-            else -> context.getString(R.string.sea_unlock_entry_on_summary, server.substringAfter("://"))
+            servers.isEmpty() -> context.getString(R.string.sea_unlock_entry_no_server_summary)
+            else -> context.getString(R.string.sea_unlock_entry_on_summary, servers.size)
         }
     }
 
@@ -539,14 +542,14 @@ class SettingsContentFactory(
         ),
     )
 
-    private fun seaResolverRows(): List<View> = listOf(
-        createSeaResolverServerRow(),
-        createClickableInfoRow(
-            context.getString(R.string.sea_resolver_test_title),
-            context.getString(R.string.sea_resolver_test_summary),
-        ) { testSeaResolver() },
-        createSeaResolverModeRow(),
-    )
+    private fun seaResolverRows(): List<View> =
+        ResolverRegion.values().map { createSeaResolverServerRow(it) } + listOf(
+            createClickableInfoRow(
+                context.getString(R.string.sea_resolver_test_title),
+                context.getString(R.string.sea_resolver_test_summary),
+            ) { testSeaResolver() },
+            createSeaResolverModeRow(),
+        )
 
     private fun seaScopeRows(): List<View> = listOf(
         createSwitchRow(
@@ -567,6 +570,12 @@ class SettingsContentFactory(
             ModuleSettings.KEY_SEA_UNLOCK_DETAIL_ENABLED,
             true,
         ) { seaDetailSwitch = it },
+        createSwitchRow(
+            context.getString(R.string.sea_unlock_relax_title),
+            context.getString(R.string.sea_unlock_relax_summary),
+            ModuleSettings.KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS,
+            true,
+        ) { seaRelaxSwitch = it },
     )
 
     private fun seaPrivacyRows(): List<View> = listOf(
@@ -639,62 +648,84 @@ class SettingsContentFactory(
             .show()
     }
 
+    private fun seaRegionLabel(region: ResolverRegion): String = context.getString(
+        when (region) {
+            ResolverRegion.HK -> R.string.sea_region_hk
+            ResolverRegion.TW -> R.string.sea_region_tw
+            ResolverRegion.SEA -> R.string.sea_region_sea
+            ResolverRegion.CN -> R.string.sea_region_cn
+        },
+    )
+
     private fun testSeaResolver() {
-        val baseUrl = ModuleSettings.getSeaResolverBaseUrl(prefs)
-        if (baseUrl == null) {
+        val servers = ResolverServers.configured(prefs)
+        if (servers.isEmpty()) {
             Toast.makeText(context, R.string.sea_resolver_server_empty_summary, Toast.LENGTH_SHORT).show()
             return
         }
         Toast.makeText(context, R.string.sea_resolver_test_running, Toast.LENGTH_SHORT).show()
         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         Thread {
-            val elapsed = io.github.bbzq.feats.SeaResolverClient(baseUrl) { _, _ -> }.ping()
-            mainHandler.post {
-                val message = if (elapsed == null) {
+            val lines = servers.map { server ->
+                val pinged = java.util.concurrent.FutureTask { io.github.bbzq.feats.SeaResolverClient(server.baseUrl) { _, _ -> }.ping() }
+                Thread(pinged).start()
+                server to pinged
+            }.joinToString("\n") { (server, pinged) ->
+                val elapsed = runCatching { pinged.get() }.getOrNull()
+                val outcome = if (elapsed == null) {
                     context.getString(R.string.sea_resolver_test_failed)
                 } else {
                     context.getString(R.string.sea_resolver_test_ok, elapsed)
                 }
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                "${seaRegionLabel(server.region)}：$outcome"
+            }
+            mainHandler.post {
+                AlertDialog.Builder(context)
+                    .setTitle(R.string.sea_resolver_test_title)
+                    .setMessage(lines)
+                    .setPositiveButton(R.string.dialog_save, null)
+                    .show()
             }
         }.start()
     }
 
-    private fun createSeaResolverServerRow(): View {
-        seaResolverServerSummaryView = TextView(context).apply {
+    private fun createSeaResolverServerRow(region: ResolverRegion): View {
+        val title = context.getString(R.string.sea_resolver_server_title_format, seaRegionLabel(region))
+        val summaryView = TextView(context).apply {
             textSize = 12f
             setTextColor(summaryTextColor)
             setPadding(0, dp(4), 0, 0)
         }
+        seaServerSummaries[region] = summaryView
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             isFocusable = true
-            setOnClickListener { showSeaResolverServerDialog() }
+            setOnClickListener { showSeaResolverServerDialog(region) }
             addView(TextView(context).apply {
-                text = context.getString(R.string.sea_resolver_server_title)
+                text = title
                 textSize = 15f
                 setTextColor(titleTextColor)
             })
-            addView(seaResolverServerSummaryView)
+            addView(summaryView)
         }.also {
-            seaResolverServerRow = it
+            seaServerRows[region] = it
             registerSearchTarget(
                 it,
-                context.getString(R.string.sea_resolver_server_title),
-                context.getString(R.string.sea_resolver_server_empty_summary),
-                "action:${context.getString(R.string.sea_resolver_server_title)}",
+                title,
+                context.getString(R.string.sea_resolver_server_unset_summary),
+                "action:$title",
             )
         }
     }
 
-    private fun showSeaResolverServerDialog() {
+    private fun showSeaResolverServerDialog(region: ResolverRegion) {
         val input = EditText(context).apply {
-            setText(ModuleSettings.getSeaResolverBaseUrl(prefs).orEmpty())
+            setText(ModuleSettings.normalizeResolverBaseUrl(prefs.getString(region.prefKey, null)).orEmpty())
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
-            setHint(R.string.sea_resolver_server_hint)
+            hint = region.hint
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -702,7 +733,7 @@ class SettingsContentFactory(
             addView(input)
         }
         AlertDialog.Builder(context)
-            .setTitle(R.string.sea_resolver_server_title)
+            .setTitle(context.getString(R.string.sea_resolver_server_title_format, seaRegionLabel(region)))
             .setView(content)
             .setNegativeButton(R.string.dialog_cancel, null)
             .setPositiveButton(R.string.dialog_save) { _, _ ->
@@ -712,7 +743,7 @@ class SettingsContentFactory(
                     Toast.makeText(context, R.string.sea_resolver_server_invalid_toast, Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                prefs.edit().putString(ModuleSettings.KEY_SEA_RESOLVER_SERVER, normalized.orEmpty()).apply()
+                prefs.edit().putString(region.prefKey, normalized.orEmpty()).apply()
                 refresh()
             }
             .show()
@@ -2867,7 +2898,8 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED ||
             key == ModuleSettings.KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED ||
-            key == ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED
+            key == ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED ||
+            key == ModuleSettings.KEY_SEA_RESOLVER_SEND_ACCESS_KEY
 
     private fun applyDesktopIconSetting(isChecked: Boolean) {
         DesktopIconHelper.applySetting(context, isChecked)
@@ -3054,39 +3086,33 @@ class SettingsContentFactory(
             homeRecommendTitleKeywordRow.isEnabled = homeRecommendFilterEnabled
             homeRecommendTitleKeywordRow.alpha = if (homeRecommendFilterEnabled) 1f else 0.45f
         }
-        if (::seaResolverServerSummaryView.isInitialized) {
-            seaResolverServerSummaryView.text = ModuleSettings.getSeaResolverBaseUrl(prefs)
-                ?: context.getString(R.string.sea_resolver_server_empty_summary)
-        }
         val seaUnlockOn = prefs.getBoolean(ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED, false)
+        val seaAccessKeyOn = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
+        seaServerSummaries.forEach { (region, view) ->
+            view.text = ModuleSettings.normalizeResolverBaseUrl(prefs.getString(region.prefKey, null))
+                ?: context.getString(R.string.sea_resolver_server_unset_summary)
+        }
+        seaServerRows.values.forEach { row ->
+            row.isEnabled = seaUnlockOn
+            row.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
         if (::seaResolverModeSummaryView.isInitialized) {
             seaResolverModeSummaryView.text =
                 context.getString(R.string.sea_resolver_mode_summary, ModuleSettings.getSeaResolverMode(prefs))
-        }
-        if (::seaResolverServerRow.isInitialized) {
-            seaResolverServerRow.isEnabled = seaUnlockOn
-            seaResolverServerRow.alpha = if (seaUnlockOn) 1f else 0.45f
         }
         if (::seaResolverModeRow.isInitialized) {
             seaResolverModeRow.isEnabled = seaUnlockOn
             seaResolverModeRow.alpha = if (seaUnlockOn) 1f else 0.45f
         }
-        if (::seaSearchSwitch.isInitialized) {
-            seaSearchSwitch.isEnabled = seaUnlockOn
-            (seaSearchSwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
+        fun gate(switchView: Switch, enabled: Boolean) {
+            switchView.isEnabled = enabled
+            (switchView.parent as? View)?.alpha = if (enabled) 1f else 0.45f
         }
-        if (::seaPlaySwitch.isInitialized) {
-            seaPlaySwitch.isEnabled = seaUnlockOn
-            (seaPlaySwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
-        }
-        if (::seaDetailSwitch.isInitialized) {
-            seaDetailSwitch.isEnabled = seaUnlockOn
-            (seaDetailSwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
-        }
-        if (::seaAccessKeySwitch.isInitialized) {
-            seaAccessKeySwitch.isEnabled = seaUnlockOn
-            (seaAccessKeySwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
-        }
+        if (::seaSearchSwitch.isInitialized) gate(seaSearchSwitch, seaUnlockOn)
+        if (::seaPlaySwitch.isInitialized) gate(seaPlaySwitch, seaUnlockOn)
+        if (::seaRelaxSwitch.isInitialized) gate(seaRelaxSwitch, seaUnlockOn)
+        if (::seaDetailSwitch.isInitialized) gate(seaDetailSwitch, seaUnlockOn && seaAccessKeyOn)
+        if (::seaAccessKeySwitch.isInitialized) gate(seaAccessKeySwitch, seaUnlockOn)
         val commentKeywordFilterEnabled = ModuleSettings.isCommentKeywordFilterEnabled(prefs)
         if (::commentKeywordFilterSwitch.isInitialized) {
             commentKeywordFilterSwitch.isChecked = commentKeywordFilterEnabled
