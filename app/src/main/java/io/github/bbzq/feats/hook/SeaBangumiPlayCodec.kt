@@ -16,19 +16,34 @@ internal object SeaBangumiPlayCodec {
     private val REGION_WORDING = Regex("地区|地區")
     private val REGION_CODES = setOf(-10403, 6002003)
 
+    /** The dialog type the host itself uses for a copyright-region refusal. */
+    const val AREA_LIMIT_DIALOG = "area_limit"
+
+    /**
+     * Whether an official PGC play reply cannot be played in this region: it carries no streams at
+     * all, or one of its dialogs says `area_limit`. A reply without streams is treated as refused
+     * whatever the dialog says, because a resolver may still be able to serve the episode.
+     */
+    fun isRefusedReply(streamCount: Int, dialogTypes: List<String?>): Boolean =
+        streamCount <= 0 || dialogTypes.any { it == AREA_LIMIT_DIALOG }
+
     fun isRegionBlocked(code: Int, message: String?): Boolean =
         code in REGION_CODES || (message != null && REGION_WORDING.containsMatchIn(message))
 
     /** The top-level `code` of a resolver answer, for logs; null if the body is not JSON. */
     fun answerCode(body: String): Int? = runCatching { JSONObject(body).optInt("code") }.getOrNull()
 
-    /** The `result` object of a successful playurl answer that carries at least one DASH video. */
+    /**
+     * The stream description of a successful playurl answer that carries at least one DASH video.
+     * Some endpoints wrap it in `video_info`; others put it directly under `result`.
+     */
     fun playableResult(body: String): JSONObject? {
         val root = JSONObject(body)
         if (root.optInt("code", -1) != 0) return null
         val result = root.optJSONObject("result") ?: root.optJSONObject("data") ?: return null
-        val dash = result.optJSONObject("dash") ?: return null
-        return result.takeIf { dash.optJSONArray("video").objects().any { it.stream() != null } }
+        val node = result.optJSONObject("video_info") ?: result
+        val dash = node.optJSONObject("dash") ?: return null
+        return node.takeIf { dash.optJSONArray("video").objects().any { it.stream() != null } }
     }
 
     /**
@@ -37,8 +52,13 @@ internal object SeaBangumiPlayCodec {
      * switches (mini window, background play, cast...) are dropped too, which enables them all.
      * Returns null if [original] is not well-formed.
      */
-    fun buildReply(original: ByteArray, result: JSONObject, relaxPlayLimits: Boolean = false): ByteArray? {
-        val videoInfo = encodeVideoInfo(result) ?: return null
+    fun buildReply(
+        original: ByteArray,
+        result: JSONObject,
+        relaxPlayLimits: Boolean = false,
+        cdnHost: String? = null,
+    ): ByteArray? {
+        val videoInfo = encodeVideoInfo(result, cdnHost) ?: return null
         val dropped = if (relaxPlayLimits) setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO, REPLY_PLAY_CONF)
         else setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO)
         val rest = ProtoWire.dropFields(original, dropped) ?: return null
@@ -48,13 +68,14 @@ internal object SeaBangumiPlayCodec {
         }.toByteArray()
     }
 
-    fun encodeVideoInfo(result: JSONObject): ByteArray? {
+    /** With [cdnHost] the main address of every stream moves to that host; backups stay as given. */
+    fun encodeVideoInfo(result: JSONObject, cdnHost: String? = null): ByteArray? {
         val dash = result.optJSONObject("dash") ?: return null
-        val audios = dash.optJSONArray("audio").objects().mapNotNull { audio -> audio.stream()?.let { audio to it } }
+        val audios = dash.optJSONArray("audio").objects().mapNotNull { audio -> audio.stream(cdnHost)?.let { audio to it } }
         val bestAudio = audios.maxByOrNull { (audio, _) -> audio.optLong("bandwidth") }?.first
         val formats = result.optJSONArray("support_formats").objects().associateBy { it.optInt("quality") }
         val videos = dash.optJSONArray("video").objects().mapNotNull { video ->
-            video.stream()?.let { video to it }
+            video.stream(cdnHost)?.let { video to it }
         }
         if (videos.isEmpty()) return null
 
@@ -125,9 +146,10 @@ internal object SeaBangumiPlayCodec {
     private class Stream(val base: String, val backups: List<String>)
 
     /** The playable address of a DASH entry; the resolver emits both snake and camel spellings. */
-    private fun JSONObject.stream(): Stream? {
-        val base = optString("base_url").ifEmpty { optString("baseUrl") }
-        if (base.isEmpty()) return null
+    private fun JSONObject.stream(cdnHost: String? = null): Stream? {
+        val original = optString("base_url").ifEmpty { optString("baseUrl") }
+        if (original.isEmpty()) return null
+        val base = if (cdnHost.isNullOrEmpty()) original else CustomCdnProcessor.replaceHost(original, cdnHost)
         val backupArray = optJSONArray("backup_url") ?: optJSONArray("backupUrl")
         val backups = (0 until (backupArray?.length() ?: 0)).mapNotNull { backupArray?.optString(it)?.takeIf(String::isNotEmpty) }
         return Stream(base, backups)

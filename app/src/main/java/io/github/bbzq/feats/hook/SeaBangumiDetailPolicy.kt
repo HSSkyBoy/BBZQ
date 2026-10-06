@@ -17,12 +17,21 @@ internal object SeaBangumiDetailPolicy {
     /** Bytes of a response worth peeking: a refusal is a tiny JSON object, a season is megabytes. */
     const val PEEK_BYTES = 2048L
 
+    private const val NOT_FOUND = -404
+
     fun isPgcPath(encodedPath: String): Boolean = PGC_PREFIXES.any { encodedPath.startsWith(it) }
 
-    /** True when the start of a JSON response is a region refusal rather than data. */
+    /** The `code` at the start of a JSON response, or null when there is none. */
+    fun answerCode(prefix: String): Int? = CODE.find(prefix)?.groupValues?.get(1)?.toIntOrNull()
+
+    /**
+     * True when the start of a JSON response is a region refusal rather than data. A season the
+     * viewer's region may not see comes back as `-404`, as well as with the explicit region codes.
+     */
     fun isRegionRefusal(prefix: String): Boolean {
-        val code = CODE.find(prefix)?.groupValues?.get(1)?.toIntOrNull() ?: return false
+        val code = answerCode(prefix) ?: return false
         if (code == 0) return false
+        if (code == NOT_FOUND) return true
         val message = MESSAGE.find(prefix)?.groupValues?.get(1)?.let(::unescape)
         return SeaBangumiPlayCodec.isRegionBlocked(code, message)
     }

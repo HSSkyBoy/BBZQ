@@ -45,6 +45,15 @@ class ResolverServersTest {
     }
 
     @Test
+    fun parseReadsRegionNamesCaseInsensitively() {
+        assertEquals(ResolverRegion.SEA, ResolverRegion.parse(" sea "))
+        assertEquals(ResolverRegion.HK, ResolverRegion.parse("HK"))
+        assertEquals(null, ResolverRegion.parse(""))
+        assertEquals(null, ResolverRegion.parse("TH"))
+        assertEquals(null, ResolverRegion.parse(null))
+    }
+
+    @Test
     fun preferringMovesTheKnownRegionFirstAndKeepsTheRest() {
         val servers = ResolverRegion.values().map { ResolverServer(it, "https://${it.name.lowercase()}.example.com") }
 

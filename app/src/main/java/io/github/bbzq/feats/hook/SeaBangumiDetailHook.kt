@@ -24,6 +24,8 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var interceptorClass: Class<*>? = null
     private var httpUrlClass: Class<*>? = null
 
+    private val loggedPaths = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     /** Region that last served a path, asked first next time. */
     private val servedBy = java.util.concurrent.ConcurrentHashMap<String, ResolverRegion>()
 
@@ -109,7 +111,13 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         val prefix = original.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String
             ?: return null
-        if (!SeaBangumiDetailPolicy.isRegionRefusal(prefix)) return null
+        if (!SeaBangumiDetailPolicy.isRegionRefusal(prefix)) {
+            val code = SeaBangumiDetailPolicy.answerCode(prefix)
+            if (code != null && code != 0 && loggedPaths.add(path)) {
+                log("SeaBangumiDetail: $path answered code=$code, not treated as a region refusal")
+            }
+            return null
+        }
 
         val shareAccount = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
         val query = url.callMethod("encodedQuery") as? String
@@ -118,7 +126,7 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("SeaBangumiDetail: $path was signed with another app key, cannot replay without the account")
             return null
         }
-        for (server in ResolverServers.preferring(servers, servedBy[path])) {
+        for (server in ResolverServers.preferring(servers, servedBy[path] ?: ModuleSettings.getResolverDefaultRegion(prefs))) {
             val replay = replayOn(chain, request, server, path, replayQuery, anonymous = !shareAccount) ?: continue
             servedBy[path] = server.region
             original.callMethod("close")

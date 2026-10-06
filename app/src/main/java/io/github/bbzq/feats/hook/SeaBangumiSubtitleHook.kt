@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.HostAccountCookies
 import io.github.bbzq.feats.ResolverServers
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.SeaResolverClient
@@ -120,8 +121,9 @@ class SeaBangumiSubtitleHook(env: RoamingEnv) : BaseRoamingHook(env) {
             prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)?.takeIf { it.isNotBlank() }
                 ?.let { params += "access_key" to it }
         }
+        val headers = HostAccountCookies.headers(env.hostContext, ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs))
         for (server in servers) {
-            val body = SeaResolverClient(server.baseUrl, ::log).get(PLAYER_PATH, params) ?: continue
+            val body = SeaResolverClient(server.baseUrl, ::log).get(PLAYER_PATH, params, headers) ?: continue
             val entries = runCatching { SeaBangumiSubtitleCodec.parse(body) }.getOrDefault(emptyList())
             if (entries.isEmpty()) continue
             val subtitle = SeaBangumiSubtitleCodec.encodeSubtitle(entries) ?: continue

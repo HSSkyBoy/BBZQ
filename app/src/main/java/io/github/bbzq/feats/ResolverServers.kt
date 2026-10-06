@@ -7,11 +7,17 @@ import io.github.bbzq.ModuleSettings
  * The regions a resolver server can unlock. Declaration order is the order in which servers are
  * tried when the answer is not known yet: Hong Kong/Macau, Taiwan, Southeast Asia, mainland China.
  */
-enum class ResolverRegion(val prefKey: String) {
-    HK(ModuleSettings.KEY_RESOLVER_SERVER_HK),
-    TW(ModuleSettings.KEY_RESOLVER_SERVER_TW),
-    SEA(ModuleSettings.KEY_SEA_RESOLVER_SERVER),
-    CN(ModuleSettings.KEY_RESOLVER_SERVER_CN),
+enum class ResolverRegion(val prefKey: String, val cdnKey: String) {
+    HK(ModuleSettings.KEY_RESOLVER_SERVER_HK, ModuleSettings.KEY_RESOLVER_CDN_HK),
+    TW(ModuleSettings.KEY_RESOLVER_SERVER_TW, ModuleSettings.KEY_RESOLVER_CDN_TW),
+    SEA(ModuleSettings.KEY_SEA_RESOLVER_SERVER, ModuleSettings.KEY_RESOLVER_CDN_SEA),
+    CN(ModuleSettings.KEY_RESOLVER_SERVER_CN, ModuleSettings.KEY_RESOLVER_CDN_CN);
+
+    companion object {
+        /** The region named by [value] (case-insensitive), or null for blank or unknown text. */
+        fun parse(value: String?): ResolverRegion? =
+            values().firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) }
+    }
 }
 
 data class ResolverServer(val region: ResolverRegion, val baseUrl: String)

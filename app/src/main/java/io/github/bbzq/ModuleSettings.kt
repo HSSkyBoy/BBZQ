@@ -126,6 +126,11 @@ object ModuleSettings {
     const val KEY_RESOLVER_SERVER_HK = "resolver_server_hk"
     const val KEY_RESOLVER_SERVER_TW = "resolver_server_tw"
     const val KEY_RESOLVER_SERVER_CN = "resolver_server_cn"
+    const val KEY_RESOLVER_DEFAULT_REGION = "resolver_default_region"
+    const val KEY_RESOLVER_CDN_HK = "resolver_cdn_hk"
+    const val KEY_RESOLVER_CDN_TW = "resolver_cdn_tw"
+    const val KEY_RESOLVER_CDN_SEA = "resolver_cdn_sea"
+    const val KEY_RESOLVER_CDN_CN = "resolver_cdn_cn"
     const val KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS = "sea_unlock_relax_play_limits"
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
@@ -431,7 +436,13 @@ object ModuleSettings {
             add(ExportableConfigSpec(region.prefKey, ExportableValueType.STRING) { prefs ->
                 normalizeResolverBaseUrl(prefs.getString(region.prefKey, null))
             })
+            add(ExportableConfigSpec(region.cdnKey, ExportableValueType.STRING) { prefs ->
+                getResolverCdnHost(prefs, region)
+            })
         }
+        add(ExportableConfigSpec(KEY_RESOLVER_DEFAULT_REGION, ExportableValueType.STRING) { prefs ->
+            getResolverDefaultRegion(prefs)?.name
+        })
         add(ExportableConfigSpec(KEY_SEA_RESOLVER_MODE, ExportableValueType.STRING) { prefs ->
             getSeaResolverMode(prefs)
         })
@@ -1066,6 +1077,14 @@ object ModuleSettings {
     /** Off by default: the account key only leaves the device when the user opts in. */
     fun isSeaResolverSendAccessKeyEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false)
+
+    /** The region asked first when nothing is known about an episode yet; null means list order. */
+    fun getResolverDefaultRegion(prefs: SharedPreferences): ResolverRegion? =
+        ResolverRegion.parse(prefs.getString(KEY_RESOLVER_DEFAULT_REGION, null))
+
+    /** Host that replaces the stream host of a region's bangumi; null follows the regular CDN settings. */
+    fun getResolverCdnHost(prefs: SharedPreferences, region: ResolverRegion): String? =
+        normalizeCdnHost(prefs.getString(region.cdnKey, null))
 
     /** Clears the substituted reply's ability switches (mini window, background play, cast...). */
     fun isSeaRelaxPlayLimitsEnabled(prefs: SharedPreferences): Boolean =

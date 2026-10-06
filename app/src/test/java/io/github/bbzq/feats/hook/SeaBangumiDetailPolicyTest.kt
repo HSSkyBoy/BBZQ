@@ -24,6 +24,13 @@ class SeaBangumiDetailPolicyTest {
     }
 
     @Test
+    fun aMissingSeasonIsTreatedAsARegionRefusal() {
+        assertTrue(SeaBangumiDetailPolicy.isRegionRefusal("""{"code":-404,"message":"啥都木有","ttl":1}"""))
+        assertEquals(-404, SeaBangumiDetailPolicy.answerCode("""{"code":-404,"message":"x"}"""))
+        assertNull(SeaBangumiDetailPolicy.answerCode("not json"))
+    }
+
+    @Test
     fun otherResponsesAreNotRefusals() {
         assertFalse(SeaBangumiDetailPolicy.isRegionRefusal("""{"code":0,"message":"success","result":{"title":"x"}}"""))
         assertFalse(SeaBangumiDetailPolicy.isRegionRefusal("""{"code":-101,"message":"账号未登录"}"""))

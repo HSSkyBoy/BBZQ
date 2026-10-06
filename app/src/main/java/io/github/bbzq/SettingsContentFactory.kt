@@ -94,6 +94,10 @@ class SettingsContentFactory(
     private val seaServerRows = mutableMapOf<ResolverRegion, View>()
     private val seaServerSummaries = mutableMapOf<ResolverRegion, TextView>()
     private lateinit var seaRelaxSwitch: Switch
+    private val seaCdnSummaries = mutableMapOf<ResolverRegion, TextView>()
+    private val seaCdnRows = mutableMapOf<ResolverRegion, View>()
+    private lateinit var seaDefaultRegionRow: View
+    private lateinit var seaDefaultRegionSummary: TextView
     private lateinit var seaSubtitleSwitch: Switch
     private lateinit var seaResolverModeRow: View
     private lateinit var seaResolverModeSummaryView: TextView
@@ -194,6 +198,9 @@ class SettingsContentFactory(
                 }
                 pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_resolver)) {
                     seaResolverRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_cdn)) {
+                    seaCdnSectionRows()
                 }
                 pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_scope)) {
                     seaScopeRows()
@@ -545,6 +552,7 @@ class SettingsContentFactory(
 
     private fun seaResolverRows(): List<View> =
         ResolverRegion.values().map { createSeaResolverServerRow(it) } + listOf(
+            createSeaDefaultRegionRow(),
             createClickableInfoRow(
                 context.getString(R.string.sea_resolver_test_title),
                 context.getString(R.string.sea_resolver_test_summary),
@@ -652,6 +660,110 @@ class SettingsContentFactory(
                 refresh()
             }
             .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    private fun seaCdnSectionRows(): List<View> =
+        listOf(createInfoRow(
+            context.getString(R.string.sea_cdn_info_title),
+            context.getString(R.string.sea_cdn_info_summary),
+        )) + ResolverRegion.values().map { createSeaCdnRow(it) }
+
+    private fun createSeaDefaultRegionRow(): View {
+        val title = context.getString(R.string.sea_default_region_title)
+        seaDefaultRegionSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showSeaDefaultRegionDialog() }
+            addView(TextView(context).apply {
+                text = title
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(seaDefaultRegionSummary)
+        }.also {
+            seaDefaultRegionRow = it
+            registerSearchTarget(it, title, context.getString(R.string.sea_default_region_unset_summary), "action:$title")
+        }
+    }
+
+    private fun showSeaDefaultRegionDialog() {
+        val regions = ResolverRegion.values()
+        val labels = (listOf(context.getString(R.string.sea_default_region_unset_summary)) + regions.map { seaRegionLabel(it) })
+            .toTypedArray()
+        val current = ModuleSettings.getResolverDefaultRegion(prefs)
+        val selected = if (current == null) 0 else regions.indexOf(current) + 1
+        AlertDialog.Builder(context)
+            .setTitle(R.string.sea_default_region_title)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                dialog.dismiss()
+                val value = if (which == 0) "" else regions[which - 1].name
+                prefs.edit().putString(ModuleSettings.KEY_RESOLVER_DEFAULT_REGION, value).apply()
+                refresh()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    private fun createSeaCdnRow(region: ResolverRegion): View {
+        val title = context.getString(R.string.sea_cdn_title_format, seaRegionLabel(region))
+        val summaryView = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+            setPadding(0, dp(4), 0, 0)
+        }
+        seaCdnSummaries[region] = summaryView
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showSeaCdnDialog(region) }
+            addView(TextView(context).apply {
+                text = title
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(summaryView)
+        }.also {
+            seaCdnRows[region] = it
+            registerSearchTarget(it, title, context.getString(R.string.sea_cdn_follow_summary), "action:$title")
+        }
+    }
+
+    private fun showSeaCdnDialog(region: ResolverRegion) {
+        val input = EditText(context).apply {
+            setText(ModuleSettings.getResolverCdnHost(prefs, region).orEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setHint(R.string.sea_cdn_hint)
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(context.getString(R.string.sea_cdn_title_format, seaRegionLabel(region)))
+            .setView(content)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                val raw = input.text?.toString()?.trim().orEmpty()
+                val normalized = ModuleSettings.normalizeCdnHost(raw)
+                if (raw.isNotEmpty() && normalized == null) {
+                    Toast.makeText(context, R.string.sea_cdn_invalid_toast, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                prefs.edit().putString(region.cdnKey, normalized.orEmpty()).apply()
+                refresh()
+            }
             .show()
     }
 
@@ -3101,6 +3213,22 @@ class SettingsContentFactory(
         seaServerRows.values.forEach { row ->
             row.isEnabled = seaUnlockOn
             row.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        seaCdnSummaries.forEach { (region, view) ->
+            view.text = ModuleSettings.getResolverCdnHost(prefs, region)
+                ?: context.getString(R.string.sea_cdn_follow_summary)
+        }
+        seaCdnRows.values.forEach { row ->
+            row.isEnabled = seaUnlockOn
+            row.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        if (::seaDefaultRegionSummary.isInitialized) {
+            seaDefaultRegionSummary.text = ModuleSettings.getResolverDefaultRegion(prefs)?.let { seaRegionLabel(it) }
+                ?: context.getString(R.string.sea_default_region_unset_summary)
+        }
+        if (::seaDefaultRegionRow.isInitialized) {
+            seaDefaultRegionRow.isEnabled = seaUnlockOn
+            seaDefaultRegionRow.alpha = if (seaUnlockOn) 1f else 0.45f
         }
         if (::seaResolverModeSummaryView.isInitialized) {
             seaResolverModeSummaryView.text =

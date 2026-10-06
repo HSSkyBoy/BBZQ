@@ -97,6 +97,48 @@ class SeaBangumiPlayCodecTest {
     }
 
     @Test
+    fun playableResultUnwrapsVideoInfo() {
+        val wrapped = """{"code":0,"result":{"video_info":{"quality":32,"dash":{"video":[{"id":32,"base_url":"https://v/32.m4s"}],"audio":[]}}}}"""
+
+        val node = SeaBangumiPlayCodec.playableResult(wrapped)
+
+        assertNotNull(node)
+        assertEquals(32, node!!.getInt("quality"))
+    }
+
+    @Test
+    fun cdnHostMovesTheMainAddressAndKeepsBackups() {
+        val result = JSONObject(playurl).getJSONObject("result")
+
+        val info = fields(SeaBangumiPlayCodec.encodeVideoInfo(result, "cdn.example.com")!!)
+
+        val video = fields(fields(info.bytes(5)).bytes(2))
+        assertEquals("https://cdn.example.com/32.m4s", video.string(1))
+        assertEquals("https://b/32.m4s", video.string(2))
+        val firstAudio = fields(info.bytes(6))
+        assertEquals("https://cdn.example.com/16.m4s", firstAudio.string(2))
+    }
+
+    @Test
+    fun aReplyWithoutStreamsIsRefusedWhateverTheDialogSays() {
+        assertTrue(SeaBangumiPlayCodec.isRefusedReply(0, emptyList()))
+        assertTrue(SeaBangumiPlayCodec.isRefusedReply(0, listOf("pay", null)))
+    }
+
+    @Test
+    fun anAreaLimitDialogRefusesEvenWithStreams() {
+        assertTrue(SeaBangumiPlayCodec.isRefusedReply(3, listOf("", "area_limit")))
+        assertTrue(SeaBangumiPlayCodec.isRefusedReply(3, listOf("area_limit", null)))
+    }
+
+    @Test
+    fun aPlayableReplyIsNotRefused() {
+        assertFalse(SeaBangumiPlayCodec.isRefusedReply(3, emptyList()))
+        assertFalse(SeaBangumiPlayCodec.isRefusedReply(3, listOf("", null)))
+        assertFalse(SeaBangumiPlayCodec.isRefusedReply(3, listOf("pay")))
+    }
+
+    @Test
     fun answerCodeReadsTheEnvelope() {
         assertEquals(-10493, SeaBangumiPlayCodec.answerCode("""{"code":-10493,"message":"x"}"""))
         assertNull(SeaBangumiPlayCodec.answerCode("not json"))
