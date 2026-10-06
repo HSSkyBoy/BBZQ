@@ -244,7 +244,7 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
             val bvid = (videoInfo?.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
                 ?: (target.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
             if (bvid != null && (bvid.startsWith("BV1") || bvid.startsWith("bv1"))) {
-                VideoStatsOverlayController.currentBvid = bvid
+                VideoStatsOverlayController.recordPlayback(bvid, null)
             }
 
             if (trial) {
@@ -320,12 +320,12 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
             val bvid = (request.callMethod("getBvid") as? String)?.takeIf { it.isNotBlank() }
             val aid = (request.callMethod("getAid") as? Number)?.toLong()?.takeIf { it > 0 }
             val cid = (request.callMethod("getCid") as? Number)?.toLong()?.takeIf { it > 0 }
-            if (bvid != null && (bvid.startsWith("BV1") || bvid.startsWith("bv1"))) {
-                VideoStatsOverlayController.currentBvid = bvid
-            } else if (aid != null) {
-                VideoStatsOverlayController.currentBvid = SkipVideoAdState.bvidFromAid(aid)
+            val requestBvid = if (bvid != null && (bvid.startsWith("BV1") || bvid.startsWith("bv1"))) {
+                bvid
+            } else {
+                aid?.let { SkipVideoAdState.bvidFromAid(it) }
             }
-            if (cid != null) VideoStatsOverlayController.currentCid = cid
+            VideoStatsOverlayController.recordPlayback(requestBvid, cid)
 
             if (trial) {
                 request.callMethod("setIsNeedTrial", true)

@@ -26,16 +26,15 @@ object VideoDownloadManager {
 
     fun fetchVideoInfo(
         activity: Activity, 
-        bvid: String, 
-        cookie: String, 
+        bvid: String,
+        cid: Long?,
+        cookie: String,
         onResult: (List<QualityInfo>?, String?) -> Unit
     ) {
-        val capturedCid = io.github.bbzq.feats.hook.VideoStatsOverlayController.currentCid
-        val capturedBvid = io.github.bbzq.feats.hook.VideoStatsOverlayController.currentBvid
-        val targetBvid = if (!capturedBvid.isNullOrBlank()) capturedBvid else bvid
+        val targetBvid = bvid
 
-        if (capturedCid != null && capturedCid > 0 && targetBvid.startsWith("BV", ignoreCase = true)) {
-            fetchPlayUrl(activity, targetBvid, capturedCid, cookie, onResult)
+        if (cid != null && cid > 0 && targetBvid.startsWith("BV", ignoreCase = true)) {
+            fetchPlayUrl(activity, targetBvid, cid, cookie, onResult)
             return
         }
 

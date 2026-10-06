@@ -34,15 +34,19 @@ internal class VideoStatsOverlayController(
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var topActivity = WeakReference<Activity>(null)
+    private val identities = PlaybackIdentityRegistry<Activity>()
     private var activeStatsContent = WeakReference<LinearLayout>(null)
     @Volatile private var latestStats: VideoStreamStats? = null
 
     fun install() {
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityCreated(activity: Activity, state: Bundle?) {
+                if (isVideoDetailActivity(activity)) identities.setOwner(activity)
+            }
             override fun onActivityStarted(activity: Activity) = Unit
             override fun onActivityResumed(activity: Activity) {
                 topActivity = WeakReference(activity)
+                if (isVideoDetailActivity(activity)) identities.setOwner(activity)
             }
             override fun onActivityPaused(activity: Activity) {
                 if (topActivity.get() === activity) topActivity.clear()
@@ -54,6 +58,11 @@ internal class VideoStatsOverlayController(
                 if (topActivity.get() === activity) topActivity.clear()
             }
         })
+    }
+
+    /** Credits a play request or reply to the video page that is currently in front. */
+    fun recordPlayback(bvid: String?, cid: Long?) {
+        identities.record(bvid, cid)
     }
 
     fun update(stats: VideoStreamStats) {
@@ -147,7 +156,9 @@ internal class VideoStatsOverlayController(
                 } else {
                     statusText.text = "状态：获取 BVID $bvid，正在拉取流信息..."
                     val cookies = getBiliCookies(activity)
-                    io.github.bbzq.feats.download.VideoDownloadManager.fetchVideoInfo(activity, bvid, cookies) { list, error ->
+                    val pageCid = identities.identityOf(activity)?.takeIf { it.bvid == bvid }?.cid
+                        ?: currentCid.takeIf { bvid == currentBvid }
+                    io.github.bbzq.feats.download.VideoDownloadManager.fetchVideoInfo(activity, bvid, pageCid, cookies) { list, error ->
                         if (list.isNullOrEmpty()) {
                             statusText.text = "状态：${error ?: "获取流信息失败"}"
                         } else {
@@ -219,6 +230,7 @@ internal class VideoStatsOverlayController(
     }
 
     private fun extractBvid(activity: Activity): String? {
+        identities.identityOf(activity)?.bvid?.takeIf { isValidBvid(it) }?.let { return it }
         val captured = currentBvid
         if (!captured.isNullOrBlank() && isValidBvid(captured)) return captured
 
@@ -397,6 +409,13 @@ internal class VideoStatsOverlayController(
         @Volatile var instance: VideoStatsOverlayController? = null
         @Volatile var currentBvid: String? = null
         @Volatile var currentCid: Long? = null
+
+        /** Keeps the process-wide last-seen ids and credits the same playback to its video page. */
+        fun recordPlayback(bvid: String?, cid: Long?) {
+            if (bvid != null) currentBvid = bvid
+            if (cid != null) currentCid = cid
+            instance?.recordPlayback(bvid, cid)
+        }
 
         fun getOrCreate(context: android.content.Context): VideoStatsOverlayController {
             return instance ?: synchronized(this) {
