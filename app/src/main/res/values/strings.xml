@@ -264,10 +264,12 @@
     <string name="sea_region_cn">中国大陆</string>
     <string name="sea_unlock_relax_title">放开解锁番剧的播放限制</string>
     <string name="sea_unlock_relax_summary">解锁播放时清除官方的功能限制，使小窗、后台播放、投屏等可用。</string>
+    <string name="sea_unlock_subtitle_title">解锁番剧字幕</string>
+    <string name="sea_unlock_subtitle_summary">解锁播放的番剧缺少字幕时，向解析服务器获取该集字幕。需要同时开启「解锁地区限制播放」。</string>
     <string name="sea_unlock_privacy_title">发送给服务器的内容</string>
     <string name="sea_unlock_privacy_summary">搜索关键词、被地区限制的番剧集数，以及搜索请求使用的设备标识，会发送到你设置的各个解析服务器。默认不发送账号密钥。</string>
     <string name="sea_unlock_notes_title">注意事项</string>
-    <string name="sea_unlock_notes_summary">不附带账号密钥时，解析服务器按未登录身份取流，清晰度可能较低；会员专享内容无法解锁。番剧详情页的解锁需要提供账号密钥。字幕与番剧缓存下载暂不支持。</string>
+    <string name="sea_unlock_notes_summary">不附带账号密钥时，解析服务器按未登录身份取流，清晰度可能较低；会员专享内容无法解锁。番剧详情页的解锁需要提供账号密钥。番剧缓存下载暂不支持。</string>
 
     <!-- 播放页 -->
     <string name="playback_hide_banner_title">屏蔽视频页广告</string>

@@ -172,6 +172,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
             if (reply != null) {
                 servedBy[epId] = server.region
+                SeaBangumiSession.record(epId, request.callMethod("getCid").asLong(), server.region)
                 log("SeaBangumiPlay: ${server.region} served ep $epId season $seasonId")
                 return reply
             }
@@ -203,63 +204,18 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return blocked
     }
 
-    private fun invoke(target: Any, method: Method, args: Array<Any?>): Any? =
-        try {
-            method.invoke(target, *args)
-        } catch (e: InvocationTargetException) {
-            throw e.targetException ?: e
-        }
+    private fun invoke(target: Any, method: Method, args: Array<Any?>): Any? = MossCallbacks.invoke(target, method, args)
 
-    private fun invokeByName(target: Any, type: Class<*>, name: String, vararg args: Any?) {
-        val method = type.methods.firstOrNull { it.name == name && it.parameterCount == args.size } ?: return
-        runCatching { invoke(target, method, arrayOf(*args)) }
-            .onFailure { log("SeaBangumiPlay: handler.$name failed", it) }
-    }
+    private fun invokeByName(target: Any, type: Class<*>, name: String, vararg args: Any?) =
+        MossCallbacks.invokeByName(target, type, name, ::log, *args)
 
-    private fun defaultValue(method: Method): Any? = when (method.returnType) {
-        java.lang.Long.TYPE -> 0L
-        java.lang.Integer.TYPE -> 0
-        java.lang.Boolean.TYPE -> false
-        else -> null
-    }
+    private fun defaultValue(method: Method): Any? = MossCallbacks.defaultValue(method)
 
     private fun Any?.asLong(): Long = (this as? Number)?.toLong() ?: 0L
 
     private sealed interface Trigger {
         class Reply(val reply: Any) : Trigger
         class Error(val error: Any) : Trigger
-    }
-
-    /** Holds back callbacks that arrive while a resolver lookup is in flight. */
-    private class Gate {
-        private val queue = ArrayList<() -> Unit>()
-        private var pending = false
-
-        @Synchronized
-        fun enqueueIfPending(task: () -> Unit): Boolean {
-            if (!pending) return false
-            queue += task
-            return true
-        }
-
-        @Synchronized
-        fun start() {
-            pending = true
-        }
-
-        fun finish() {
-            while (true) {
-                val next = synchronized(this) {
-                    if (queue.isEmpty()) {
-                        pending = false
-                        null
-                    } else {
-                        queue.removeAt(0)
-                    }
-                } ?: return
-                runCatching(next)
-            }
-        }
     }
 
     private companion object {

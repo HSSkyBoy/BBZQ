@@ -94,6 +94,7 @@ class SettingsContentFactory(
     private val seaServerRows = mutableMapOf<ResolverRegion, View>()
     private val seaServerSummaries = mutableMapOf<ResolverRegion, TextView>()
     private lateinit var seaRelaxSwitch: Switch
+    private lateinit var seaSubtitleSwitch: Switch
     private lateinit var seaResolverModeRow: View
     private lateinit var seaResolverModeSummaryView: TextView
     private lateinit var seaSearchSwitch: Switch
@@ -576,6 +577,12 @@ class SettingsContentFactory(
             ModuleSettings.KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS,
             true,
         ) { seaRelaxSwitch = it },
+        createSwitchRow(
+            context.getString(R.string.sea_unlock_subtitle_title),
+            context.getString(R.string.sea_unlock_subtitle_summary),
+            ModuleSettings.KEY_SEA_UNLOCK_SUBTITLE_ENABLED,
+            true,
+        ) { seaSubtitleSwitch = it },
     )
 
     private fun seaPrivacyRows(): List<View> = listOf(
@@ -3111,6 +3118,7 @@ class SettingsContentFactory(
         if (::seaSearchSwitch.isInitialized) gate(seaSearchSwitch, seaUnlockOn)
         if (::seaPlaySwitch.isInitialized) gate(seaPlaySwitch, seaUnlockOn)
         if (::seaRelaxSwitch.isInitialized) gate(seaRelaxSwitch, seaUnlockOn)
+        if (::seaSubtitleSwitch.isInitialized) gate(seaSubtitleSwitch, seaUnlockOn)
         if (::seaDetailSwitch.isInitialized) gate(seaDetailSwitch, seaUnlockOn && seaAccessKeyOn)
         if (::seaAccessKeySwitch.isInitialized) gate(seaAccessKeySwitch, seaUnlockOn)
         val commentKeywordFilterEnabled = ModuleSettings.isCommentKeywordFilterEnabled(prefs)

@@ -119,6 +119,7 @@ object ModuleSettings {
     const val KEY_SEA_UNLOCK_SEARCH_ENABLED = "sea_unlock_search_enabled"
     const val KEY_SEA_UNLOCK_PLAY_ENABLED = "sea_unlock_play_enabled"
     const val KEY_SEA_UNLOCK_DETAIL_ENABLED = "sea_unlock_detail_enabled"
+    const val KEY_SEA_UNLOCK_SUBTITLE_ENABLED = "sea_unlock_subtitle_enabled"
     const val KEY_SEA_RESOLVER_MODE = "sea_resolver_mode"
     const val KEY_SEA_RESOLVER_SEND_ACCESS_KEY = "sea_resolver_send_access_key"
     const val KEY_SEA_RESOLVER_SERVER = "sea_resolver_server"
@@ -376,6 +377,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_SEA_UNLOCK_SEARCH_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_SEARCH_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_PLAY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_PLAY_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_DETAIL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true) },
+        ExportableConfigSpec(KEY_SEA_UNLOCK_SUBTITLE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_SUBTITLE_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, true) },
         ExportableConfigSpec(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
@@ -1048,6 +1050,9 @@ object ModuleSettings {
 
     fun isSeaBangumiPlayEnabled(prefs: SharedPreferences): Boolean =
         isSeaBangumiUnlockEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_PLAY_ENABLED, true)
+
+    fun isSeaBangumiSubtitleEnabled(prefs: SharedPreferences): Boolean =
+        isSeaBangumiPlayEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_SUBTITLE_ENABLED, true)
 
     /** The detail replay carries the host's signed request, so it also needs the account key opt-in. */
     fun isSeaBangumiDetailEnabled(prefs: SharedPreferences): Boolean =
