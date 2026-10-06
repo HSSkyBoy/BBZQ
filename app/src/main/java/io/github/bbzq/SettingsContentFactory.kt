@@ -732,7 +732,7 @@ class SettingsContentFactory(
             setText(ModuleSettings.normalizeResolverBaseUrl(prefs.getString(region.prefKey, null)).orEmpty())
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
-            hint = region.hint
+            setHint(R.string.sea_resolver_server_hint)
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -3094,7 +3094,6 @@ class SettingsContentFactory(
             homeRecommendTitleKeywordRow.alpha = if (homeRecommendFilterEnabled) 1f else 0.45f
         }
         val seaUnlockOn = prefs.getBoolean(ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED, false)
-        val seaAccessKeyOn = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
         seaServerSummaries.forEach { (region, view) ->
             view.text = ModuleSettings.normalizeResolverBaseUrl(prefs.getString(region.prefKey, null))
                 ?: context.getString(R.string.sea_resolver_server_unset_summary)
@@ -3119,7 +3118,7 @@ class SettingsContentFactory(
         if (::seaPlaySwitch.isInitialized) gate(seaPlaySwitch, seaUnlockOn)
         if (::seaRelaxSwitch.isInitialized) gate(seaRelaxSwitch, seaUnlockOn)
         if (::seaSubtitleSwitch.isInitialized) gate(seaSubtitleSwitch, seaUnlockOn)
-        if (::seaDetailSwitch.isInitialized) gate(seaDetailSwitch, seaUnlockOn && seaAccessKeyOn)
+        if (::seaDetailSwitch.isInitialized) gate(seaDetailSwitch, seaUnlockOn)
         if (::seaAccessKeySwitch.isInitialized) gate(seaAccessKeySwitch, seaUnlockOn)
         val commentKeywordFilterEnabled = ModuleSettings.isCommentKeywordFilterEnabled(prefs)
         if (::commentKeywordFilterSwitch.isInitialized) {

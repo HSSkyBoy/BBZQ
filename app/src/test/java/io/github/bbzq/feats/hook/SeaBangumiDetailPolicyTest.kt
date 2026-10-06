@@ -2,6 +2,7 @@ package io.github.bbzq.feats.hook
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +28,34 @@ class SeaBangumiDetailPolicyTest {
         assertFalse(SeaBangumiDetailPolicy.isRegionRefusal("""{"code":0,"message":"success","result":{"title":"x"}}"""))
         assertFalse(SeaBangumiDetailPolicy.isRegionRefusal("""{"code":-101,"message":"账号未登录"}"""))
         assertFalse(SeaBangumiDetailPolicy.isRegionRefusal("not json at all"))
+    }
+
+    @Test
+    fun anonymousQueryDropsTheAccountAndSignsAgain() {
+        val hostQuery = "season_id=28747&appkey=1d8b6e7d45233436&access_key=secret&sign=old&build=8110300&ts=1700000000"
+
+        val query = SeaBangumiDetailPolicy.anonymousQuery(hostQuery)
+
+        assertEquals(
+            "appkey=1d8b6e7d45233436&build=8110300&season_id=28747&ts=1700000000&sign=bb24c8098d99bff31270230738af289a",
+            query,
+        )
+        assertFalse(query!!.contains("secret"))
+    }
+
+    @Test
+    fun anonymousQueryRefusesAnotherAppKeyAndEmptyQueries() {
+        assertNull(SeaBangumiDetailPolicy.anonymousQuery("season_id=1&appkey=other&sign=x"))
+        assertNull(SeaBangumiDetailPolicy.anonymousQuery("season_id=1"))
+        assertNull(SeaBangumiDetailPolicy.anonymousQuery(null))
+        assertNull(SeaBangumiDetailPolicy.anonymousQuery(""))
+    }
+
+    @Test
+    fun accountHeadersCoverTheCredentialsTheHostAdds() {
+        assertTrue("authorization" in SeaBangumiDetailPolicy.ACCOUNT_HEADERS)
+        assertTrue("x-bili-metadata-bin" in SeaBangumiDetailPolicy.ACCOUNT_HEADERS)
+        assertTrue("cookie" in SeaBangumiDetailPolicy.ACCOUNT_HEADERS)
     }
 
     @Test

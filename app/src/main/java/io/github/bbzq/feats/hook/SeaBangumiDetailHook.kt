@@ -16,9 +16,9 @@ import java.lang.reflect.Proxy
 
 /**
  * Lets the host's season detail page load for region-limited bangumi: when a PGC HTTP request is
- * refused for the viewer's region, the very same request (including the host's own signature) is
- * replayed on the resolver server. That replay necessarily carries the account key the host puts
- * on the request, so it only runs when the user opted in to sharing it.
+ * refused for the viewer's region, the same request is replayed on the resolver server. By default
+ * the replay is anonymous: the account key and account headers are removed and the query is signed
+ * again. Only when the user opted in to sharing the account is the original request sent as it is.
  */
 class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var interceptorClass: Class<*>? = null
@@ -111,9 +111,15 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
             ?: return null
         if (!SeaBangumiDetailPolicy.isRegionRefusal(prefix)) return null
 
+        val shareAccount = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
         val query = url.callMethod("encodedQuery") as? String
+        val replayQuery = if (shareAccount) query else SeaBangumiDetailPolicy.anonymousQuery(query)
+        if (replayQuery == null && !shareAccount) {
+            log("SeaBangumiDetail: $path was signed with another app key, cannot replay without the account")
+            return null
+        }
         for (server in ResolverServers.preferring(servers, servedBy[path])) {
-            val replay = replayOn(chain, request, server, path, query) ?: continue
+            val replay = replayOn(chain, request, server, path, replayQuery, anonymous = !shareAccount) ?: continue
             servedBy[path] = server.region
             original.callMethod("close")
             log("SeaBangumiDetail: ${server.region} served $path")
@@ -124,10 +130,18 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     /** The replay response if this server answered with data; otherwise it is closed and null returned. */
-    private fun replayOn(chain: Any, request: Any, server: ResolverServer, path: String, query: String?): Any? {
+    private fun replayOn(
+        chain: Any,
+        request: Any,
+        server: ResolverServer,
+        path: String,
+        query: String?,
+        anonymous: Boolean,
+    ): Any? {
         val target = parseUrl(SeaBangumiDetailPolicy.replayUrl(server.baseUrl, path, query)) ?: return null
         val replayRequest = request.callMethod("newBuilder")?.run {
             callMethod("url", target)
+            if (anonymous) SeaBangumiDetailPolicy.ACCOUNT_HEADERS.forEach { callMethod("removeHeader", it) }
             callMethod("build")
         } ?: return null
         val replay = runCatching { proceed(chain, replayRequest) }

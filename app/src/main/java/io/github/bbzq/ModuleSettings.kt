@@ -1054,11 +1054,8 @@ object ModuleSettings {
     fun isSeaBangumiSubtitleEnabled(prefs: SharedPreferences): Boolean =
         isSeaBangumiPlayEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_SUBTITLE_ENABLED, true)
 
-    /** The detail replay carries the host's signed request, so it also needs the account key opt-in. */
     fun isSeaBangumiDetailEnabled(prefs: SharedPreferences): Boolean =
-        isSeaBangumiUnlockEnabled(prefs) &&
-            prefs.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true) &&
-            isSeaResolverSendAccessKeyEnabled(prefs)
+        isSeaBangumiUnlockEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true)
 
     /** Region hints the resolver accepts on the search request; TH, INTL and SEA all reach the same upstream. */
     val SEA_RESOLVER_MODES = listOf("TH", "INTL", "SEA")

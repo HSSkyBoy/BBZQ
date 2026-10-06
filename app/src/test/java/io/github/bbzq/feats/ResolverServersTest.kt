@@ -26,19 +26,19 @@ class ResolverServersTest {
     @Test
     fun configuredKeepsTrialOrderAndSkipsInvalidEntries() {
         val values = mapOf(
-            ResolverRegion.CN to "cn.pre-s.com",
-            ResolverRegion.SEA to "http://intl.pre-s.com:8080/",
+            ResolverRegion.CN to "cn.example.com",
+            ResolverRegion.SEA to "http://sea.example.com:8080/",
             ResolverRegion.TW to "not a host",
-            ResolverRegion.HK to "https://hk.pre-s.com",
+            ResolverRegion.HK to "https://hk.example.com",
         )
 
         val servers = ResolverServers.configured { values[it] }
 
         assertEquals(
             listOf(
-                ResolverRegion.HK to "https://hk.pre-s.com",
-                ResolverRegion.SEA to "http://intl.pre-s.com:8080",
-                ResolverRegion.CN to "https://cn.pre-s.com",
+                ResolverRegion.HK to "https://hk.example.com",
+                ResolverRegion.SEA to "http://sea.example.com:8080",
+                ResolverRegion.CN to "https://cn.example.com",
             ),
             servers.map { it.region to it.baseUrl },
         )
@@ -46,7 +46,7 @@ class ResolverServersTest {
 
     @Test
     fun preferringMovesTheKnownRegionFirstAndKeepsTheRest() {
-        val servers = ResolverRegion.values().map { ResolverServer(it, "https://${it.hint}") }
+        val servers = ResolverRegion.values().map { ResolverServer(it, "https://${it.name.lowercase()}.example.com") }
 
         val ordered = ResolverServers.preferring(servers, ResolverRegion.SEA).map { it.region }
 
