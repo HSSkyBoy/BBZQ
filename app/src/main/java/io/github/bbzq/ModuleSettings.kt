@@ -113,6 +113,13 @@ object ModuleSettings {
     const val KEY_SEARCH_HOT_CLEAN_ENABLED = "search_hot_clean_enabled"
     const val KEY_SEARCH_SUGGEST_CLEAN_ENABLED = "search_suggest_clean_enabled"
     const val KEY_SEARCH_RESULT_AD_BLOCK_ENABLED = "search_result_ad_block_enabled"
+    const val KEY_SEA_BANGUMI_UNLOCK_ENABLED = "sea_bangumi_unlock_enabled"
+    const val KEY_SEA_UNLOCK_SEARCH_ENABLED = "sea_unlock_search_enabled"
+    const val KEY_SEA_UNLOCK_PLAY_ENABLED = "sea_unlock_play_enabled"
+    const val KEY_SEA_UNLOCK_DETAIL_ENABLED = "sea_unlock_detail_enabled"
+    const val KEY_SEA_RESOLVER_MODE = "sea_resolver_mode"
+    const val KEY_SEA_RESOLVER_SEND_ACCESS_KEY = "sea_resolver_send_access_key"
+    const val KEY_SEA_RESOLVER_SERVER = "sea_resolver_server"
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
     const val KEY_LAST_ACCESS_KEY = "last_access_key"
@@ -359,6 +366,11 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_SEARCH_HOT_CLEAN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEARCH_HOT_CLEAN_ENABLED, false) },
         ExportableConfigSpec(KEY_SEARCH_SUGGEST_CLEAN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEARCH_SUGGEST_CLEAN_ENABLED, false) },
         ExportableConfigSpec(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, false) },
+        ExportableConfigSpec(KEY_SEA_BANGUMI_UNLOCK_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_BANGUMI_UNLOCK_ENABLED, false) },
+        ExportableConfigSpec(KEY_SEA_UNLOCK_SEARCH_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_SEARCH_ENABLED, true) },
+        ExportableConfigSpec(KEY_SEA_UNLOCK_PLAY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_PLAY_ENABLED, true) },
+        ExportableConfigSpec(KEY_SEA_UNLOCK_DETAIL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true) },
+        ExportableConfigSpec(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
         ExportableConfigSpec(KEY_UNLOCK_COMMENT_GIF_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_UNLOCK_COMMENT_GIF_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_DESKTOP_ICON, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_DESKTOP_ICON, false) },
@@ -405,6 +417,12 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_CUSTOM_CDN_HOST, ExportableValueType.STRING) { prefs ->
             getCustomCdnHost(prefs)
+        })
+        add(ExportableConfigSpec(KEY_SEA_RESOLVER_SERVER, ExportableValueType.STRING) { prefs ->
+            getSeaResolverBaseUrl(prefs)
+        })
+        add(ExportableConfigSpec(KEY_SEA_RESOLVER_MODE, ExportableValueType.STRING) { prefs ->
+            getSeaResolverMode(prefs)
         })
         add(ExportableConfigSpec(KEY_CDN_WIFI_PRIORITY, ExportableValueType.STRING) { prefs ->
             prefs.getString(KEY_CDN_WIFI_PRIORITY, null)
@@ -1012,6 +1030,42 @@ object ModuleSettings {
 
     fun isSearchResultAdBlockEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SEARCH_RESULT_AD_BLOCK_ENABLED, false)
+
+    fun isSeaBangumiUnlockEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SEA_BANGUMI_UNLOCK_ENABLED, false) && getSeaResolverBaseUrl(prefs) != null
+
+    fun isSeaBangumiSearchEnabled(prefs: SharedPreferences): Boolean =
+        isSeaBangumiUnlockEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_SEARCH_ENABLED, true)
+
+    fun isSeaBangumiPlayEnabled(prefs: SharedPreferences): Boolean =
+        isSeaBangumiUnlockEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_PLAY_ENABLED, true)
+
+    /** The detail replay carries the host's signed request, so it also needs the account key opt-in. */
+    fun isSeaBangumiDetailEnabled(prefs: SharedPreferences): Boolean =
+        isSeaBangumiUnlockEnabled(prefs) &&
+            prefs.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true) &&
+            isSeaResolverSendAccessKeyEnabled(prefs)
+
+    /** Region hints the resolver accepts on the search request; TH, INTL and SEA all reach the same upstream. */
+    val SEA_RESOLVER_MODES = listOf("TH", "INTL", "SEA")
+
+    fun getSeaResolverMode(prefs: SharedPreferences): String =
+        prefs.getString(KEY_SEA_RESOLVER_MODE, null)?.uppercase()?.takeIf { it in SEA_RESOLVER_MODES } ?: SEA_RESOLVER_MODES.first()
+
+    /** Off by default: the account key only leaves the device when the user opts in. */
+    fun isSeaResolverSendAccessKeyEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false)
+
+    fun getSeaResolverBaseUrl(prefs: SharedPreferences): String? =
+        normalizeResolverBaseUrl(prefs.getString(KEY_SEA_RESOLVER_SERVER, null))
+
+    /** Keeps an explicit http:// for self-hosted resolvers; anything else is served over https. */
+    fun normalizeResolverBaseUrl(value: String?): String? {
+        val raw = value.orEmpty().trim()
+        val scheme = if (raw.startsWith("http://", ignoreCase = true)) "http" else "https"
+        val host = normalizeCdnHost(raw) ?: return null
+        return "$scheme://$host"
+    }
 
     fun isFullNumberFormatEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false)

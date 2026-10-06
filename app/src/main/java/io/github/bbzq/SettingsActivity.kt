@@ -488,6 +488,7 @@ class SettingsActivity : Activity() {
         PAGE_HIDDEN_FEATURES -> getString(R.string.about_hidden_features_title)
         PAGE_UPDATE -> getString(R.string.about_update_title)
         PAGE_CONFIG_BACKUP -> getString(R.string.about_config_backup_title)
+        PAGE_SEA_BANGUMI_UNLOCK -> getString(R.string.sea_bangumi_unlock_title)
         else -> getString(R.string.settings_title)
     }
 
@@ -697,6 +698,7 @@ class SettingsActivity : Activity() {
         const val PAGE_HIDDEN_FEATURES = "hidden_features"
         const val PAGE_UPDATE = "update"
         const val PAGE_CONFIG_BACKUP = "config_backup"
+        const val PAGE_SEA_BANGUMI_UNLOCK = "sea_bangumi_unlock"
         private const val REQUEST_EXPORT_CONFIG = 0x5001
         private const val REQUEST_IMPORT_CONFIG = 0x5002
         private const val REQUEST_IMPORT_CUSTOM_SKIN = 0x5003

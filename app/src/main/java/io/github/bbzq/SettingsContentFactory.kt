@@ -89,6 +89,14 @@ class SettingsContentFactory(
     private lateinit var homeRecommendTitleKeywordRow: View
     private lateinit var homeRecommendTabSwitch: Switch
     private lateinit var homeRecommendTitleKeywordSummaryView: TextView
+    private lateinit var seaResolverServerRow: View
+    private lateinit var seaResolverModeRow: View
+    private lateinit var seaResolverModeSummaryView: TextView
+    private lateinit var seaSearchSwitch: Switch
+    private lateinit var seaPlaySwitch: Switch
+    private lateinit var seaDetailSwitch: Switch
+    private lateinit var seaAccessKeySwitch: Switch
+    private lateinit var seaResolverServerSummaryView: TextView
     private lateinit var hideAllHomeComponentsSwitch: Switch
     private lateinit var customHomeComponentHideSwitch: Switch
     private lateinit var storyVideoAdSwitch: Switch
@@ -173,6 +181,24 @@ class SettingsContentFactory(
             SettingsActivity.PAGE_CONFIG_BACKUP -> {
                 pageRoot.addSettingsSection(context.getString(R.string.about_config_backup_title)) {
                     configBackupRows()
+                }
+            }
+
+            SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK -> {
+                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_overview)) {
+                    seaBangumiUnlockRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_resolver)) {
+                    seaResolverRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_scope)) {
+                    seaScopeRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_privacy)) {
+                    seaPrivacyRows()
+                }
+                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_notes)) {
+                    seaNotesRows()
                 }
             }
 
@@ -481,7 +507,215 @@ class SettingsContentFactory(
             ModuleSettings.KEY_SEARCH_RESULT_AD_BLOCK_ENABLED,
             false,
         )
+        rows += createClickableInfoRow(
+            context.getString(R.string.sea_bangumi_unlock_title),
+            seaUnlockEntrySummary(),
+        ) {
+            openPage(SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK)
+        }
         return rows
+    }
+
+    private fun seaUnlockEntrySummary(): String {
+        val server = ModuleSettings.getSeaResolverBaseUrl(prefs)
+        return when {
+            !prefs.getBoolean(ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED, false) ->
+                context.getString(R.string.sea_unlock_entry_off_summary)
+            server == null -> context.getString(R.string.sea_unlock_entry_no_server_summary)
+            else -> context.getString(R.string.sea_unlock_entry_on_summary, server.substringAfter("://"))
+        }
+    }
+
+    private fun seaBangumiUnlockRows(): List<View> = listOf(
+        createInfoRow(
+            context.getString(R.string.sea_unlock_overview_title),
+            context.getString(R.string.sea_unlock_overview_summary),
+        ),
+        createSwitchRow(
+            context.getString(R.string.sea_bangumi_unlock_title),
+            context.getString(R.string.sea_bangumi_unlock_summary),
+            ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED,
+            false,
+        ),
+    )
+
+    private fun seaResolverRows(): List<View> = listOf(
+        createSeaResolverServerRow(),
+        createClickableInfoRow(
+            context.getString(R.string.sea_resolver_test_title),
+            context.getString(R.string.sea_resolver_test_summary),
+        ) { testSeaResolver() },
+        createSeaResolverModeRow(),
+    )
+
+    private fun seaScopeRows(): List<View> = listOf(
+        createSwitchRow(
+            context.getString(R.string.sea_unlock_search_title),
+            context.getString(R.string.sea_unlock_search_summary),
+            ModuleSettings.KEY_SEA_UNLOCK_SEARCH_ENABLED,
+            true,
+        ) { seaSearchSwitch = it },
+        createSwitchRow(
+            context.getString(R.string.sea_unlock_play_title),
+            context.getString(R.string.sea_unlock_play_summary),
+            ModuleSettings.KEY_SEA_UNLOCK_PLAY_ENABLED,
+            true,
+        ) { seaPlaySwitch = it },
+        createSwitchRow(
+            context.getString(R.string.sea_unlock_detail_title),
+            context.getString(R.string.sea_unlock_detail_summary),
+            ModuleSettings.KEY_SEA_UNLOCK_DETAIL_ENABLED,
+            true,
+        ) { seaDetailSwitch = it },
+    )
+
+    private fun seaPrivacyRows(): List<View> = listOf(
+        createInfoRow(
+            context.getString(R.string.sea_unlock_privacy_title),
+            context.getString(R.string.sea_unlock_privacy_summary),
+        ),
+        createSwitchRow(
+            context.getString(R.string.sea_resolver_send_access_key_title),
+            context.getString(R.string.sea_resolver_send_access_key_summary),
+            ModuleSettings.KEY_SEA_RESOLVER_SEND_ACCESS_KEY,
+            false,
+        ) { seaAccessKeySwitch = it },
+    )
+
+    private fun seaNotesRows(): List<View> = listOf(
+        createInfoRow(
+            context.getString(R.string.sea_unlock_notes_title),
+            context.getString(R.string.sea_unlock_notes_summary),
+        ),
+    )
+
+    private fun createSeaResolverModeRow(): View {
+        seaResolverModeSummaryView = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showSeaResolverModeDialog() }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.sea_resolver_mode_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(seaResolverModeSummaryView)
+        }.also {
+            seaResolverModeRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.sea_resolver_mode_title),
+                context.getString(R.string.sea_resolver_mode_summary, ModuleSettings.getSeaResolverMode(prefs)),
+                "action:${context.getString(R.string.sea_resolver_mode_title)}",
+            )
+        }
+    }
+
+    private fun showSeaResolverModeDialog() {
+        val modes = ModuleSettings.SEA_RESOLVER_MODES
+        val labels = modes.map { mode ->
+            when (mode) {
+                "TH" -> context.getString(R.string.sea_resolver_mode_th)
+                "INTL" -> context.getString(R.string.sea_resolver_mode_intl)
+                else -> context.getString(R.string.sea_resolver_mode_sea)
+            }
+        }.toTypedArray()
+        val selected = modes.indexOf(ModuleSettings.getSeaResolverMode(prefs)).coerceAtLeast(0)
+        AlertDialog.Builder(context)
+            .setTitle(R.string.sea_resolver_mode_title)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                dialog.dismiss()
+                prefs.edit().putString(ModuleSettings.KEY_SEA_RESOLVER_MODE, modes[which]).apply()
+                refresh()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    private fun testSeaResolver() {
+        val baseUrl = ModuleSettings.getSeaResolverBaseUrl(prefs)
+        if (baseUrl == null) {
+            Toast.makeText(context, R.string.sea_resolver_server_empty_summary, Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(context, R.string.sea_resolver_test_running, Toast.LENGTH_SHORT).show()
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        Thread {
+            val elapsed = io.github.bbzq.feats.SeaResolverClient(baseUrl) { _, _ -> }.ping()
+            mainHandler.post {
+                val message = if (elapsed == null) {
+                    context.getString(R.string.sea_resolver_test_failed)
+                } else {
+                    context.getString(R.string.sea_resolver_test_ok, elapsed)
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
+    private fun createSeaResolverServerRow(): View {
+        seaResolverServerSummaryView = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+            setPadding(0, dp(4), 0, 0)
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showSeaResolverServerDialog() }
+            addView(TextView(context).apply {
+                text = context.getString(R.string.sea_resolver_server_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(seaResolverServerSummaryView)
+        }.also {
+            seaResolverServerRow = it
+            registerSearchTarget(
+                it,
+                context.getString(R.string.sea_resolver_server_title),
+                context.getString(R.string.sea_resolver_server_empty_summary),
+                "action:${context.getString(R.string.sea_resolver_server_title)}",
+            )
+        }
+    }
+
+    private fun showSeaResolverServerDialog() {
+        val input = EditText(context).apply {
+            setText(ModuleSettings.getSeaResolverBaseUrl(prefs).orEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setHint(R.string.sea_resolver_server_hint)
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.sea_resolver_server_title)
+            .setView(content)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                val raw = input.text?.toString()?.trim().orEmpty()
+                val normalized = ModuleSettings.normalizeResolverBaseUrl(raw)
+                if (raw.isNotEmpty() && normalized == null) {
+                    Toast.makeText(context, R.string.sea_resolver_server_invalid_toast, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                prefs.edit().putString(ModuleSettings.KEY_SEA_RESOLVER_SERVER, normalized.orEmpty()).apply()
+                refresh()
+            }
+            .show()
     }
 
     private fun playbackRows(): List<View> {
@@ -2632,7 +2866,8 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED ||
             key == ModuleSettings.KEY_BLOCK_ALL_COMPONENT_POOLS_ENABLED ||
-            key == ModuleSettings.KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED
+            key == ModuleSettings.KEY_CUSTOM_COMPONENT_POOL_BLOCK_ENABLED ||
+            key == ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED
 
     private fun applyDesktopIconSetting(isChecked: Boolean) {
         DesktopIconHelper.applySetting(context, isChecked)
@@ -2818,6 +3053,39 @@ class SettingsContentFactory(
         if (::homeRecommendTitleKeywordRow.isInitialized) {
             homeRecommendTitleKeywordRow.isEnabled = homeRecommendFilterEnabled
             homeRecommendTitleKeywordRow.alpha = if (homeRecommendFilterEnabled) 1f else 0.45f
+        }
+        if (::seaResolverServerSummaryView.isInitialized) {
+            seaResolverServerSummaryView.text = ModuleSettings.getSeaResolverBaseUrl(prefs)
+                ?: context.getString(R.string.sea_resolver_server_empty_summary)
+        }
+        val seaUnlockOn = prefs.getBoolean(ModuleSettings.KEY_SEA_BANGUMI_UNLOCK_ENABLED, false)
+        if (::seaResolverModeSummaryView.isInitialized) {
+            seaResolverModeSummaryView.text =
+                context.getString(R.string.sea_resolver_mode_summary, ModuleSettings.getSeaResolverMode(prefs))
+        }
+        if (::seaResolverServerRow.isInitialized) {
+            seaResolverServerRow.isEnabled = seaUnlockOn
+            seaResolverServerRow.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        if (::seaResolverModeRow.isInitialized) {
+            seaResolverModeRow.isEnabled = seaUnlockOn
+            seaResolverModeRow.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        if (::seaSearchSwitch.isInitialized) {
+            seaSearchSwitch.isEnabled = seaUnlockOn
+            (seaSearchSwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        if (::seaPlaySwitch.isInitialized) {
+            seaPlaySwitch.isEnabled = seaUnlockOn
+            (seaPlaySwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        if (::seaDetailSwitch.isInitialized) {
+            seaDetailSwitch.isEnabled = seaUnlockOn
+            (seaDetailSwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
+        }
+        if (::seaAccessKeySwitch.isInitialized) {
+            seaAccessKeySwitch.isEnabled = seaUnlockOn
+            (seaAccessKeySwitch.parent as? View)?.alpha = if (seaUnlockOn) 1f else 0.45f
         }
         val commentKeywordFilterEnabled = ModuleSettings.isCommentKeywordFilterEnabled(prefs)
         if (::commentKeywordFilterSwitch.isInitialized) {
