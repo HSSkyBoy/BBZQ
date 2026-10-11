@@ -80,14 +80,26 @@ class StoryDetailRedirectHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
 
     private fun installAutoStorySuppression(): Int {
-        val boolValue = BOOL_VALUE_CLASS.from(classLoader) ?: return 0
-        val playConfig = PLAY_CONFIG_CLASS.from(classLoader) ?: return 0
-        val defaultValue = runCatching {
-            boolValue.declaredMethods.firstOrNull { method ->
-                method.name == "getDefaultInstance" && Modifier.isStatic(method.modifiers) &&
-                    method.parameterCount == 0 && method.returnType == boolValue
-            }?.apply { isAccessible = true }?.invoke(null)
-        }.getOrNull()?.takeIf(boolValue::isInstance) ?: return 0
+        val javaHooks = installAutoStoryGetters(PLAY_CONFIG_CLASS, BOOL_VALUE_CLASS) { type ->
+            type.getMethod("getDefaultInstance").invoke(null)
+        }
+        val kotlinHooks = installAutoStoryGetters(K_PLAY_CONFIG_CLASS, K_BOOL_VALUE_CLASS) { type ->
+            type.getDeclaredConstructor().newInstance().takeIf {
+                type.getMethod("getValue").invoke(it) == false
+            }
+        }
+        return javaHooks + kotlinHooks
+    }
+
+    private fun installAutoStoryGetters(
+        configClassName: String,
+        valueClassName: String,
+        defaultValueOf: (Class<*>) -> Any?,
+    ): Int {
+        val boolValue = valueClassName.from(classLoader) ?: return 0
+        val playConfig = configClassName.from(classLoader) ?: return 0
+        val defaultValue = runCatching { defaultValueOf(boolValue) }.getOrNull()
+            ?.takeIf(boolValue::isInstance) ?: return 0
         return AUTO_STORY_GETTERS.count { name ->
             val method = playConfig.declaredMethods.firstOrNull { method ->
                 method.name == name && !Modifier.isStatic(method.modifiers) &&
@@ -145,6 +157,8 @@ class StoryDetailRedirectHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val INTENT_HANDLER_CLASS = "tv.danmaku.bili.ui.intent.IntentHandlerActivity"
         private const val BOOL_VALUE_CLASS = "com.bapis.bilibili.app.distribution.BoolValue"
         private const val PLAY_CONFIG_CLASS = "com.bapis.bilibili.app.distribution.setting.play.PlayConfig"
+        private const val K_BOOL_VALUE_CLASS = "com.bapis.bilibili.app.distribution.KBoolValue"
+        private const val K_PLAY_CONFIG_CLASS = "com.bapis.bilibili.app.distribution.setting.play.KPlayConfig"
         private const val MAX_LOGGED_KEYS = 24
         private const val MAX_LOGGED_KEY_LENGTH = 40
         private val AUTO_STORY_GETTERS = listOf("getLandscapeAutoStory", "getShouldAutoStory")

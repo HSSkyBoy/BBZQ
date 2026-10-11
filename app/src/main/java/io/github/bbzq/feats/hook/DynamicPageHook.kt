@@ -30,6 +30,7 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return
         }
 
+        val kotlinHooks = env.hookKotlinDynamicTabs()
         env.hookAfterMethod(Activity::class.java, "onResume") { param ->
             val activity = param.thisObject as? Activity ?: return@hookAfterMethod
             val name = activity.javaClass.name
@@ -55,7 +56,7 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("DynamicPage Fragment.onViewCreated hook unavailable")
         }
 
-        log("startHook: DynamicPage Activity.onResume + Fragment.onViewCreated")
+        log("startHook: DynamicPage Activity.onResume + Fragment.onViewCreated, Kotlin hooks=$kotlinHooks")
     }
 
     private fun scheduleSweep(activity: Activity, root: View, ownerName: String) {
