@@ -20,6 +20,7 @@ import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.allFields
 import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.symbol.dexkit.DexKitBridgeProvider
+import io.github.bbzq.feats.hook.QualityRangePolicy
 import io.github.bbzq.feats.symbol.dexkit.scanMessage
 import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.query.FindClass
@@ -984,7 +985,7 @@ object BiliSymbolResolver {
             ).mapNotNull { classLoader.loadClassOrNull(it.name) }.firstOrNull()
             val outerHolderClass = preloadClass?.declaringClass
             outerHolderClass?.declaredMethods?.filter {
-                Modifier.isPublic(it.modifiers) && it.parameterCount == 1
+                Modifier.isPublic(it.modifiers) && it.parameterCount == 1 && it.returnType == preloadClass
             }?.onEach { it.isAccessible = true }.orEmpty()
         }.getOrElse { emptyList() }
 
@@ -999,9 +1000,23 @@ object BiliSymbolResolver {
         // 5. PlayerSettingHelper (quality settings:)
         val defaultQnMethod = runCatching {
             currentBridge.findMethod(
-                FindMethod.create().matcher(MethodMatcher.create().usingStrings("quality settings:")),
+                FindMethod.create().matcher(MethodMatcher.create().usingStrings("quality settings:").paramCount(0)),
             ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
-                .firstOrNull { it.returnType == Int::class.javaPrimitiveType || it.returnType == Int::class.javaObjectType }
+                .filter { it.returnType == Int::class.javaPrimitiveType || it.returnType == Int::class.javaObjectType }
+                .distinctBy(Method::toGenericString)
+                .singleOrNull()
+                ?.apply { isAccessible = true }
+        }.getOrNull()
+
+        val rangeUpdateMethod = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create()
+                    .searchPackages("com.bilibili.ship.theseus.united.player")
+                    .matcher(MethodMatcher.create().paramCount(11).returnType(Void.TYPE)),
+            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .filter(QualityRangePolicy::matchesUpdate)
+                .distinctBy(Method::toGenericString)
+                .singleOrNull()
                 ?.apply { isAccessible = true }
         }.getOrNull()
 
@@ -1011,10 +1026,11 @@ object BiliSymbolResolver {
             playerPreloadGetMethods = preloadMethods.map(MethodDescriptor::of),
             playerQualityServiceMethods = qualityServiceMethods.map(MethodDescriptor::of),
             playerSettingHelperGetDefaultQnMethod = defaultQnMethod?.let(MethodDescriptor::of),
-            evidence = "autoSupremum=${autoSupremumCtor != null},strategy=${selectQualityMethod != null},preload=${preloadMethods.size},service=${qualityServiceMethods.size},setting=${defaultQnMethod != null}",
+            rangeQualityUpdateMethod = rangeUpdateMethod?.let(MethodDescriptor::of),
+            evidence = "autoSupremum=${autoSupremumCtor != null},strategy=${selectQualityMethod != null},preload=${preloadMethods.size},service=${qualityServiceMethods.size},setting=${defaultQnMethod != null},range=${rangeUpdateMethod != null}",
         )
 
-        return if (autoSupremumCtor != null || selectQualityMethod != null || preloadMethods.isNotEmpty() || qualityServiceMethods.isNotEmpty()) {
+        return if (autoSupremumCtor != null || selectQualityMethod != null || preloadMethods.isNotEmpty() || qualityServiceMethods.isNotEmpty() || defaultQnMethod != null || rangeUpdateMethod != null) {
             SymbolScanResult.Found(symbols, autoSupremumQualityClass?.name ?: "VideoQuality", symbols.evidence)
         } else {
             SymbolScanResult.Missing("video quality hook points not found")

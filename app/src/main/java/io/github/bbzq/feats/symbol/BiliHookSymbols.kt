@@ -147,7 +147,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 60
+    const val CURRENT = 61
 }
 
 data class HookPointStatus(
@@ -2208,6 +2208,7 @@ data class VideoQualitySymbols(
     val playerPreloadGetMethods: List<MethodDescriptor> = emptyList(),
     val playerQualityServiceMethods: List<MethodDescriptor> = emptyList(),
     val playerSettingHelperGetDefaultQnMethod: MethodDescriptor? = null,
+    val rangeQualityUpdateMethod: MethodDescriptor? = null,
     val evidence: String,
 ) {
     fun toJson(): JSONObject = JSONObject()
@@ -2216,6 +2217,7 @@ data class VideoQualitySymbols(
         .put("playerPreloadGetMethods", playerPreloadGetMethods.toJsonArray { it.toJson() })
         .put("playerQualityServiceMethods", playerQualityServiceMethods.toJsonArray { it.toJson() })
         .putOpt("playerSettingHelperGetDefaultQnMethod", playerSettingHelperGetDefaultQnMethod?.toJson())
+        .putOpt("rangeQualityUpdateMethod", rangeQualityUpdateMethod?.toJson())
         .put("evidence", evidence)
 
     fun restore(classLoader: ClassLoader): RestoredVideoQualitySymbols {
@@ -2233,6 +2235,7 @@ data class VideoQualitySymbols(
             playerPreloadGetMethods = preloadMethods,
             playerQualityServiceMethods = qualityServiceMethods,
             playerSettingHelperGetDefaultQnMethod = settingDefaultQnMethod,
+            rangeQualityUpdateMethod = rangeQualityUpdateMethod?.restoreOptional(classLoader),
         )
     }
 
@@ -2243,6 +2246,7 @@ data class VideoQualitySymbols(
             playerPreloadGetMethods = obj.optJSONArray("playerPreloadGetMethods").toList { MethodDescriptor.fromJson(it) },
             playerQualityServiceMethods = obj.optJSONArray("playerQualityServiceMethods").toList { MethodDescriptor.fromJson(it) },
             playerSettingHelperGetDefaultQnMethod = obj.optJSONObject("playerSettingHelperGetDefaultQnMethod")?.let(MethodDescriptor::fromJson),
+            rangeQualityUpdateMethod = obj.optJSONObject("rangeQualityUpdateMethod")?.let(MethodDescriptor::fromJson),
             evidence = obj.optString("evidence", "-"),
         )
     }
@@ -2254,6 +2258,7 @@ data class RestoredVideoQualitySymbols(
     val playerPreloadGetMethods: List<Method>,
     val playerQualityServiceMethods: List<Method>,
     val playerSettingHelperGetDefaultQnMethod: Method?,
+    val rangeQualityUpdateMethod: Method? = null,
 )
 
 data class MethodDescriptor(

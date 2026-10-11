@@ -5,6 +5,7 @@ import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
+import io.github.bbzq.feats.hookAfter
 
 class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
@@ -32,6 +33,23 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         var installedHooks = 0
+
+        if (halfScreenQuality != 0 || fullScreenQuality != 0) {
+            symbols.rangeQualityUpdateMethod?.let { method ->
+                env.hookAfter(method) { param ->
+                    if (param.args[0] == true && param.args[9] == true) return@hookAfter
+                    val state = param.args.getOrNull(3) ?: return@hookAfter
+                    val fullScreen = state.javaClass.getField("element").getBoolean(state)
+                    val halfFlow = param.args.getOrNull(1) ?: return@hookAfter
+                    val autoFlow = param.args.getOrNull(2) ?: return@hookAfter
+                    QualityRangePolicy.overrideRanges(
+                        halfFlow, autoFlow, fullScreen,
+                        ModuleSettings.getHalfScreenQuality(prefs), ModuleSettings.getFullScreenQuality(prefs),
+                    )
+                }
+                installedHooks++
+            }
+        }
 
         // 1. VIP privilege spoofing for quality management classes:
         if (unlockHighestBitrate || unlockVideoFeatures) {
@@ -63,8 +81,8 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (halfScreenQuality != 0) {
             symbols.playerPreloadGetMethods.forEach { method ->
                 runCatching {
-                    env.hookBefore(method) { param ->
-                        param.result = null
+                    env.hookAfter(method) { param ->
+                        if (ModuleSettings.getHalfScreenQuality(prefs) != 0) param.result = null
                     }
                     installedHooks++
                 }.onFailure { log("Failed to hook preload method ${method.name}", it) }
@@ -83,7 +101,7 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         // 2. Full screen setting helper
-        if (fullScreenQuality != 0) {
+        if (fullScreenQuality != 0 && symbols.rangeQualityUpdateMethod == null) {
             symbols.playerSettingHelperGetDefaultQnMethod?.let { method ->
                 runCatching {
                     env.hookBefore(method) { param ->
