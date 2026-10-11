@@ -23,6 +23,16 @@ class BlockActivityMetaStickerHook(env: RoamingEnv) : BaseRoamingHook(env) {
         var installed = 0
         installed += installDmViewReplyGetterHooks()
         installed += installOnNextHook()
+        installed += env.hookKotlinMoss(
+            "com.bapis.bilibili.community.service.dm.v1.KDMMoss",
+            "dmView",
+            "com.bapis.bilibili.community.service.dm.v1.DmViewReply",
+            enabled = { ModuleSettings.isBlockActivityMetaStickerEnabled(prefs) },
+        ) { reply ->
+            val builder = reply.javaClass.getMethod("toBuilder").invoke(reply) ?: error("Empty dm builder")
+            builder.javaClass.getMethod("clearActivityMeta").invoke(builder)
+            builder.javaClass.getMethod("build").invoke(builder) ?: error("Empty dm reply")
+        }
 
         if (installed == 0) {
             log("startHook: BlockActivityMetaSticker no hook point found")
@@ -50,6 +60,7 @@ class BlockActivityMetaStickerHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         if (getListMethod != null) {
             env.hookBefore(getListMethod) { param ->
+                if (KotlinMossBridge.isRaw()) return@hookBefore
                 param.result = Collections.emptyList<Any>()
             }
             log("startHook: BlockActivityMetaSticker getActivityMetaList at ${dmViewReplyClass.name}")
@@ -64,6 +75,7 @@ class BlockActivityMetaStickerHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         if (getCountMethod != null) {
             env.hookBefore(getCountMethod) { param ->
+                if (KotlinMossBridge.isRaw()) return@hookBefore
                 param.result = 0
             }
             log("startHook: BlockActivityMetaSticker getActivityMetaCount at ${dmViewReplyClass.name}")

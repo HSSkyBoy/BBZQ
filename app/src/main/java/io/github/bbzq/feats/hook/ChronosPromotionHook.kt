@@ -42,13 +42,14 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("startHook: ChronosPromotion disabled, settings=${ModuleSettingsBridge.lastStatus}")
             return
         }
+        val kotlinHooks = installKotlinResponseHooks()
         val symbols = env.symbols?.chronosPromotion?.restore(classLoader)
         if (symbols == null) {
-            log("startHook: ChronosPromotion skipped because symbols are unavailable")
+            log("startHook: ChronosPromotion symbols unavailable, Kotlin hooks=$kotlinHooks")
             return
         }
 
-        val installed = installRpcReceiveHooks(symbols) +
+        val installed = kotlinHooks + installRpcReceiveHooks(symbols) +
             installLocalGetViewProgressHook(symbols) +
             installLocalDmViewHook(symbols) +
             installRemoteHandlerHooks(symbols) +
@@ -60,6 +61,31 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("startHook: ChronosPromotion no hook point found")
         } else {
             log("startHook: ChronosPromotion installed $installed hook point(s)")
+        }
+    }
+
+    private fun installKotlinResponseHooks(): Int {
+        val dmHooks = env.hookKotlinMoss(
+            "com.bapis.bilibili.community.service.dm.v1.KDMMoss",
+            "dmView",
+            "com.bapis.bilibili.community.service.dm.v1.DmViewReply",
+            enabled = { ModuleSettings.isBlockChronosPromotionEnabled(prefs) },
+        ) { reply ->
+            val removed = scrubDmViewReply(reply)
+            if (removed > 0) logBlocked("kotlinDmView:$removed")
+            reply
+        }
+        return dmHooks + listOf("view", "viewunite").sumOf { family ->
+            env.hookKotlinMoss(
+                "com.bapis.bilibili.app.$family.v1.KViewMoss",
+                "viewProgress",
+                "com.bapis.bilibili.app.$family.v1.ViewProgressReply",
+                enabled = { ModuleSettings.isBlockChronosPromotionEnabled(prefs) },
+            ) { reply ->
+                val removed = scrubOriginReply(reply)
+                if (removed > 0) logBlocked("kotlinViewProgress:$removed")
+                reply
+            }
         }
     }
 

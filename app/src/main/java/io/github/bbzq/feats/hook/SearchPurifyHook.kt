@@ -32,6 +32,7 @@ class SearchPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
         runCatching {
             val responseClass = classLoader.loadClass("com.bapis.bilibili.polymer.app.search.v1.SearchAllResponse")
             env.hookAfterMethod(responseClass, "getItemList") { param ->
+                if (KotlinMossBridge.isRaw() || !ModuleSettings.isSearchResultAdBlockEnabled(prefs)) return@hookAfterMethod
                 val items = param.result as? List<*> ?: return@hookAfterMethod
                 if (items.none(::isAdItem)) return@hookAfterMethod
                 param.result = items.filterNot(::isAdItem)
@@ -39,6 +40,20 @@ class SearchPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("SearchPurifyHook: SearchAllResponse.getItemList hook installed")
         }.onFailure {
             log("SearchPurifyHook: failed to hook SearchAllResponse.getItemList", it)
+        }
+        env.hookKotlinMoss(
+            "com.bapis.bilibili.polymer.app.search.v1.KSearchMoss",
+            "searchAll",
+            "com.bapis.bilibili.polymer.app.search.v1.SearchAllResponse",
+            enabled = { ModuleSettings.isSearchResultAdBlockEnabled(prefs) },
+        ) { reply ->
+            val items = reply.callMethod("getItemList") as? List<*> ?: return@hookKotlinMoss reply
+            val kept = items.filterNot(::isAdItem)
+            if (kept.size == items.size) return@hookKotlinMoss reply
+            val builder = reply.javaClass.getMethod("toBuilder").invoke(reply) ?: error("Empty search builder")
+            builder.javaClass.getMethod("clearItem").invoke(builder)
+            builder.javaClass.getMethod("addAllItem", Iterable::class.java).invoke(builder, kept)
+            builder.javaClass.getMethod("build").invoke(builder) ?: error("Empty search reply")
         }
     }
 
