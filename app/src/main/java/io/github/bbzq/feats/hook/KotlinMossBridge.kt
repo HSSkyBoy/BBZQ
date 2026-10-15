@@ -14,8 +14,11 @@ internal class KotlinMossBridge(
     fun transform(value: Any, filter: (Any) -> Any): Any = raw {
         val wire = encode(value)
         val bytes = serialize(parse(wire))
-        val updated = serialize(filter(parse(wire)))
-        if (bytes.contentEquals(updated)) value else decode(updated)
+        val edited = filter(parse(wire))
+        val updated = serialize(edited)
+        if (bytes.contentEquals(updated)) value else decode(updated).also { decoded ->
+            check(parse(encode(decoded)) == edited) { "Kotlin Moss reply changed during round trip" }
+        }
     }
 
     companion object {
@@ -45,7 +48,7 @@ internal class KotlinMossBridge(
         }?.apply { isAccessible = true }
 
         private fun hasOnNext(type: Class<*>): Boolean = type.methods.any {
-            it.name == "onNext" && it.parameterCount == 1 && it.returnType == Void.TYPE
+            it.name == "onNext" && it.parameterTypes.contentEquals(arrayOf(Any::class.java)) && it.returnType == Void.TYPE
         }
 
         fun wrap(
