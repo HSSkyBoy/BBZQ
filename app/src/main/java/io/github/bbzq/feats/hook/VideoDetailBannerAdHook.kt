@@ -26,9 +26,16 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val hookedAdPanelClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private val hookedEndPageClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private var blockedCount = 0
+    private var preservePauseBar = false
 
     override fun startHook() {
         if (env.processName != env.packageName) return
+        preservePauseBar = runCatching {
+            classLoader.findClassOrNull("com.bapis.bilibili.app.viewunite.v1.PlayPauseReply")?.methods?.any {
+                it.name == "hasBar" && !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 &&
+                    it.returnType == Boolean::class.javaPrimitiveType
+            } == true
+        }.getOrDefault(false)
 
         var installed = 0
         installed += installDirectBannerBlocks()
@@ -52,6 +59,7 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun installDirectBannerBlocks(): Int {
         var count = 0
+        count += env.hookPauseResponses()
         count += installVDPausedPageDirectBlock()
         count += installBannerV2ControllerDirectBlock()
         count += installVideoDetailPanelHelperDirectBlock()
@@ -137,6 +145,7 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun installVDPausedPageDirectBlock(): Int {
+        if (preservePauseBar) return 0
         val vdPausedPageClass = classLoader.findClassOrNull("com.bilibili.ad.adview.videodetail.pausedpage.VDPausedPage")
             ?: return 0
         var count = 0
@@ -247,7 +256,7 @@ class VideoDetailBannerAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         }
                     }
                 }
-                "getPausedPage" -> if (pausedPageType != null && requestPausedPage != null) {
+                "getPausedPage" -> if (!preservePauseBar && pausedPageType != null && requestPausedPage != null) {
                     env.hookAfter(method) { param ->
                         if (!ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) return@hookAfter
                         val pausedPage = param.result ?: return@hookAfter
