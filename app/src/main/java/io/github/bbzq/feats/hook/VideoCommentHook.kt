@@ -1,5 +1,6 @@
 package io.github.bbzq.feats.hook
 
+import android.net.Uri
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
@@ -9,10 +10,13 @@ import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.symbol.RestoredVideoCommentSymbols
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.lang.reflect.Modifier
+import java.lang.reflect.ParameterizedType
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.Unit
+import org.json.JSONObject
 
 class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
@@ -175,16 +179,12 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             runCatching {
                 if (KotlinMossBridge.isRaw()) return@runCatching
                 if (!ModuleSettings.isCommentNoSearchEnabled(prefs)) return@runCatching
-                val urls = param.result as? MutableMap<*, *> ?: return@runCatching
-                urls.entries.removeIf { (_, value) ->
-                    value != null && value.javaClass.declaredFields.any { field ->
-                        field.isAccessible = true
-                        runCatching {
-                            (field.get(value) as? CharSequence)
-                                ?.startsWith("bilibili://search") == true
-                        }.getOrDefault(false)
-                    }
+                val urls = param.result as? Map<*, *> ?: return@runCatching
+                val kept = urls.filterValues { value ->
+                    val schema = value?.let { noArgMethod(it.javaClass, "getAppUrlSchema")?.invoke(it) as? String }
+                    schema == null || !isSearchUrl(schema)
                 }
+                if (kept.size != urls.size) param.result = kept
             }.onFailure {
                 log("VideoComment search url hook failed", it)
             }
@@ -226,20 +226,50 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun hookKotlinReplyCleanup(): Int = listOf(
         "mainList" to "MainListReply",
         "detailList" to "DetailListReply",
+        "dialogList" to "DialogListReply",
+        "foldList" to "FoldListResp",
+        "hotspotPage" to "HotspotPageResp",
+        "replyInfo" to "ReplyInfoReply",
     ).sumOf { (rpc, reply) ->
-        env.hookKotlinMoss(
+        val enabled = {
+            currentReplyCleanupOptions().active || ModuleSettings.isCommentNoSearchEnabled(prefs) ||
+                ModuleSettings.isCommentNoEmptyPageEnabled(prefs) || ModuleSettings.isCommentNoVoteEnabled(prefs)
+        }
+        val cleanup: (Any) -> Any = { payload ->
+            cleanupReplyPayload(payload, currentReplyCleanupOptions(), ::cleanupKotlinReplyDecorations, rpc == "replyInfo")
+            payload
+        }
+        val javaHooks = if (rpc == "mainList") 0 else env.hookJavaMoss(
+            "com.bapis.bilibili.main.community.reply.v1.ReplyMoss", rpc,
+            "com.bapis.bilibili.main.community.reply.v1.${rpc.replaceFirstChar(Char::uppercaseChar)}Req",
+            "com.bapis.bilibili.main.community.reply.v1.$reply", enabled,
+        ) { payload -> copyProtobufReply(payload) { cleanup(it) } }
+        javaHooks + env.hookKotlinMoss(
             "com.bapis.bilibili.main.community.reply.v1.KReplyMoss",
             rpc,
             "com.bapis.bilibili.main.community.reply.v1.$reply",
-            enabled = {
-                currentReplyCleanupOptions().active || ModuleSettings.isCommentNoSearchEnabled(prefs) ||
-                    ModuleSettings.isCommentNoEmptyPageEnabled(prefs) || ModuleSettings.isCommentNoVoteEnabled(prefs)
-            },
-        ) { payload ->
-            cleanupReplyPayload(payload, currentReplyCleanupOptions(), ::cleanupKotlinReplyDecorations)
-            payload
-        }
+            enabled = enabled,
+            requestName = if (rpc == "mainList") "com.bapis.bilibili.main.community.reply.v1.MainListReq" else null,
+            requestFilter = if (rpc == "mainList") ::disableSearchUnderline else null,
+            filter = cleanup,
+        )
     }
+
+    private fun disableSearchUnderline(request: Any): Any {
+        if (!ModuleSettings.isCommentNoSearchEnabled(prefs)) return request
+        val extra = request.javaClass.getMethod("getExtra").invoke(request) as? String ?: return request
+        val json = if (extra.isBlank()) JSONObject() else JSONObject(extra)
+        if (json.has("disable_underline")) return request
+        val builder = newProtobufBuilder(request)
+        builder.javaClass.getMethod("setExtra", String::class.java).apply { isAccessible = true }
+            .invoke(builder, json.put("disable_underline", true).toString())
+        return builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder) ?: request
+    }
+
+    private fun isSearchUrl(value: String): Boolean = runCatching {
+        val uri = Uri.parse(value)
+        uri.scheme.equals("bilibili", ignoreCase = true) && uri.host.equals("search", ignoreCase = true)
+    }.getOrDefault(false)
 
     private fun cleanupKotlinReplyDecorations(reply: Any) {
         if (ModuleSettings.isCommentNoEmptyPageEnabled(prefs) && noArgMethod(reply.javaClass, "hasSubjectControl")?.invoke(reply) == true) {
@@ -257,13 +287,13 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val urls = noArgMethod(content.javaClass, "getUrlsMap")?.invoke(content) as? Map<*, *> ?: return
         val kept = urls.filterValues { url ->
             val schema = url?.let { noArgMethod(it.javaClass, "getAppUrlSchema")?.invoke(it) as? String }
-            schema?.startsWith("bilibili://search") != true
+            schema == null || !isSearchUrl(schema)
         }
         if (kept.size == urls.size) return
-        val builder = content.javaClass.getMethod("toBuilder").invoke(content) ?: return
-        builder.javaClass.getMethod("clearUrls").invoke(builder)
-        builder.javaClass.getMethod("putAllUrls", Map::class.java).invoke(builder, kept)
-        val updated = builder.javaClass.getMethod("build").invoke(builder) ?: return
+        val builder = newProtobufBuilder(content)
+        builder.javaClass.getMethod("clearUrls").apply { isAccessible = true }.invoke(builder)
+        builder.javaClass.getMethod("putAllUrls", Map::class.java).apply { isAccessible = true }.invoke(builder, kept)
+        val updated = builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder) ?: return
         reply.javaClass.getDeclaredMethod("setContent", content.javaClass).apply { isAccessible = true }
             .invoke(reply, updated)
     }
@@ -288,7 +318,9 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
     }
 
-    private fun cleanupReplyPayload(reply: Any, options: ReplyCleanupOptions, decorate: ((Any) -> Unit)? = null) {
+    private fun cleanupReplyPayload(
+        reply: Any, options: ReplyCleanupOptions, decorate: ((Any) -> Unit)? = null, removeSingleReply: Boolean = false,
+    ) {
         val visited = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
         val pending = ArrayDeque<Any>()
         pending += reply
@@ -319,40 +351,25 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (noArgMethod(current.javaClass, "has$fieldName")?.invoke(current) != true) return@forEach
                 val child = getter.invoke(current) ?: return@forEach
                 val clear = noArgMethod(current.javaClass, "clear$fieldName")
-                if (getter.name != "getRoot" && options.filtersActive && clear != null && shouldRemoveReply(child, options)) {
+                val removable = fieldName in setOf("UpTop", "AdminTop", "VoteTop") ||
+                    (removeSingleReply && current === reply && fieldName == "Reply")
+                if (removable && options.filtersActive && clear != null && shouldRemoveReply(child, options)) {
                     clear.invoke(current)
                 } else {
                     pending += child
                 }
             }
 
-            methods.getTopRepliesList?.let { getter ->
-                val children = getter.invoke(current) as? List<*> ?: return@let
+            methods.replyLists.forEach { (getter, remove) ->
+                val children = getter.invoke(current) as? List<*> ?: return@forEach
                 for (index in children.indices.reversed()) {
                     val child = children[index] ?: continue
-                    if (options.filtersActive && methods.removeTopReplies != null && shouldRemoveReply(child, options)) {
-                        methods.removeTopReplies.invoke(current, index)
+                    if (options.filtersActive && remove != null && shouldRemoveReply(child, options)) {
+                        remove.invoke(current, index)
                     } else {
                         pending += child
                     }
                 }
-            }
-
-            val children = methods.getRepliesList
-                ?.let { runCatching { it.invoke(current) as? List<*> }.getOrNull() }
-                .orEmpty()
-            if (options.filtersActive && methods.removeReplies != null) {
-                // Walk from the end so removing by index never shifts a not-yet-visited entry.
-                for (index in children.indices.reversed()) {
-                    val child = children[index] ?: continue
-                    if (shouldRemoveReply(child, options)) {
-                        runCatching { methods.removeReplies.invoke(current, index) }
-                    } else {
-                        pending += child
-                    }
-                }
-            } else {
-                children.filterNotNullTo(pending)
             }
         }
     }
@@ -395,13 +412,18 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun readReplyMemberLevel(node: Any): Int? {
+        if (noArgMethod(node.javaClass, "hasMember")?.invoke(node) == false) return null
         val getMember = noArgMethod(node.javaClass, "getMember") ?: return null
         val member = runCatching { getMember.invoke(node) }.getOrNull() ?: return null
         // reply.v1 Member exposes the commenter level via level_info.current_level;
         // fall back to a flat getLevel() when the schema differs.
-        intFromNoArg(member, "getLevel")?.let { return it }
+        if (noArgMethod(member.javaClass, "hasLevel")?.invoke(member) != false) {
+            intFromNoArg(member, "getLevel")?.let { return it }
+        }
+        if (noArgMethod(member.javaClass, "hasLevelInfo")?.invoke(member) == false) return null
         val getLevelInfo = noArgMethod(member.javaClass, "getLevelInfo") ?: return null
         val levelInfo = runCatching { getLevelInfo.invoke(member) }.getOrNull() ?: return null
+        if (noArgMethod(levelInfo.javaClass, "hasCurrentLevel")?.invoke(levelInfo) == false) return null
         return intFromNoArg(levelInfo, "getCurrentLevel")
     }
 
@@ -437,23 +459,25 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         it.parameterTypes[0] == Int::class.javaPrimitiveType
                 }
                 ?.apply { isAccessible = true },
-            getRepliesList = type.declaredMethods
-                .firstOrNull { it.name == "getRepliesList" && it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) },
-            removeReplies = type.declaredMethods
-                .firstOrNull {
-                    it.name == "removeReplies" && it.parameterCount == 1 &&
-                        it.parameterTypes[0] == Int::class.javaPrimitiveType
+            replyLists = type.declaredMethods.filter { method ->
+                if (Modifier.isStatic(method.modifiers) || method.parameterCount != 0 ||
+                    !method.name.startsWith("get") || !method.name.endsWith("List") ||
+                    !List::class.java.isAssignableFrom(method.returnType)) false else {
+                    val element = (method.genericReturnType as? ParameterizedType)?.actualTypeArguments?.singleOrNull()
+                    method.name in setOf("getRepliesList", "getTopRepliesList") ||
+                        (element as? Class<*>)?.name == "com.bapis.bilibili.main.community.reply.v1.ReplyInfo"
                 }
-                ?.apply { isAccessible = true },
-            getTopRepliesList = type.declaredMethods
-                .firstOrNull { it.name == "getTopRepliesList" && it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) },
-            removeTopReplies = type.declaredMethods
-                .firstOrNull { it.name == "removeTopReplies" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
-                ?.apply { isAccessible = true },
-            singleReplies = type.declaredMethods.filter {
-                it.name.startsWith("get") && it.parameterCount == 0 &&
-                    it.returnType.name == "com.bapis.bilibili.main.community.reply.v1.ReplyInfo"
+            }.map { getter ->
+                getter.isAccessible = true
+                getter to type.declaredMethods.singleOrNull {
+                    it.name == "remove${getter.name.removePrefix("get").removeSuffix("List")}" &&
+                        it.returnType == Void.TYPE && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType))
+                }?.apply { isAccessible = true }
             },
+            singleReplies = type.declaredMethods.filter {
+                !Modifier.isStatic(it.modifiers) && it.name.startsWith("get") && it.parameterCount == 0 &&
+                    it.returnType.name == "com.bapis.bilibili.main.community.reply.v1.ReplyInfo"
+            }.onEach { it.isAccessible = true },
         )
 
     private fun Class<*>.isCommentActionType(): Boolean {
@@ -577,9 +601,6 @@ private data class ReplyCleanupMethods(
     val clearOperations: List<Method>,
     val getMixedCardsList: Method?,
     val removeMixedCards: Method?,
-    val getRepliesList: Method?,
-    val removeReplies: Method?,
-    val getTopRepliesList: Method?,
-    val removeTopReplies: Method?,
+    val replyLists: List<Pair<Method, Method?>>,
     val singleReplies: List<Method>,
 )
