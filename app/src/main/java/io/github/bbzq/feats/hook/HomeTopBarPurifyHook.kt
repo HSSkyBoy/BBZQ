@@ -41,7 +41,8 @@ class HomeTopBarPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun hookSearchDefaultWord(): Int {
         var count = 0
-        val symbols = env.symbols?.homeTopBar?.restore(classLoader) ?: return 0
+        count += env.hookSearchDefaultWords()
+        val symbols = env.symbols?.homeTopBar?.restore(classLoader) ?: return count
 
         symbols.baseOnViewCreated?.let { method ->
             env.hookAfter(method) { param ->
