@@ -44,12 +44,13 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         val kotlinHooks = installKotlinResponseHooks()
         val symbols = env.symbols?.chronosPromotion?.restore(classLoader)
+        val promotionHooks = env.hookPlayerPromotions(symbols)
         if (symbols == null) {
-            log("startHook: ChronosPromotion symbols unavailable, Kotlin hooks=$kotlinHooks")
+            log("startHook: ChronosPromotion symbols unavailable, Kotlin hooks=$kotlinHooks, promotion hooks=$promotionHooks")
             return
         }
 
-        val installed = kotlinHooks + installRpcReceiveHooks(symbols) +
+        val installed = kotlinHooks + promotionHooks + installRpcReceiveHooks(symbols) +
             installLocalGetViewProgressHook(symbols) +
             installLocalDmViewHook(symbols) +
             installRemoteHandlerHooks(symbols) +

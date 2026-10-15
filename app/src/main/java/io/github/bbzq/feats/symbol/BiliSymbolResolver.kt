@@ -21,6 +21,7 @@ import io.github.bbzq.feats.allFields
 import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.symbol.dexkit.DexKitBridgeProvider
 import io.github.bbzq.feats.hook.QualityRangePolicy
+import io.github.bbzq.feats.hook.PlayerPromotionAccess
 import io.github.bbzq.feats.symbol.dexkit.scanMessage
 import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.query.FindClass
@@ -3464,6 +3465,33 @@ object BiliSymbolResolver {
                 )
             }
         }
+
+        val freeDataGuide = PlayerPromotionAccess.directGuide(classLoader) ?: runCatching {
+            bridge()?.findMethod(
+                FindMethod.create().searchPackages(PlayerPromotionAccess.NETWORK_PACKAGE)
+                    .matcher(MethodMatcher.create().paramCount(1).returnType(Any::class.java)
+                        .usingStrings(PlayerPromotionAccess.GUIDE_MARK)),
+            ).orEmpty().mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .filter(PlayerPromotionAccess::isGuide).distinctBy(Method::toGenericString).singleOrNull()
+        }.getOrNull()
+        addMethods(PlayerPromotionAccess.GUIDE_METHOD, listOfNotNull(freeDataGuide))
+
+        val advertFloat = classLoader.loadClassOrNull("${PlayerPromotionAccess.MODEL_PACKAGE}.DmAdvert")
+            ?.declaredMethods?.singleOrNull { it.name == "getFloatLayers" && PlayerPromotionAccess.isAdvertFloat(it) }
+            ?: runCatching {
+                val cardClass = "${PlayerPromotionAccess.MODEL_PACKAGE}.Card"
+                val matcher = MethodMatcher.create().paramCount(0).returnType(List::class.java)
+                for (name in listOf("isValidCommon", "isValidCommerce", "isValidGuide")) {
+                    matcher.addInvoke(MethodMatcher.create().declaredClass(cardClass).name(name).paramCount(0))
+                }
+                bridge()?.findMethod(FindMethod.create().searchPackages(PlayerPromotionAccess.MODEL_PACKAGE).matcher(matcher))
+                    .orEmpty().filter { data ->
+                        // 混合面板还读取普通弹幕，不能作为纯广告浮层入口。
+                        data.invokes.none { it.declaredClassName == cardClass && it.name == "isValidDanmaku" }
+                    }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .filter(PlayerPromotionAccess::isAdvertFloat).distinctBy(Method::toGenericString).singleOrNull()
+            }.getOrNull()
+        addMethods(PlayerPromotionAccess.FLOAT_METHOD, listOfNotNull(advertFloat))
 
         val totalMethods = methodGroups.sumOf { it.methods.size }
         if (totalMethods == 0) {
