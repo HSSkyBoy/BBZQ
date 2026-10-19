@@ -17,6 +17,7 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var titleKeywordsCache = emptyList<String>()
     private val knownTypes = mutableSetOf<String>()
     private val methodCache = java.util.concurrent.ConcurrentHashMap<Class<*>, java.util.concurrent.ConcurrentHashMap<String, Method?>>()
+    private val relateCardFieldCache = java.util.concurrent.ConcurrentHashMap<Class<*>, RelateCardFields>()
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -169,24 +170,12 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return normalizeTypeName(it)
         }
 
-        // 3. Try DetailRelateService D0 fields
-        val itemClass = item?.javaClass ?: return null
-        if (itemClass.name.endsWith("D0") || itemClass.name.contains("relate.D0")) {
-            runCatching {
-                val fieldA = itemClass.fields.firstOrNull { it.name == "f289440a" || it.name == "type" }
-                val typeVal = fieldA?.get(item)
-                val typeName = (typeVal as? Enum<*>)?.name ?: typeVal?.toString()
-                if (!typeName.isNullOrBlank() && !typeName.equals("CARD_TYPE_UNKNOWN", ignoreCase = true)) {
-                    return normalizeTypeName(typeName)
-                }
-            }
-            runCatching {
-                val fieldB = itemClass.fields.firstOrNull { it.name == "f289441b" || it.name == "goto" }
-                val gotoVal = fieldB?.get(item)?.toString()
-                if (!gotoVal.isNullOrBlank()) {
-                    return normalizeTypeName(gotoVal)
-                }
-            }
+        // 3. DetailRelateService card model: fields are obfuscated, the RelateCardType enum is not
+        val typeName = relateCardFields(item?.javaClass ?: return null).type
+            ?.let { runCatching { it.get(item) }.getOrNull() as? Enum<*> }
+            ?.name
+        if (!typeName.isNullOrBlank() && !typeName.equals("CARD_TYPE_UNKNOWN", ignoreCase = true)) {
+            return normalizeTypeName(typeName)
         }
 
         return null
@@ -208,13 +197,35 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
-        // 3. DetailRelateService D0 method d()
-        callNoArg(item, "d")?.toString()?.takeIf { it.isNotBlank() }?.let {
-            return it
+        // 3. DetailRelateService card model: title is the first field of RelateCardBasicInfo
+        val fields = relateCardFields(item?.javaClass ?: return null)
+        val info = fields.basicInfo?.let { runCatching { it.get(item) }.getOrNull() }
+        val title = info?.let { basicInfo ->
+            fields.title?.let { runCatching { it.get(basicInfo) as? String }.getOrNull() }
         }
-
-        return null
+        return title?.takeIf { it.isNotBlank() }
     }
+
+    private class RelateCardFields(val type: Field?, val basicInfo: Field?, val title: Field?)
+
+    private fun relateCardFields(type: Class<*>): RelateCardFields =
+        relateCardFieldCache.computeIfAbsent(type) {
+            val instanceFields = type.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }
+            val typeField = instanceFields.firstOrNull { it.type.isEnum && it.type.simpleName == RELATE_CARD_TYPE_ENUM }
+                ?: return@computeIfAbsent RelateCardFields(null, null, null)
+            val basicInfoField = instanceFields.firstOrNull { field ->
+                field.type.`package` == typeField.type.`package` &&
+                    field.type.declaredFields.count { !Modifier.isStatic(it.modifiers) && it.type == String::class.java } >= BASIC_INFO_MIN_STRINGS
+            }
+            val titleField = basicInfoField?.type?.declaredFields
+                ?.filter { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+                ?.minByOrNull { it.name }
+            RelateCardFields(
+                type = typeField.apply { isAccessible = true },
+                basicInfo = basicInfoField?.apply { isAccessible = true },
+                title = titleField?.apply { isAccessible = true },
+            )
+        }
 
     private fun normalizeTypeName(raw: String): String {
         var clean = raw.trim().uppercase()
@@ -277,6 +288,8 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private companion object {
+        private const val RELATE_CARD_TYPE_ENUM = "RelateCardType"
+        private const val BASIC_INFO_MIN_STRINGS = 8
         private val SUB_GETTERS = arrayOf(
             "getBasicInfo",
             "getAv",
