@@ -6,6 +6,7 @@ import android.widget.TextView
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
+import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.symbol.RestoredMineProfileSymbols
@@ -17,6 +18,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val mineSymbols: RestoredMineProfileSymbols? by lazy(LazyThreadSafetyMode.NONE) {
         env.symbols?.mineProfile?.restore(classLoader)
     }
+    private val seenMenuTitles: MutableSet<String> = Collections.synchronizedSet(HashSet())
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -41,7 +43,63 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("MineProfileHook: Mine profile symbols missing for VIP hook")
         }
 
+        hookVipEntranceState()
         hookMineComponentData()
+        hookMenuGroupItems()
+    }
+
+    /**
+     * Both the View page (onViewCreated) and the Compose pages (MineVipModule in mine/v2 and v3)
+     * only build the VIP card when the "vip" entrance state is non-zero.
+     */
+    private fun hookVipEntranceState() {
+        val method = classLoader.findClassOrNull(TEENAGERS_MODE_CLASS)
+            ?.declaredMethods
+            ?.firstOrNull {
+                it.name == "getEntranceState" &&
+                    it.parameterTypes.contentEquals(arrayOf(String::class.java)) &&
+                    it.returnType == Int::class.javaPrimitiveType
+            }
+            ?: return log("MineProfileHook: TeenagersMode.getEntranceState not found, VIP entrance hook skipped")
+        env.hookBefore(method) { param ->
+            if (param.args.firstOrNull() != VIP_ENTRANCE_KEY) return@hookBefore
+            if (!ModuleSettings.isMineRemoveVipEnabled(prefs)) return@hookBefore
+            // The View page keeps the card's space through the onResume hook instead.
+            if (ModuleSettings.isMineKeepVipSpaceEnabled(prefs) && isCalledFromViewPage()) return@hookBefore
+            param.result = 0
+        }
+    }
+
+    private fun isCalledFromViewPage(): Boolean =
+        Thread.currentThread().stackTrace.any { it.className == VIEW_PAGE_FRAGMENT_CLASS }
+
+    /** mine/v2 and v3 decode AccountMineV2 with kotlinx, so filter the menu groups at their getter. */
+    private fun hookMenuGroupItems() {
+        val getItemList = classLoader.findClassOrNull(MENU_GROUP_CLASS)
+            ?.declaredMethods
+            ?.firstOrNull { it.name == "getItemList" && it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) }
+            ?: return log("MineProfileHook: MenuGroupV2.getItemList not found, menu item hook skipped")
+        val getTitle = classLoader.findClassOrNull(MENU_ITEM_CLASS)
+            ?.declaredMethods
+            ?.firstOrNull { it.name == "getTitle" && it.parameterCount == 0 && it.returnType == String::class.java }
+            ?: return log("MineProfileHook: MenuGroupV2.Item.getTitle not found, menu item hook skipped")
+        env.hookAfter(getItemList) { param ->
+            val items = param.result as? List<*> ?: return@hookAfter
+            val hidden = if (ModuleSettings.isCustomMineComponentHideEnabled(prefs)) {
+                ModuleSettings.getHiddenMineComponents(prefs)
+            } else {
+                emptySet()
+            }
+            val titles = linkedSetOf<String>()
+            val kept = items.filter { item ->
+                val title = item?.let { runCatching { getTitle.invoke(it) as? String }.getOrNull() }?.trim()
+                if (title.isNullOrBlank()) return@filter true
+                titles += title
+                title !in hidden
+            }
+            if (titles.isNotEmpty() && seenMenuTitles.addAll(titles)) saveKnownComponents(titles)
+            if (kept.size != items.size) param.result = kept
+        }
     }
 
     private fun hookMineComponentData() {
@@ -190,5 +248,13 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (!known.addAll(names)) return
         ModuleSettings.cacheKnownMineComponents(known)
         prefs.edit().putStringSet(ModuleSettings.KEY_KNOWN_MINE_COMPONENTS, known).apply()
+    }
+
+    private companion object {
+        private const val TEENAGERS_MODE_CLASS = "com.bilibili.teenagersmode.TeenagersMode"
+        private const val VIEW_PAGE_FRAGMENT_CLASS = "tv.danmaku.bili.ui.main2.mine.HomeUserCenterFragment"
+        private const val MENU_GROUP_CLASS = "com.bilibili.lib.homepage.mine.MenuGroupV2"
+        private const val MENU_ITEM_CLASS = "com.bilibili.lib.homepage.mine.MenuGroupV2\$Item"
+        private const val VIP_ENTRANCE_KEY = "vip"
     }
 }
