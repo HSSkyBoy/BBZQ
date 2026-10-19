@@ -257,11 +257,11 @@
     <string name="sea_resolver_test_running">正在测试…</string>
     <string name="sea_resolver_test_ok">连接正常，耗时 %1$d 毫秒</string>
     <string name="sea_resolver_test_failed">无法连接到解析服务器</string>
-    <string name="sea_resolver_mode_title">搜索地区模式</string>
-    <string name="sea_resolver_mode_summary">当前：%1$s。服务器对 TH、INTL、SEA 一视同仁，仅在服务器有区别对待时才需要更改。</string>
-    <string name="sea_resolver_mode_th">TH（泰国）</string>
-    <string name="sea_resolver_mode_intl">INTL（国际）</string>
-    <string name="sea_resolver_mode_sea">SEA（东南亚）</string>
+    <string name="sea_resolver_mode_title">东南亚搜索协议模式</string>
+    <string name="sea_resolver_mode_summary">当前：%1$s。此选项仅用于东南亚 gRPC 节点。大陆与港澳台直接走主站协议，不受此选项影响。</string>
+    <string name="sea_resolver_mode_th">TH（泰国 gRPC）</string>
+    <string name="sea_resolver_mode_intl">INTL（国际 gRPC，推荐）</string>
+    <string name="sea_resolver_mode_sea">SEA（东南亚 gRPC）</string>
     <string name="sea_unlock_search_title">搜索东南亚番剧</string>
     <string name="sea_unlock_search_summary">在综合与番剧搜索结果第一页加入各解析服务器返回的番剧。搜索关键词会发送到已设置的服务器。</string>
     <string name="sea_unlock_play_title">解锁地区限制播放</string>

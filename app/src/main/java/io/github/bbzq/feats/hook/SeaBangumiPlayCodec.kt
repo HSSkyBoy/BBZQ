@@ -14,7 +14,7 @@ internal object SeaBangumiPlayCodec {
 
     /** Region wording used by Bilibili's blocking dialogs and errors, in both scripts. */
     private val REGION_WORDING = Regex("地区|地區")
-    private val REGION_CODES = setOf(-10403, 6002003)
+    private val REGION_CODES = setOf(-10403, 6002003, -10493)
 
     /** The dialog type the host itself uses for a copyright-region refusal. */
     const val AREA_LIMIT_DIALOG = "area_limit"
@@ -65,6 +65,25 @@ internal object SeaBangumiPlayCodec {
         return ProtoWriter().apply {
             message(REPLY_VIDEO_INFO, videoInfo)
             raw(rest)
+        }.toByteArray()
+    }
+
+    /**
+     * Builds a unified player reply (PlayViewUniteReply) swapping in the resolver streams.
+     * Field 1: vod_info (VodInfo), Field 2: play_arc_conf, Field 9: view_info.
+     */
+    fun buildUniteReply(
+        original: ByteArray,
+        result: JSONObject,
+        relaxPlayLimits: Boolean = false,
+        cdnHost: String? = null,
+    ): ByteArray? {
+        val vodInfo = encodeVideoInfo(result, cdnHost) ?: return null
+        val dropped = if (relaxPlayLimits) setOf(1, 2, 9) else setOf(1, 9)
+        val rest = if (original.isNotEmpty()) ProtoWire.dropFields(original, dropped) ?: ByteArray(0) else ByteArray(0)
+        return ProtoWriter().apply {
+            message(1, vodInfo)
+            if (rest.isNotEmpty()) raw(rest)
         }.toByteArray()
     }
 

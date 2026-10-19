@@ -1,7 +1,10 @@
 package io.github.bbzq.feats.hook
 
 import io.github.bbzq.feats.AppSignature
+import io.github.bbzq.feats.callMethod
+import java.io.ByteArrayInputStream
 import java.net.URLDecoder
+import java.util.zip.GZIPInputStream
 
 /** Pure decisions for replaying a refused PGC HTTP request on the resolver server. */
 internal object SeaBangumiDetailPolicy {
@@ -15,11 +18,23 @@ internal object SeaBangumiDetailPolicy {
     private val MESSAGE = Regex("\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
 
     /** Bytes of a response worth peeking: a refusal is a tiny JSON object, a season is megabytes. */
-    const val PEEK_BYTES = 2048L
+    const val PEEK_BYTES = 4096L
 
     private const val NOT_FOUND = -404
 
     fun isPgcPath(encodedPath: String): Boolean = PGC_PREFIXES.any { encodedPath.startsWith(it) }
+
+    /** Peeks prefix text from an OkHttp response, decompressing gzip if needed. */
+    fun peekPrefix(response: Any): String {
+        val body = response.callMethod("peekBody", PEEK_BYTES) ?: return ""
+        val bytes = (body.callMethod("bytes") as? ByteArray) ?: return ""
+        if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+            return runCatching {
+                GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).readText()
+            }.getOrDefault("")
+        }
+        return String(bytes, Charsets.UTF_8)
+    }
 
     /** The `code` at the start of a JSON response, or null when there is none. */
     fun answerCode(prefix: String): Int? = CODE.find(prefix)?.groupValues?.get(1)?.toIntOrNull()
@@ -45,25 +60,21 @@ internal object SeaBangumiDetailPolicy {
         }
 
     /**
-     * The same request without the account: `access_key` is dropped and the query signed again, so
-     * the resolver can still forward it. Null when the host signed with another app key, in which
-     * case the secret is unknown and only the original, account-carrying request can be replayed.
+     * The same request without the account: `access_key` is dropped and the query signed again with
+     * the standard app key, so the resolver can forward it.
      */
     fun anonymousQuery(encodedQuery: String?): String? {
         if (encodedQuery.isNullOrEmpty()) return null
         val params = LinkedHashMap<String, String>()
-        var appKey: String? = null
         for (part in encodedQuery.split('&')) {
             if (part.isEmpty()) continue
             val name = URLDecoder.decode(part.substringBefore('='), "UTF-8")
             val value = URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
             when (name) {
-                "appkey" -> appKey = value
-                "access_key", "sign" -> Unit
+                "appkey", "access_key", "sign" -> Unit
                 else -> params[name] = value
             }
         }
-        if (appKey != AppSignature.APP_KEY) return null
         return AppSignature.signedQuery(params)
     }
 

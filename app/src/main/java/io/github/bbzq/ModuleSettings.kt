@@ -1068,8 +1068,8 @@ object ModuleSettings {
     fun isSeaBangumiDetailEnabled(prefs: SharedPreferences): Boolean =
         isSeaBangumiUnlockEnabled(prefs) && prefs.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true)
 
-    /** Region hints the resolver accepts on the search request; TH, INTL and SEA all reach the same upstream. */
-    val SEA_RESOLVER_MODES = listOf("TH", "INTL", "SEA")
+    /** Region hints the resolver accepts on the search request; INTL, TH and SEA all reach the same upstream. */
+    val SEA_RESOLVER_MODES = listOf("INTL", "TH", "SEA")
 
     fun getSeaResolverMode(prefs: SharedPreferences): String =
         prefs.getString(KEY_SEA_RESOLVER_MODE, null)?.uppercase()?.takeIf { it in SEA_RESOLVER_MODES } ?: SEA_RESOLVER_MODES.first()
@@ -1090,12 +1090,26 @@ object ModuleSettings {
     fun isSeaRelaxPlayLimitsEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, true)
 
-    /** Keeps an explicit http:// for self-hosted resolvers; anything else is served over https. */
+    /** Normalizes a resolver server address, keeping scheme, port, and subpaths. */
     fun normalizeResolverBaseUrl(value: String?): String? {
-        val raw = value.orEmpty().trim()
-        val scheme = if (raw.startsWith("http://", ignoreCase = true)) "http" else "https"
-        val host = normalizeCdnHost(raw) ?: return null
-        return "$scheme://$host"
+        val raw = value.orEmpty().trim().trimEnd('/')
+        if (raw.isEmpty()) return null
+        val hasScheme = raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)
+        val uri = runCatching { java.net.URI(if (hasScheme) raw else "https://$raw") }.getOrNull() ?: return null
+        val host = uri.host ?: return null
+        if (host.isEmpty() || host.any(Char::isWhitespace)) return null
+        val scheme = if (hasScheme) uri.scheme.lowercase() else {
+            if ((uri.port > 0 && uri.port != 443) || isLocalResolverHost(host)) "http" else "https"
+        }
+        val portPart = if (uri.port > 0) ":${uri.port}" else ""
+        val path = uri.rawPath?.trimEnd('/') ?: ""
+        return "$scheme://$host$portPart$path"
+    }
+
+    private fun isLocalResolverHost(host: String): Boolean {
+        val h = host.lowercase()
+        return h == "localhost" || h.endsWith(".local") || h.endsWith(".localhost") ||
+            h.startsWith("127.") || h.startsWith("10.") || h.startsWith("192.168.")
     }
 
     fun isFullNumberFormatEnabled(prefs: SharedPreferences): Boolean =

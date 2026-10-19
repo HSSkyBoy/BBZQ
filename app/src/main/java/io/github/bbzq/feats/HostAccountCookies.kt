@@ -19,9 +19,11 @@ object HostAccountCookies {
         }.joinToString("; ")
     }.getOrDefault("")
 
-    /** Headers for a resolver request: the cookie only when the user chose to share the account. */
+    /** Headers for a resolver request: standard Referer/UA, plus the cookie only when the user chose to share the account. */
     fun headers(context: Context?, share: Boolean): Headers {
         val builder = Headers.Builder()
+            .add("Referer", "https://www.bilibili.com/")
+            .add("User-Agent", "Bilibili Freedoooooom/MarkII")
         if (share && context != null) {
             header(context).takeIf { it.isNotEmpty() }?.let { builder.addUnsafeNonAscii("Cookie", it) }
         }

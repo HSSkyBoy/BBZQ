@@ -49,7 +49,9 @@ class ResolverServersTest {
         assertEquals(ResolverRegion.SEA, ResolverRegion.parse(" sea "))
         assertEquals(ResolverRegion.HK, ResolverRegion.parse("HK"))
         assertEquals(null, ResolverRegion.parse(""))
-        assertEquals(null, ResolverRegion.parse("TH"))
+        assertEquals(ResolverRegion.SEA, ResolverRegion.parse("TH"))
+        assertEquals(ResolverRegion.SEA, ResolverRegion.parse("INTL"))
+        assertEquals(null, ResolverRegion.parse("UNKNOWN"))
         assertEquals(null, ResolverRegion.parse(null))
     }
 

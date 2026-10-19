@@ -1,7 +1,9 @@
 package io.github.bbzq.feats.hook
 
+import io.github.bbzq.feats.AppSignature
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,9 +53,13 @@ class SeaBangumiDetailPolicyTest {
     }
 
     @Test
-    fun anonymousQueryRefusesAnotherAppKeyAndEmptyQueries() {
-        assertNull(SeaBangumiDetailPolicy.anonymousQuery("season_id=1&appkey=other&sign=x"))
-        assertNull(SeaBangumiDetailPolicy.anonymousQuery("season_id=1"))
+    fun anonymousQueryResignsWithStandardAppKeyAndRefusesEmptyQueries() {
+        val query = SeaBangumiDetailPolicy.anonymousQuery("season_id=1&appkey=other&access_key=secret&sign=x")
+        assertNotNull(query)
+        assertTrue(query!!.contains("season_id=1"))
+        assertTrue(query.contains("appkey=${AppSignature.APP_KEY}"))
+        assertFalse(query.contains("access_key"))
+        assertFalse(query.contains("other"))
         assertNull(SeaBangumiDetailPolicy.anonymousQuery(null))
         assertNull(SeaBangumiDetailPolicy.anonymousQuery(""))
     }

@@ -15,8 +15,16 @@ enum class ResolverRegion(val prefKey: String, val cdnKey: String) {
 
     companion object {
         /** The region named by [value] (case-insensitive), or null for blank or unknown text. */
-        fun parse(value: String?): ResolverRegion? =
-            values().firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) }
+        fun parse(value: String?): ResolverRegion? {
+            val v = value?.trim()?.uppercase() ?: return null
+            return when (v) {
+                "SEA", "TH", "INTL" -> ResolverRegion.SEA
+                "HK", "MO", "HK/MO" -> ResolverRegion.HK
+                "TW" -> ResolverRegion.TW
+                "CN" -> ResolverRegion.CN
+                else -> values().firstOrNull { it.name.equals(v, ignoreCase = true) }
+            }
+        }
     }
 }
 

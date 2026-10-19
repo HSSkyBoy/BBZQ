@@ -97,6 +97,36 @@ class SeaBangumiPlayCodecTest {
     }
 
     @Test
+    fun buildUniteReplyReplacesVodInfoAndViewInfo() {
+        val original = ProtoWriter().apply {
+            message(1, ProtoWriter().apply { int(1, 16) }.toByteArray())
+            message(2, byteArrayOf(0x08, 0x01))
+            message(9, ProtoWriter().apply { message(1, ProtoWriter().apply { string(2, "blocked") }.toByteArray()) }.toByteArray())
+            message(7, byteArrayOf(0x0A, 0x00))
+        }.toByteArray()
+
+        val reply = fields(SeaBangumiPlayCodec.buildUniteReply(original, JSONObject(playurl).getJSONObject("result"))!!)
+
+        assertEquals(listOf(1, 2, 7), reply.map { it.first })
+        assertEquals(32L, fields(reply.bytes(1)).varint(1))
+        assertTrue(reply.bytes(2).contentEquals(byteArrayOf(0x08, 0x01)))
+    }
+
+    @Test
+    fun buildUniteReplyRelaxPlayLimitsDropsPlayArcConf() {
+        val original = ProtoWriter().apply {
+            message(1, ProtoWriter().apply { int(1, 16) }.toByteArray())
+            message(2, byteArrayOf(0x08, 0x01))
+            message(9, byteArrayOf(0x08, 0x02))
+            message(7, byteArrayOf(0x0A, 0x00))
+        }.toByteArray()
+
+        val relaxed = fields(SeaBangumiPlayCodec.buildUniteReply(original, JSONObject(playurl).getJSONObject("result"), relaxPlayLimits = true)!!)
+
+        assertEquals(listOf(1, 7), relaxed.map { it.first })
+    }
+
+    @Test
     fun playableResultUnwrapsVideoInfo() {
         val wrapped = """{"code":0,"result":{"video_info":{"quality":32,"dash":{"video":[{"id":32,"base_url":"https://v/32.m4s"}],"audio":[]}}}}"""
 

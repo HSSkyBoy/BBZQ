@@ -109,8 +109,8 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val host = url.callMethod("host") as? String
         if (servers.any { parseUrl(it.baseUrl)?.callMethod("host") == host }) return null
 
-        val prefix = original.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String
-            ?: return null
+        val prefix = SeaBangumiDetailPolicy.peekPrefix(original)
+        if (prefix.isEmpty()) return null
         if (!SeaBangumiDetailPolicy.isRegionRefusal(prefix)) {
             val code = SeaBangumiDetailPolicy.answerCode(prefix)
             if (code != null && code != 0 && loggedPaths.add(path)) {
@@ -149,13 +149,14 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val target = parseUrl(SeaBangumiDetailPolicy.replayUrl(server.baseUrl, path, query)) ?: return null
         val replayRequest = request.callMethod("newBuilder")?.run {
             callMethod("url", target)
+            callMethod("header", "Referer", "https://www.bilibili.com/")
             if (anonymous) SeaBangumiDetailPolicy.ACCOUNT_HEADERS.forEach { callMethod("removeHeader", it) }
             callMethod("build")
         } ?: return null
         val replay = runCatching { proceed(chain, replayRequest) }
             .onFailure { log("SeaBangumiDetail: ${server.region} request failed", it) }
             .getOrNull() ?: return null
-        val prefix = replay.callMethod("peekBody", SeaBangumiDetailPolicy.PEEK_BYTES)?.callMethod("string") as? String ?: ""
+        val prefix = SeaBangumiDetailPolicy.peekPrefix(replay)
         val accepted = replay.callMethod("isSuccessful") == true &&
             !SeaBangumiDetailPolicy.isRegionRefusal(prefix) &&
             Regex("\"code\"\\s*:\\s*0\\b").containsMatchIn(prefix)

@@ -44,9 +44,12 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return
         }
         val installed = installSearch(mossClass, "executeSearchAll", "searchAll", ALL_REQUEST, ALL_ITEM_FIELD, "getItemList") { request ->
-            firstPageKeyword(request)
+            firstPageKeyword(request)?.let { it to null }
         } + installSearch(mossClass, "executeSearchByType", "searchByType", BY_TYPE_REQUEST, BY_TYPE_ITEM_FIELD, "getItemsList") { request ->
-            firstPageKeyword(request)?.takeIf { request.callMethod("getType") == BANGUMI_SEARCH_TYPE }
+            firstPageKeyword(request)?.let { kw ->
+                val type = (request.callMethod("getType") as? Number)?.toInt() ?: return@let null
+                if (type == BANGUMI_SEARCH_TYPE || type == MOVIE_SEARCH_TYPE) kw to type else null
+            }
         }
         isInstalled = installed > 0
         log("SeaBangumiSearch: hooked $installed search method(s)")
@@ -59,7 +62,7 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         requestClassName: String,
         itemField: Int,
         itemsGetter: String,
-        keywordOf: (Any) -> String?,
+        targetOf: (Any) -> Pair<String, Int?>?,
     ): Int {
         val requestClass = classLoader.findClassOrNull(requestClassName) ?: return 0
         var installed = 0
@@ -70,8 +73,8 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }?.let { sync ->
             env.hookAfter(sync) { param ->
                 val response = param.result ?: return@hookAfter
-                val keyword = param.args.firstOrNull()?.let(keywordOf) ?: return@hookAfter
-                val pending = query(keyword) ?: return@hookAfter
+                val (keyword, type) = param.args.firstOrNull()?.let(targetOf) ?: return@hookAfter
+                val pending = query(keyword, type) ?: return@hookAfter
                 merge(response, itemField, itemsGetter, pending)?.let { param.result = it }
             }
             installed++
@@ -87,8 +90,8 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }?.let { async ->
                 env.hookBefore(async) { param ->
                     val delegate = param.args.getOrNull(1) ?: return@hookBefore
-                    val keyword = param.args.firstOrNull()?.let(keywordOf) ?: return@hookBefore
-                    val pending = query(keyword) ?: return@hookBefore
+                    val (keyword, type) = param.args.firstOrNull()?.let(targetOf) ?: return@hookBefore
+                    val pending = query(keyword, type) ?: return@hookBefore
                     param.args[1] = wrapHandler(handlerClass, delegate) { merge(it, itemField, itemsGetter, pending) }
                 }
                 installed++
@@ -103,13 +106,18 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return (request.callMethod("getKeyword") as? String)?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    private fun query(keyword: String): Pending? {
+    private fun query(keyword: String, type: Int?): Pending? {
         val servers = ResolverServers.configured(prefs)
         if (servers.isEmpty()) return null
         val host = readHostIdentity()
         val deadline = SystemClock.uptimeMillis() + WAIT_MILLIS
-        val tasks = servers.map { server ->
-            executor.submit<List<JSONObject>> { fetch(server, keyword, host) }
+        val types = if (type != null) listOf(type) else listOf(BANGUMI_SEARCH_TYPE, MOVIE_SEARCH_TYPE)
+        val tasks = servers.flatMap { server ->
+            types.mapNotNull { searchType ->
+                // The SEA resolver proxy only handles media_bangumi on its gRPC bridge; skip media_ft on SEA
+                if (server.region == ResolverRegion.SEA && searchType != BANGUMI_SEARCH_TYPE) return@mapNotNull null
+                executor.submit<List<JSONObject>> { fetch(server, keyword, searchType, host) }
+            }
         }
         val combined = FutureTask {
             val seen = HashSet<Long>()
@@ -126,31 +134,42 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     /** One region's hits through the app's signed search API; the SEA server also gets its region hint. */
-    private fun fetch(server: ResolverServer, keyword: String, host: HostIdentity?): List<JSONObject> {
+    private fun fetch(server: ResolverServer, keyword: String, type: Int, host: HostIdentity?): List<JSONObject> {
+        val searchType = if (type == MOVIE_SEARCH_TYPE) "media_ft" else "media_bangumi"
         val params = mutableMapOf(
             "build" to (host?.identity?.build ?: 0).toString(),
             "mobi_app" to (host?.identity?.mobiApp ?: "android"),
             "platform" to "android",
             "ts" to (System.currentTimeMillis() / 1000).toString(),
             "keyword" to keyword,
-            "search_type" to "media_bangumi",
-            "type" to BANGUMI_SEARCH_TYPE.toString(),
+            "search_type" to searchType,
+            "type" to type.toString(),
             "page" to "1",
+            "page_size" to "20",
             "pagesize" to "20",
         )
         host?.identity?.buvid?.takeIf { it.isNotEmpty() }?.let { params["buvid"] = it }
+        val mode = if (server.region == ResolverRegion.SEA) ModuleSettings.getSeaResolverMode(prefs) else server.region.name
+        params["resolver_mode"] = mode
         val headers = identityHeaders(host).newBuilder().apply {
-            if (server.region == ResolverRegion.SEA) add("x-resolver-mode", ModuleSettings.getSeaResolverMode(prefs))
+            add("x-resolver-mode", mode)
+            add("resolver_mode", mode)
+            add("Referer", "https://www.bilibili.com/")
         }.build()
+        val queryStr = if (server.region == ResolverRegion.SEA) {
+            "keyword=${java.net.URLEncoder.encode(keyword, "UTF-8")}&search_type=$searchType&page=1&page_size=20&resolver_mode=$mode"
+        } else {
+            AppSignature.signedQuery(params)
+        }
         val body = SeaResolverClient(server.baseUrl, ::log).get(
             SEARCH_PATH,
             emptyList(),
             headers,
             WAIT_MILLIS,
-            encodedQuery = AppSignature.signedQuery(params),
+            encodedQuery = queryStr,
         ) ?: return emptyList()
         return runCatching { SeaBangumiSearchCodec.parseMatches(body) }.getOrElse {
-            log("SeaBangumiSearch: ${server.region} answer was not valid JSON", it)
+            log("SeaBangumiSearch: ${server.region} $searchType answer was not valid JSON", it)
             emptyList()
         }
     }
@@ -197,12 +216,12 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun merge(response: Any, itemField: Int, itemsGetter: String, pending: Pending): Any? {
         val remaining = pending.deadline - SystemClock.uptimeMillis()
-        if (!pending.task.isDone && (remaining <= 0 || Looper.myLooper() == Looper.getMainLooper())) {
+        if (!pending.task.isDone && remaining <= 0) {
             pending.task.cancel(true)
             log("SeaBangumiSearch: resolver too slow, skipped")
             return null
         }
-        val entries = runCatching { pending.task.get(remaining.coerceAtLeast(0), TimeUnit.MILLISECONDS) }
+        val entries = runCatching { pending.task.get(remaining.coerceAtLeast(100), TimeUnit.MILLISECONDS) }
             .getOrElse {
                 pending.task.cancel(true)
                 log("SeaBangumiSearch: resolver result unavailable", it)
@@ -226,8 +245,10 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun existingSeasonIds(response: Any, itemsGetter: String): Set<Long> =
         (response.callMethod(itemsGetter) as? List<*>).orEmpty().mapNotNullTo(HashSet()) { item ->
-            if (item?.callMethod("getCardItemCase")?.toString() != "BANGUMI") return@mapNotNullTo null
-            item.callMethod("getBangumi")?.callMethod("getSeasonId") as? Long
+            val case = item?.callMethod("getCardItemCase")?.toString()
+            if (case != "BANGUMI" && case != "MOVIE") return@mapNotNullTo null
+            val card = if (case == "MOVIE") item.callMethod("getMovie") else item.callMethod("getBangumi")
+            card?.callMethod("getSeasonId") as? Long
         }
 
     private fun wrapHandler(handlerClass: Class<*>, delegate: Any, transform: (Any) -> Any?): Any =
@@ -267,6 +288,7 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val ALL_ITEM_FIELD = 4
         const val BY_TYPE_ITEM_FIELD = 6
         const val BANGUMI_SEARCH_TYPE = 7
+        const val MOVIE_SEARCH_TYPE = 8
         const val SEARCH_PATH = "x/v2/search/type"
         const val WAIT_MILLIS = 6_000L
     }
