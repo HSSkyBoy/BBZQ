@@ -150,14 +150,12 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
         host?.identity?.buvid?.takeIf { it.isNotEmpty() }?.let { params["buvid"] = it }
         val mode = if (server.region == ResolverRegion.SEA) ModuleSettings.getSeaResolverMode(prefs) else server.region.name
-        params["resolver_mode"] = mode
         val headers = identityHeaders(host).newBuilder().apply {
             add("x-resolver-mode", mode)
-            add("resolver_mode", mode)
             add("Referer", "https://www.bilibili.com/")
         }.build()
         val queryStr = if (server.region == ResolverRegion.SEA) {
-            "keyword=${java.net.URLEncoder.encode(keyword, "UTF-8")}&search_type=$searchType&page=1&page_size=20&resolver_mode=$mode"
+            "keyword=${java.net.URLEncoder.encode(keyword, "UTF-8")}&search_type=$searchType&page=1&page_size=20"
         } else {
             AppSignature.signedQuery(params)
         }
