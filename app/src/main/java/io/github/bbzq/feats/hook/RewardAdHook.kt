@@ -1,6 +1,7 @@
 package io.github.bbzq.feats.hook
 
 import android.app.Activity
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -32,6 +33,7 @@ class RewardAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
             count += hookRewardActivity(symbols)
             count += hookRewardHeaderTimer(symbols)
             count += hookCountDownTextView(symbols)
+            count += hookDisplayTimer(symbols)
             count += hookActivitySweeper()
         }
         if (skipMiniGame) {
@@ -113,6 +115,24 @@ class RewardAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 
+    private fun hookDisplayTimer(symbols: RestoredRewardAdSymbols): Int {
+        var count = 0
+        symbols.timerSetTotalMethod?.let { method ->
+            env.hookBefore(method) { param ->
+                val total = (param.args.firstOrNull() as? Number)?.toInt() ?: return@hookBefore
+                if (total > TIMER_MIN_TOTAL_MS) param.args[0] = TIMER_MIN_TOTAL_MS
+            }
+            count++
+        }
+        symbols.jumpResumeMethod?.let { method ->
+            env.hookBefore(method) { param ->
+                backdateJumpStart(param.thisObject, symbols.jumpStartField)
+            }
+            count++
+        }
+        return count
+    }
+
     private fun hookMiniGameReward(symbols: RestoredRewardAdSymbols): Int {
         val showMethod = symbols.miniGameRewardShow ?: return 0
         val emitEventMethod = symbols.miniGameRewardEmitEvent ?: return 0
@@ -179,6 +199,16 @@ class RewardAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (jumpClockField == null) return
         runCatching {
             jumpClockField.set(null, System.currentTimeMillis() - JUMP_FAST_FORWARD_MS)
+        }
+    }
+
+    /** The display records the jump start on the elapsed-realtime clock and credits the time on return. */
+    private fun backdateJumpStart(display: Any?, jumpStartField: Field?) {
+        if (display == null || jumpStartField == null) return
+        runCatching {
+            if (jumpStartField.get(display) != null) {
+                jumpStartField.set(display, SystemClock.elapsedRealtime() - JUMP_FAST_FORWARD_MS)
+            }
         }
     }
 
@@ -260,6 +290,7 @@ class RewardAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private companion object {
         private const val REWARD_FAST_FORWARD_MS = 60_000L
         private const val JUMP_FAST_FORWARD_MS = 60_000L
+        private const val TIMER_MIN_TOTAL_MS = 1_000
         private const val MAX_VIEW_SCAN_NODES = 320
         private const val METHOD_SHOW_REWARDED_VIDEO_AD = "showRewardedVideoAd"
         private const val EVENT_REWARDED_VIDEO_AD_ON_CLOSE = "RewardedVideoAdOnClose"

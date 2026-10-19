@@ -399,6 +399,9 @@ data class RewardAdSymbols(
     val countDownSetTotalTime: MethodDescriptor? = null,
     val countDownSetElapsedTime: MethodDescriptor? = null,
     val jumpClockField: FieldDescriptor? = null,
+    val timerSetTotalMethod: MethodDescriptor? = null,
+    val jumpResumeMethod: MethodDescriptor? = null,
+    val jumpStartField: FieldDescriptor? = null,
     val miniGameRewardShow: MethodDescriptor? = null,
     val miniGameRewardEmitEvent: MethodDescriptor? = null,
     val miniGameRewardCallback: MethodDescriptor? = null,
@@ -414,6 +417,9 @@ data class RewardAdSymbols(
         .putOpt("countDownSetTotalTime", countDownSetTotalTime?.toJson())
         .putOpt("countDownSetElapsedTime", countDownSetElapsedTime?.toJson())
         .putOpt("jumpClockField", jumpClockField?.toJson())
+        .putOpt("timerSetTotalMethod", timerSetTotalMethod?.toJson())
+        .putOpt("jumpResumeMethod", jumpResumeMethod?.toJson())
+        .putOpt("jumpStartField", jumpStartField?.toJson())
         .putOpt("miniGameRewardShow", miniGameRewardShow?.toJson())
         .putOpt("miniGameRewardEmitEvent", miniGameRewardEmitEvent?.toJson())
         .putOpt("miniGameRewardCallback", miniGameRewardCallback?.toJson())
@@ -430,6 +436,9 @@ data class RewardAdSymbols(
             countDownSetTotalTime = countDownSetTotalTime.restoreOptional(classLoader),
             countDownSetElapsedTime = countDownSetElapsedTime.restoreOptional(classLoader),
             jumpClockField = jumpClockField.restoreOptional(classLoader),
+            timerSetTotalMethod = timerSetTotalMethod.restoreOptional(classLoader),
+            jumpResumeMethod = jumpResumeMethod.restoreOptional(classLoader),
+            jumpStartField = jumpStartField.restoreOptional(classLoader),
             miniGameRewardShow = miniGameRewardShow.restoreOptional(classLoader),
             miniGameRewardEmitEvent = miniGameRewardEmitEvent.restoreOptional(classLoader),
             miniGameRewardCallback = miniGameRewardCallback.restoreOptional(classLoader),
@@ -446,6 +455,9 @@ data class RewardAdSymbols(
             countDownSetTotalTime = obj.optJSONObject("countDownSetTotalTime")?.let(MethodDescriptor::fromJson),
             countDownSetElapsedTime = obj.optJSONObject("countDownSetElapsedTime")?.let(MethodDescriptor::fromJson),
             jumpClockField = obj.optJSONObject("jumpClockField")?.let(FieldDescriptor::fromJson),
+            timerSetTotalMethod = obj.optJSONObject("timerSetTotalMethod")?.let(MethodDescriptor::fromJson),
+            jumpResumeMethod = obj.optJSONObject("jumpResumeMethod")?.let(MethodDescriptor::fromJson),
+            jumpStartField = obj.optJSONObject("jumpStartField")?.let(FieldDescriptor::fromJson),
             miniGameRewardShow = obj.optJSONObject("miniGameRewardShow")?.let(MethodDescriptor::fromJson),
             miniGameRewardEmitEvent = obj.optJSONObject("miniGameRewardEmitEvent")?.let(MethodDescriptor::fromJson),
             miniGameRewardCallback = obj.optJSONObject("miniGameRewardCallback")?.let(MethodDescriptor::fromJson),
@@ -464,6 +476,9 @@ data class RestoredRewardAdSymbols(
     val countDownSetTotalTime: Method?,
     val countDownSetElapsedTime: Method?,
     val jumpClockField: Field?,
+    val timerSetTotalMethod: Method?,
+    val jumpResumeMethod: Method?,
+    val jumpStartField: Field?,
     val miniGameRewardShow: Method?,
     val miniGameRewardEmitEvent: Method?,
     val miniGameRewardCallback: Method?,
