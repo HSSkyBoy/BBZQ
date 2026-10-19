@@ -599,8 +599,7 @@ object BiliSymbolResolver {
             ?.allMethods()
             ?.filter {
                 Modifier.isStatic(it.modifiers) &&
-                    it.parameterTypes.contentEquals(arrayOf(String::class.java)) &&
-                    it.returnType == Void.TYPE
+                    it.parameterTypes.contentEquals(arrayOf(String::class.java))
             }
             ?.toList()
             .orEmpty()
