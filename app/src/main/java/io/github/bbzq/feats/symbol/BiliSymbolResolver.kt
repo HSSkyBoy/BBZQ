@@ -813,6 +813,17 @@ object BiliSymbolResolver {
                 (method.name == name || method.name.startsWith("$name\$"))
         }?.apply { isAccessible = true }
 
+    private fun findSkinResponseClass(classLoader: ClassLoader, bridge: DexKitBridge): Class<*>? {
+        fun Class<*>.hasUserGarbSetter() = declaredMethods.any { it.name == "setUserGarb" && it.parameterCount == 1 }
+        val searched = runCatching {
+            bridge.findClass(
+                FindClass.create().matcher(ClassMatcher.create().usingStrings("user_equip")),
+            ).mapNotNull { classLoader.loadClassOrNull(it.name) }
+                .firstOrNull { it.hasUserGarbSetter() }
+        }.getOrNull()
+        return searched ?: classLoader.loadClassOrNull(GARB_DATA_CLASS)?.takeIf { it.hasUserGarbSetter() }
+    }
+
     /** Countdown model: start()/stop()/d()/e() plus b(int) that receives the total duration in ms. */
     private fun Class<*>.findRewardTimerSetTotal(): Method? {
         fun noArgVoid(name: String) = declaredMethods.any {
@@ -1125,14 +1136,7 @@ object BiliSymbolResolver {
 
         // 皮肤响应模型:含 setUserGarb / setLoadEquip setter,
         // load_equip(下拉动画)与 user_equip 一起在解析 /x/resource/show/skin 时注入
-        val skinResponseClass = runCatching {
-            currentBridge.findClass(
-                FindClass.create().matcher(ClassMatcher.create().usingStrings("user_equip")),
-            ).mapNotNull { classLoader.loadClassOrNull(it.name) }
-                .firstOrNull { type ->
-                    type.declaredMethods.any { it.name == "setUserGarb" && it.parameterCount == 1 }
-                }
-        }.getOrNull()
+        val skinResponseClass = findSkinResponseClass(classLoader, currentBridge)
         val skinResponseUserGarbSetter = skinResponseClass?.declaredMethods?.firstOrNull {
             it.name == "setUserGarb" && it.parameterCount == 1
         }?.apply { isAccessible = true }
@@ -1289,14 +1293,7 @@ object BiliSymbolResolver {
 
         // Mirror BiliRoamingX's response replacement at Bilibili's parsed model boundary.
         // This narrows the hook to skin data instead of intercepting every OkHttp response.
-        val skinResponseClass = runCatching {
-            currentBridge.findClass(
-                FindClass.create().matcher(ClassMatcher.create().usingStrings("user_equip")),
-            ).mapNotNull { classLoader.loadClassOrNull(it.name) }
-                .firstOrNull { type ->
-                    type.declaredMethods.any { it.name == "setUserGarb" && it.parameterCount == 1 }
-                }
-        }.getOrNull()
+        val skinResponseClass = findSkinResponseClass(classLoader, currentBridge)
         val skinResponseUserGarbSetter = skinResponseClass?.declaredMethods?.firstOrNull {
             it.name == "setUserGarb" && it.parameterCount == 1
         }?.apply { isAccessible = true }
@@ -4392,6 +4389,7 @@ object BiliSymbolResolver {
     private const val REWARD_MINI_GAME_ABILITY =
         "com.bilibili.lib.fasthybrid.game.engine.ability.impl.ad.BWARewardAbility"
     private val REWARD_JUMP_CLOCK_CLASSES = arrayOf("Ke.m", "Pe.k")
+    private const val GARB_DATA_CLASS = "tv.danmaku.bili.ui.garb.model.GarbData"
     private const val REWARD_PACKAGE = "com.bilibili.ad.reward"
     private const val REWARD_DISPLAY = "com.bilibili.ad.reward.RewardAdDisplay"
     private const val REWARD_JUMP_REASON = "jump"
