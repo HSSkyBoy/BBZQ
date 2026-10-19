@@ -67,7 +67,6 @@ object BiliSymbolResolver {
     private const val HP_TRY_FREE_QUALITY = "TryFreeQualityHook.GeneratedMessages"
     private const val HP_TEENAGERS_MODE = "TeenagersModeHook.DialogActivity"
     private const val HP_DOWNLOAD_THREAD_LISTENER = "DownloadThreadHook.Listener"
-    private const val HP_DOWNLOAD_THREAD_REPORT = "DownloadThreadHook.ReportMethod"
     private const val HP_STORY_PLAYER_AD = "StoryPlayerAdHook.InstallPoints"
     private const val HP_STORY_FULLSCREEN = "StoryFullscreenHook.StoryVideoActivity"
     private const val HP_STORY_FULLSCREEN_ON_CREATE = "StoryFullscreenHook.OnCreate"
@@ -315,14 +314,10 @@ object BiliSymbolResolver {
         val downloadThreadListeners = scanHookPoint(HP_DOWNLOAD_THREAD_LISTENER, hookPoints, scanErrors, log) {
             scanDownloadThreadListeners(classLoader, ::bridge)
         }.orEmpty()
-        val downloadThreadReport = scanOptionalHookPoint(HP_DOWNLOAD_THREAD_REPORT, hookPoints, scanErrors, log) {
-            scanDownloadThreadReportMethod(classLoader, ::bridge)
-        }
-        val downloadThread = if (downloadThreadListeners.isNotEmpty() || downloadThreadReport != null) {
+        val downloadThread = if (downloadThreadListeners.isNotEmpty()) {
             DownloadThreadSymbols(
                 listeners = downloadThreadListeners,
-                reportMethod = downloadThreadReport,
-                evidence = "listeners=${downloadThreadListeners.size},report=${downloadThreadReport != null}",
+                evidence = "listeners=${downloadThreadListeners.size}",
             )
         } else {
             null
@@ -1680,40 +1675,6 @@ object BiliSymbolResolver {
             listeners,
             listeners.joinToString("|") { it.className },
             "dexkitClassName+TextViewCtor+onClick+TextViewField",
-        )
-    }
-
-    private fun scanDownloadThreadReportMethod(
-        classLoader: ClassLoader,
-        bridge: () -> DexKitBridge?,
-    ): SymbolScanResult<MethodDescriptor> {
-        val classNames = findClassNamesByNameContains(
-            bridge = bridge,
-            terms = DOWNLOAD_THREAD_REPORT_CLASS_TERMS,
-        )
-        val methods = classNames
-            .asSequence()
-            .mapNotNull { classLoader.loadClassOrNull(it) }
-            .distinctBy { it.name }
-            .flatMap { type -> type.allMethods() }
-            .filter { method ->
-                method.name == "reportDownloadThread" &&
-                    method.parameterCount == 2 &&
-                    method.parameterTypes[0].name == "android.content.Context" &&
-                    method.parameterTypes[1] == Int::class.javaPrimitiveType &&
-                    !method.returnType.isPrimitive &&
-                    CharSequence::class.java.isAssignableFrom(method.returnType)
-            }
-            .distinctBy { it.declaringClass.name + "#" + it.name + it.parameterTypes.joinToString { type -> type.name } }
-            .toList()
-
-        if (methods.size != 1) {
-            return SymbolScanResult.Missing("reportDownloadThread method candidates=${methods.size}")
-        }
-        return SymbolScanResult.Found(
-            MethodDescriptor.of(methods.single()),
-            methods.single().toGenericString(),
-            "dexkitClassName+exactSignature",
         )
     }
 
@@ -4478,19 +4439,6 @@ object BiliSymbolResolver {
         "thread",
         "Listener",
         "listener",
-        "Cache",
-        "cache",
-        "Offline",
-        "offline",
-    )
-
-    private val DOWNLOAD_THREAD_REPORT_CLASS_TERMS = listOf(
-        "Download",
-        "download",
-        "Thread",
-        "thread",
-        "Report",
-        "report",
         "Cache",
         "cache",
         "Offline",

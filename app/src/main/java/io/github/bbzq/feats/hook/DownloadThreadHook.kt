@@ -10,7 +10,6 @@ import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.symbol.RestoredDownloadThreadListenerSymbols
-import java.lang.reflect.Method
 
 class DownloadThreadHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
@@ -25,9 +24,6 @@ class DownloadThreadHook(env: RoamingEnv) : BaseRoamingHook(env) {
         var count = 0
         restored.listeners.forEach { listener ->
             count += hookListener(listener)
-        }
-        restored.reportMethod?.let { method ->
-            count += hookReportDownloadThread(method)
         }
 
         if (count > 0) {
@@ -69,12 +65,5 @@ class DownloadThreadHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         count++
         return count
-    }
-
-    private fun hookReportDownloadThread(method: Method): Int {
-        env.hookBefore(method) { param ->
-            param.result = ""
-        }
-        return 1
     }
 }

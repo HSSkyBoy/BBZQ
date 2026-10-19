@@ -734,27 +734,18 @@ data class RestoredMineProfileSymbols(
 
 data class DownloadThreadSymbols(
     val listeners: List<DownloadThreadListenerSymbols>,
-    val reportMethod: MethodDescriptor?,
     val evidence: String,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("listeners", listeners.toJsonArray { it.toJson() })
-        .putOpt("reportMethod", reportMethod?.toJson())
         .put("evidence", evidence)
 
-    fun restore(classLoader: ClassLoader): RestoredDownloadThreadSymbols {
-        val restoredListeners = listeners.mapNotNull { it.restore(classLoader) }
-        val restoredReport = reportMethod?.let { descriptor ->
-            val owner = classLoader.loadClassOrNull(descriptor.declaringClassName) ?: return@let null
-            descriptor.restore(owner)
-        }
-        return RestoredDownloadThreadSymbols(restoredListeners, restoredReport)
-    }
+    fun restore(classLoader: ClassLoader): RestoredDownloadThreadSymbols =
+        RestoredDownloadThreadSymbols(listeners.mapNotNull { it.restore(classLoader) })
 
     companion object {
         fun fromJson(obj: JSONObject): DownloadThreadSymbols = DownloadThreadSymbols(
             listeners = obj.optJSONArray("listeners").toList { DownloadThreadListenerSymbols.fromJson(it) },
-            reportMethod = obj.optJSONObject("reportMethod")?.let(MethodDescriptor::fromJson),
             evidence = obj.optString("evidence", "-"),
         )
     }
@@ -793,7 +784,6 @@ data class DownloadThreadListenerSymbols(
 
 data class RestoredDownloadThreadSymbols(
     val listeners: List<RestoredDownloadThreadListenerSymbols>,
-    val reportMethod: Method?,
 )
 
 data class RestoredDownloadThreadListenerSymbols(
