@@ -44,66 +44,52 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val handlerClass = classLoader.findClassOrNull(MOSS_HANDLER)?.takeIf { it.isInterface }
         var installed = 0
 
-        // 1. Traditional PGC PlayURLMoss
-        val pgcMossClass = classLoader.findClassOrNull(PGC_MOSS_CLASS)
-        val pgcRequestClass = classLoader.findClassOrNull(PGC_REQUEST_CLASS)
         replyClass = classLoader.findClassOrNull(PGC_REPLY_CLASS)
-        if (pgcMossClass != null && pgcRequestClass != null && replyClass != null) {
-            pgcMossClass.declaredMethods.firstOrNull {
-                it.name == PGC_SYNC_METHOD && it.parameterTypes.contentEquals(arrayOf(pgcRequestClass)) && !Modifier.isStatic(it.modifiers)
-            }?.let { sync ->
-                env.intercept(sync) { chain -> proceedWithFallback(chain.getArgs().firstOrNull(), chain, isUnite = false) }
-                installed++
-            }
-            if (handlerClass != null) {
-                pgcMossClass.declaredMethods.firstOrNull {
-                    it.name == PGC_ASYNC_METHOD &&
-                        it.parameterTypes.contentEquals(arrayOf(pgcRequestClass, handlerClass)) &&
-                        it.returnType == Void.TYPE &&
-                        !Modifier.isStatic(it.modifiers)
-                }?.let { async ->
-                    env.hookBefore(async) { param ->
-                        val request = param.args.firstOrNull() ?: return@hookBefore
-                        val delegate = param.args.getOrNull(1) ?: return@hookBefore
-                        if (resolveTarget(request, isUnite = false) == null) return@hookBefore
-                        param.args[1] = wrapHandler(handlerClass, delegate, request, isUnite = false)
-                    }
-                    installed++
-                }
-            }
-        }
-
-        // 2. Modern Unified Player (PlayerMoss)
-        val uniteMossClass = classLoader.findClassOrNull(UNITE_MOSS_CLASS)
-        val uniteRequestClass = classLoader.findClassOrNull(UNITE_REQUEST_CLASS)
+        installed += hookMoss(PGC_MOSS_CLASS, PGC_REQUEST_CLASS, replyClass, PGC_SYNC_METHOD, PGC_ASYNC_METHOD, handlerClass, isUnite = false)
         uniteReplyClass = classLoader.findClassOrNull(UNITE_REPLY_CLASS)
-        if (uniteMossClass != null && uniteRequestClass != null && uniteReplyClass != null) {
-            uniteMossClass.declaredMethods.firstOrNull {
-                it.name == UNITE_SYNC_METHOD && it.parameterTypes.contentEquals(arrayOf(uniteRequestClass)) && !Modifier.isStatic(it.modifiers)
-            }?.let { sync ->
-                env.intercept(sync) { chain -> proceedWithFallback(chain.getArgs().firstOrNull(), chain, isUnite = true) }
-                installed++
-            }
-            if (handlerClass != null) {
-                uniteMossClass.declaredMethods.firstOrNull {
-                    it.name == UNITE_ASYNC_METHOD &&
-                        it.parameterTypes.contentEquals(arrayOf(uniteRequestClass, handlerClass)) &&
-                        it.returnType == Void.TYPE &&
-                        !Modifier.isStatic(it.modifiers)
-                }?.let { async ->
-                    env.hookBefore(async) { param ->
-                        val request = param.args.firstOrNull() ?: return@hookBefore
-                        val delegate = param.args.getOrNull(1) ?: return@hookBefore
-                        if (resolveTarget(request, isUnite = true) == null) return@hookBefore
-                        param.args[1] = wrapHandler(handlerClass, delegate, request, isUnite = true)
-                    }
-                    installed++
-                }
-            }
-        }
+        installed += hookMoss(UNITE_MOSS_CLASS, UNITE_REQUEST_CLASS, uniteReplyClass, UNITE_SYNC_METHOD, UNITE_ASYNC_METHOD, handlerClass, isUnite = true)
 
         isInstalled = installed > 0
         log("SeaBangumiPlay: hooked $installed play method(s)")
+    }
+
+    /** Hooks one Moss service (PGC or unified player); returns how many methods were hooked. */
+    private fun hookMoss(
+        mossName: String,
+        requestName: String,
+        reply: Class<*>?,
+        syncName: String,
+        asyncName: String,
+        handlerClass: Class<*>?,
+        isUnite: Boolean,
+    ): Int {
+        val mossClass = classLoader.findClassOrNull(mossName)
+        val requestClass = classLoader.findClassOrNull(requestName)
+        if (mossClass == null || requestClass == null || reply == null) return 0
+        var installed = 0
+        mossClass.declaredMethods.firstOrNull {
+            it.name == syncName && it.parameterTypes.contentEquals(arrayOf(requestClass)) && !Modifier.isStatic(it.modifiers)
+        }?.let { sync ->
+            env.intercept(sync) { chain -> proceedWithFallback(chain.getArgs().firstOrNull(), chain, isUnite) }
+            installed++
+        }
+        if (handlerClass != null) {
+            mossClass.declaredMethods.firstOrNull {
+                it.name == asyncName &&
+                    it.parameterTypes.contentEquals(arrayOf(requestClass, handlerClass)) &&
+                    it.returnType == Void.TYPE &&
+                    !Modifier.isStatic(it.modifiers)
+            }?.let { async ->
+                env.hookBefore(async) { param ->
+                    val request = param.args.firstOrNull() ?: return@hookBefore
+                    val delegate = param.args.getOrNull(1) ?: return@hookBefore
+                    if (resolveTarget(request, isUnite) == null) return@hookBefore
+                    param.args[1] = wrapHandler(handlerClass, delegate, request, isUnite)
+                }
+                installed++
+            }
+        }
+        return installed
     }
 
     private fun proceedWithFallback(request: Any?, chain: io.github.libxposed.api.XposedInterface.Chain, isUnite: Boolean): Any? {
@@ -177,6 +163,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val (epId, seasonId) = resolveTarget(request, isUnite) ?: return null
         val preferred = servedBy[epId] ?: ModuleSettings.getResolverDefaultRegion(prefs)
         val servers = ResolverServers.preferring(ResolverServers.configured(prefs), preferred)
+        if (servers.isEmpty()) return null
         val vod = if (isUnite) request.callMethod("getVod") else null
         val cid = (vod?.callMethod("getCid") ?: request.callMethod("getCid")).asLong()
         val qn = (vod?.callMethod("getQn") ?: request.callMethod("getQn")).asLong()
@@ -308,7 +295,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 val title = value?.callMethod("getTitle")?.callMethod("getText") as? String
                 val subtitle = value?.callMethod("getSubtitle")?.callMethod("getText") as? String
                 val msg = value?.callMethod("getMsg") as? String
-                listOf(title, subtitle, msg).any { it != null && (it.contains("地区") || it.contains("地區")) }
+                listOf(title, subtitle, msg).any { it != null && SeaBangumiPlayCodec.isRegionBlocked(0, it) }
             } == true
 
             val refused = streams <= 0 || hasAreaLimitDialog
