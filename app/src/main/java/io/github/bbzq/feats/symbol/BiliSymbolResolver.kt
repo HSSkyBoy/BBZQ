@@ -1907,7 +1907,9 @@ object BiliSymbolResolver {
             ?: return SymbolScanResult.Missing("story pager player class not found")
         val interactLayerService = classLoader.loadClassOrNull(INTERACT_LAYER_SERVICE)
             ?: return SymbolScanResult.Missing("interact layer service class not found")
-        val introCommentService = classLoader.loadClassOrNull(STORY_INTRO_COMMENT_SERVICE)
+        val introCommentService = STORY_INTRO_COMMENT_SERVICES
+            .mapNotNull { classLoader.loadClassOrNull(it) }
+            .firstOrNull { it.findStoryIntroCommentShow() != null }
 
         var matchedSignature: Array<Class<*>>? = null
         var matchedVerticalContainer: Class<*>? = null
@@ -1998,16 +2000,15 @@ object BiliSymbolResolver {
                 ?.apply { isAccessible = true }
                 ?.let(::add)
         }
-        val introCommentShow = introCommentService
-            ?.allMethods()
-            ?.singleOrNull { method ->
-                method.name == "b" &&
-                    method.returnType == Void.TYPE &&
-                    method.parameterCount == 1 &&
-                    method.parameterTypes[0].name.startsWith(STORY_TAB_PACKAGE_PREFIX)
-            }
+        val introCommentShow = introCommentService?.findStoryIntroCommentShow()
             ?.apply { isAccessible = true }
-        val introCommentDismiss = introCommentService?.findMethod("a", Void.TYPE)
+        // dismissSheet() returns Boolean since 9.15; older builds return Unit.
+        val introCommentDismiss = introCommentService?.allMethods()
+            ?.singleOrNull { method ->
+                method.name == "a" &&
+                    method.parameterCount == 0 &&
+                    (method.returnType == Void.TYPE || method.returnType == Boolean::class.javaPrimitiveType)
+            }
             ?.apply { isAccessible = true }
         val setDanmakuOpacity = interactLayerService.findMethod(
             "setDanmakuOpacity",
@@ -2161,6 +2162,14 @@ object BiliSymbolResolver {
             hookPoints,
         )
     }
+
+    private fun Class<*>.findStoryIntroCommentShow(): Method? =
+        allMethods().singleOrNull { method ->
+            method.name == "b" &&
+                method.returnType == Void.TYPE &&
+                method.parameterCount == 1 &&
+                method.parameterTypes[0].name.startsWith(STORY_TAB_PACKAGE_PREFIX)
+        }
 
     private fun isStoryPagerListMethod(method: Method): Boolean =
         method.returnType == Void.TYPE &&
@@ -4426,7 +4435,10 @@ object BiliSymbolResolver {
     private val STORY_COMMENT_OUTER_CANDIDATES = listOf("StoryCommentHelper", "C", "B") + ('D'..'Z').map { it.toString() }
     private val STORY_COMMENT_VERTICAL_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$VerticalContainerV2", "C\$f", "B\$f") + ('D'..'Z').map { "$it\$f" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
     private val STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$d", "C\$d", "B\$d") + ('D'..'Z').map { "$it\$d" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
-    private const val STORY_INTRO_COMMENT_SERVICE = "com.bilibili.video.story.action.widget.comment.p"
+    private val STORY_INTRO_COMMENT_SERVICES = listOf(
+        "com.bilibili.video.story.action.widget.comment.t",
+        "com.bilibili.video.story.action.widget.comment.p",
+    )
     private const val STORY_TAB_PACKAGE_PREFIX = "com.bilibili.video.story.tab."
     private const val KOTLIN_UNIT = "kotlin.Unit"
     private const val ANDROIDX_VIEW_BINDING = "androidx.viewbinding.ViewBinding"
