@@ -64,6 +64,48 @@ class SettingsActivity : Activity() {
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
 
+        when (RuntimeEnvironmentInfo.frameworkGate(prefs)) {
+            RuntimeEnvironmentInfo.FrameworkGate.ALLOWED -> setupContent()
+            RuntimeEnvironmentInfo.FrameworkGate.NEEDS_ROOT -> verifyRootThenSetup()
+            RuntimeEnvironmentInfo.FrameworkGate.BLOCKED -> showFrameworkGateDialog(
+                R.string.framework_gate_title,
+                R.string.framework_gate_blocked_message,
+                retry = false,
+            )
+        }
+    }
+
+    private fun verifyRootThenSetup() {
+        Thread {
+            val granted = RootUtils.executeSuCommand("id").isSuccess
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (granted) {
+                    setupContent()
+                } else {
+                    showFrameworkGateDialog(
+                        R.string.framework_gate_root_title,
+                        R.string.framework_gate_root_message,
+                        retry = true,
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun showFrameworkGateDialog(titleRes: Int, messageRes: Int, retry: Boolean) {
+        val builder = AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setMessage(messageRes)
+            .setCancelable(false)
+            .setNegativeButton(R.string.framework_gate_exit) { _, _ -> finish() }
+        if (retry) {
+            builder.setPositiveButton(R.string.framework_gate_retry) { _, _ -> verifyRootThenSetup() }
+        }
+        builder.show()
+    }
+
+    private fun setupContent() {
         val initialPage = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
         pageStack.addLast(initialPage)
 
@@ -131,6 +173,7 @@ class SettingsActivity : Activity() {
         setIntent(intent)
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
+        if (!::contentContainer.isInitialized) return
         val targetPage = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
         if (targetPage == PAGE_ROOT) {
             pageStack.clear()

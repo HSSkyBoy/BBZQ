@@ -3,6 +3,7 @@ package io.github.bbzq
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -18,67 +19,99 @@ object RuntimeEnvironmentInfo {
     private const val UNKNOWN = "unknown"
     const val EXTRA_RUNTIME_VALUES = "io.github.bbzq.extra.RUNTIME_VALUES"
 
+    private const val BLOCKED_FRAMEWORK_NAME = "LSPosed"
+    private val BLOCKED_FRAMEWORK_VERSION_CODES = setOf("7777")
+
     private val targetPackages = listOf(
         "tv.danmaku.bili",
         "com.bilibili.app.blue",
         "top.nkbe.npatch",
     )
 
+    private class ObservedSetSpec(
+        val key: String,
+        val getter: (SharedPreferences) -> Set<String>,
+        val cacher: (Set<String>) -> Unit,
+    )
+
+    private val observedSetSpecs = listOf(
+        ObservedSetSpec(
+            ModuleSettings.KEY_KNOWN_BOTTOM_BAR_ITEMS,
+            ModuleSettings::getKnownBottomBarItems,
+            ModuleSettings::cacheKnownBottomBarItems,
+        ),
+        ObservedSetSpec(
+            ModuleSettings.KEY_KNOWN_HOME_RECOMMEND_TABS,
+            ModuleSettings::getKnownHomeRecommendTabs,
+            ModuleSettings::cacheKnownHomeRecommendTabs,
+        ),
+        ObservedSetSpec(
+            ModuleSettings.KEY_KNOWN_HOME_COMPONENTS,
+            ModuleSettings::getKnownHomeComponents,
+            ModuleSettings::cacheKnownHomeComponents,
+        ),
+        ObservedSetSpec(
+            ModuleSettings.KEY_KNOWN_MINE_COMPONENTS,
+            ModuleSettings::getKnownMineComponents,
+            ModuleSettings::cacheKnownMineComponents,
+        ),
+        ObservedSetSpec(
+            ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES,
+            ModuleSettings::getKnownVideoDetailRelateTypes,
+            ModuleSettings::cacheKnownVideoDetailRelateTypes,
+        ),
+        ObservedSetSpec(
+            ModuleSettings.KEY_KNOWN_COMPONENT_POOLS,
+            ModuleSettings::getKnownComponentPools,
+            ModuleSettings::cacheKnownComponentPools,
+        ),
+    ).associateBy { it.key }
+
     fun versionSummary(context: Context, prefs: SharedPreferences): String {
         val host = resolveHostVersion(context, prefs)
         val module = moduleVersion(context)
-        return buildString {
-            append("APP ")
-            append(host.displayName)
-            append('\n')
-            append("Module ")
-            append(module.displayName)
-        }
+        return "APP ${host.displayName}\nModule ${module.displayName}"
     }
 
     fun runtimeEnvironmentJson(context: Context, prefs: SharedPreferences): String {
         val host = resolveHostVersion(context, prefs)
         val module = moduleVersion(context)
+        return buildRuntimeEnvironmentJson(context, prefs, host, module)
+    }
+
+    private fun buildRuntimeEnvironmentJson(
+        context: Context,
+        prefs: SharedPreferences,
+        host: VersionInfo,
+        module: VersionInfo,
+        hostSourceKind: String = resolveHostSourceKind(context, prefs, host.packageName),
+    ): String {
         val serviceInfo = ModuleRemotePreferences.getFrameworkInfo()
 
-        val xposedApiVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION)
-            .takeUnless { it == UNKNOWN }
-            ?: serviceInfo?.apiVersion
-            ?: UNKNOWN
-
-        val xposedFrameworkName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME)
-            .takeUnless { it == UNKNOWN }
-            ?: serviceInfo?.frameworkName?.takeIf { it.isNotBlank() }
-            ?: UNKNOWN
-
-        val xposedFrameworkVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION)
-            .takeUnless { it == UNKNOWN }
-            ?: serviceInfo?.frameworkVersion?.takeIf { it.isNotBlank() }
-            ?: UNKNOWN
-
-        val xposedFrameworkVersionCode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE)
-            .takeUnless { it == UNKNOWN }
-            ?: serviceInfo?.frameworkVersionCode?.takeIf { it.isNotBlank() }
-            ?: UNKNOWN
-
-        val xposedFrameworkProperties = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES)
-            .takeUnless { it == UNKNOWN }
-            ?: serviceInfo?.frameworkProperties?.takeIf { it.isNotBlank() }
-            ?: UNKNOWN
-
-        val runtimeKind = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_KIND)
-            .takeUnless { it == UNKNOWN }
-            ?: classifyRuntimeKind(xposedFrameworkName)
-
-        val hostSourceKind = resolveHostSourceKind(context, prefs, host.packageName)
-
-        val patchMode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PATCH_MODE)
-            .takeUnless { it == UNKNOWN }
-            ?: classifyPatchMode(context, hostSourceKind)
-
-        val processName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PROCESS_NAME)
-            .takeUnless { it == UNKNOWN }
-            ?: (context.applicationInfo?.processName ?: context.packageName)
+        val xposedApiVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION) {
+            serviceInfo?.apiVersion
+        }
+        val xposedFrameworkName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME) {
+            serviceInfo?.frameworkName
+        }
+        val xposedFrameworkVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION) {
+            serviceInfo?.frameworkVersion
+        }
+        val xposedFrameworkVersionCode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE) {
+            serviceInfo?.frameworkVersionCode
+        }
+        val xposedFrameworkProperties = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES) {
+            serviceInfo?.frameworkProperties
+        }
+        val runtimeKind = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_KIND) {
+            classifyRuntimeKind(xposedFrameworkName)
+        }
+        val patchMode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PATCH_MODE) {
+            classifyPatchMode(context, hostSourceKind)
+        }
+        val processName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PROCESS_NAME) {
+            context.applicationInfo?.processName ?: context.packageName
+        }
 
         val lastUpdateTimeRaw = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_LAST_UPDATE_TIME)
         val lastRuntimeUpdateTime = if (lastUpdateTimeRaw != UNKNOWN) {
@@ -109,26 +142,32 @@ object RuntimeEnvironmentInfo {
             .toString(2)
     }
 
-    fun devicesText(context: Context, prefs: SharedPreferences, exportedAtMillis: Long = System.currentTimeMillis()): String {
+    fun devicesText(
+        context: Context,
+        prefs: SharedPreferences,
+        exportedAtMillis: Long = System.currentTimeMillis(),
+    ): String {
         val host = resolveHostVersion(context, prefs)
         val module = moduleVersion(context)
+        val hostSourceKind = resolveHostSourceKind(context, prefs, host.packageName)
+
         return buildString {
-            appendLine("exportedAt=" + SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(exportedAtMillis)))
-            appendLine("deviceBrand=" + Build.BRAND)
-            appendLine("deviceManufacturer=" + Build.MANUFACTURER)
-            appendLine("deviceModel=" + Build.MODEL)
-            appendLine("deviceName=" + Build.DEVICE)
-            appendLine("productName=" + Build.PRODUCT)
-            appendLine("androidRelease=" + Build.VERSION.RELEASE)
-            appendLine("androidSdk=" + Build.VERSION.SDK_INT)
-            appendLine("securityPatch=" + (Build.VERSION.SECURITY_PATCH ?: UNKNOWN))
-            appendLine("hostPackage=" + host.packageName)
-            appendLine("hostVersion=" + host.displayName)
-            appendLine("hostSourceKind=" + resolveHostSourceKind(context, prefs, host.packageName))
-            appendLine("modulePackage=" + context.packageName)
-            appendLine("moduleVersion=" + module.displayName)
+            appendLine("exportedAt=${formatTimestamp(exportedAtMillis)}")
+            appendLine("deviceBrand=${Build.BRAND}")
+            appendLine("deviceManufacturer=${Build.MANUFACTURER}")
+            appendLine("deviceModel=${Build.MODEL}")
+            appendLine("deviceName=${Build.DEVICE}")
+            appendLine("productName=${Build.PRODUCT}")
+            appendLine("androidRelease=${Build.VERSION.RELEASE}")
+            appendLine("androidSdk=${Build.VERSION.SDK_INT}")
+            appendLine("securityPatch=${Build.VERSION.SECURITY_PATCH ?: UNKNOWN}")
+            appendLine("hostPackage=${host.packageName}")
+            appendLine("hostVersion=${host.displayName}")
+            appendLine("hostSourceKind=$hostSourceKind")
+            appendLine("modulePackage=${context.packageName}")
+            appendLine("moduleVersion=${module.displayName}")
             appendLine("runtimeSnapshot=")
-            appendLine(runtimeEnvironmentJson(context, prefs))
+            appendLine(buildRuntimeEnvironmentJson(context, prefs, host, module, hostSourceKind))
         }
     }
 
@@ -152,9 +191,7 @@ object RuntimeEnvironmentInfo {
             editor.putString(key, value)
         }
         runtimeObservedStringSets(prefs).forEach { (key, items) ->
-            if (items.isNotEmpty()) {
-                putObservedStringSet(editor, prefs, key, items)
-            }
+            putObservedStringSet(editor, prefs, key, items)
         }
         editor.commit()
     }
@@ -168,20 +205,19 @@ object RuntimeEnvironmentInfo {
         xposedFrameworkVersionCode: String,
         xposedFrameworkProperties: String,
         observedPrefs: SharedPreferences? = null,
-    ): Bundle {
-        return Bundle().apply {
-            runtimeSnapshotValues(
-                hostContext = hostContext,
-                processName = processName,
-                xposedApiVersion = xposedApiVersion,
-                xposedFrameworkName = xposedFrameworkName,
-                xposedFrameworkVersion = xposedFrameworkVersion,
-                xposedFrameworkVersionCode = xposedFrameworkVersionCode,
-                xposedFrameworkProperties = xposedFrameworkProperties,
-            ).forEach { (key, value) -> putString(key, value) }
-            runtimeObservedStringSets(observedPrefs).forEach { (key, value) ->
-                putStringArrayList(key, ArrayList(value))
-            }
+    ): Bundle = Bundle().apply {
+        runtimeSnapshotValues(
+            hostContext = hostContext,
+            processName = processName,
+            xposedApiVersion = xposedApiVersion,
+            xposedFrameworkName = xposedFrameworkName,
+            xposedFrameworkVersion = xposedFrameworkVersion,
+            xposedFrameworkVersionCode = xposedFrameworkVersionCode,
+            xposedFrameworkProperties = xposedFrameworkProperties,
+        ).forEach { (key, value) -> putString(key, value) }
+
+        runtimeObservedStringSets(observedPrefs).forEach { (key, value) ->
+            putStringArrayList(key, ArrayList(value))
         }
     }
 
@@ -189,8 +225,9 @@ object RuntimeEnvironmentInfo {
         val values = intent?.getBundleExtra(EXTRA_RUNTIME_VALUES) ?: return
         val editor = prefs.edit()
         var changed = false
+
         values.keySet().forEach { key ->
-            if (key in OBSERVED_STRING_SET_KEYS) {
+            if (key in observedSetSpecs) {
                 val items = values.getStringArrayList(key)
                     ?.filterTo(linkedSetOf()) { it.isNotBlank() }
                     .orEmpty()
@@ -209,8 +246,7 @@ object RuntimeEnvironmentInfo {
 
     private fun resolveHostVersion(context: Context, prefs: SharedPreferences): VersionInfo {
         val recordedPackage = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_HOST_PACKAGE)
-            .takeUnless { it == UNKNOWN }
-        if (!recordedPackage.isNullOrBlank()) {
+        if (recordedPackage != UNKNOWN) {
             return VersionInfo(
                 packageName = recordedPackage,
                 versionName = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_HOST_VERSION_NAME),
@@ -218,9 +254,7 @@ object RuntimeEnvironmentInfo {
             )
         }
         return targetPackages
-            .asSequence()
-            .mapNotNull { packageVersionOrNull(context, it) }
-            .firstOrNull()
+            .firstNotNullOfOrNull { packageVersionOrNull(context, it) }
             ?: VersionInfo(UNKNOWN, UNKNOWN, UNKNOWN)
     }
 
@@ -239,21 +273,20 @@ object RuntimeEnvironmentInfo {
     ): Map<String, String> {
         val host = packageVersion(hostContext, hostContext.packageName)
         val sourceKind = classifyHostSource(hostContext.applicationInfo?.sourceDir)
-        return linkedMapOf(
-            ModuleSettings.KEY_RUNTIME_HOST_PACKAGE to host.packageName,
-            ModuleSettings.KEY_RUNTIME_HOST_VERSION_NAME to host.versionName,
-            ModuleSettings.KEY_RUNTIME_HOST_VERSION_CODE to host.versionCode,
-            ModuleSettings.KEY_RUNTIME_HOST_SOURCE_KIND to sourceKind,
-            ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION to xposedApiVersion.ifBlank { UNKNOWN },
-            ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME to xposedFrameworkName.ifBlank { UNKNOWN },
-            ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION to xposedFrameworkVersion.ifBlank { UNKNOWN },
-            ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE to xposedFrameworkVersionCode.ifBlank { UNKNOWN },
-            ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES to xposedFrameworkProperties.ifBlank { UNKNOWN },
-            ModuleSettings.KEY_RUNTIME_KIND to classifyRuntimeKind(xposedFrameworkName),
-            ModuleSettings.KEY_RUNTIME_PATCH_MODE to classifyPatchMode(hostContext, sourceKind),
-            ModuleSettings.KEY_RUNTIME_PROCESS_NAME to processName.ifBlank { UNKNOWN },
-            ModuleSettings.KEY_RUNTIME_LAST_UPDATE_TIME to System.currentTimeMillis().toString(),
-        ).apply {
+        return buildMap {
+            put(ModuleSettings.KEY_RUNTIME_HOST_PACKAGE, host.packageName)
+            put(ModuleSettings.KEY_RUNTIME_HOST_VERSION_NAME, host.versionName)
+            put(ModuleSettings.KEY_RUNTIME_HOST_VERSION_CODE, host.versionCode)
+            put(ModuleSettings.KEY_RUNTIME_HOST_SOURCE_KIND, sourceKind)
+            put(ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION, xposedApiVersion.ifBlank { UNKNOWN })
+            put(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME, xposedFrameworkName.ifBlank { UNKNOWN })
+            put(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION, xposedFrameworkVersion.ifBlank { UNKNOWN })
+            put(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE, xposedFrameworkVersionCode.ifBlank { UNKNOWN })
+            put(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES, xposedFrameworkProperties.ifBlank { UNKNOWN })
+            put(ModuleSettings.KEY_RUNTIME_KIND, classifyRuntimeKind(xposedFrameworkName))
+            put(ModuleSettings.KEY_RUNTIME_PATCH_MODE, classifyPatchMode(hostContext, sourceKind))
+            put(ModuleSettings.KEY_RUNTIME_PROCESS_NAME, processName.ifBlank { UNKNOWN })
+            put(ModuleSettings.KEY_RUNTIME_LAST_UPDATE_TIME, System.currentTimeMillis().toString())
             putAll(symbolScanStatusValues(hostContext))
         }
     }
@@ -261,24 +294,12 @@ object RuntimeEnvironmentInfo {
     private fun runtimeObservedStringSets(prefs: SharedPreferences?): Map<String, Set<String>> {
         if (prefs == null) return emptyMap()
         return buildMap {
-            ModuleSettings.getKnownBottomBarItems(prefs)
-                .takeIf { it.isNotEmpty() }
-                ?.let { put(ModuleSettings.KEY_KNOWN_BOTTOM_BAR_ITEMS, it) }
-            ModuleSettings.getKnownHomeRecommendTabs(prefs)
-                .takeIf { it.isNotEmpty() }
-                ?.let { put(ModuleSettings.KEY_KNOWN_HOME_RECOMMEND_TABS, it) }
-            ModuleSettings.getKnownHomeComponents(prefs)
-                .takeIf { it.isNotEmpty() }
-                ?.let { put(ModuleSettings.KEY_KNOWN_HOME_COMPONENTS, it) }
-            ModuleSettings.getKnownMineComponents(prefs)
-                .takeIf { it.isNotEmpty() }
-                ?.let { put(ModuleSettings.KEY_KNOWN_MINE_COMPONENTS, it) }
-            ModuleSettings.getKnownVideoDetailRelateTypes(prefs)
-                .takeIf { it.isNotEmpty() }
-                ?.let { put(ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES, it) }
-            ModuleSettings.getKnownComponentPools(prefs)
-                .takeIf { it.isNotEmpty() }
-                ?.let { put(ModuleSettings.KEY_KNOWN_COMPONENT_POOLS, it) }
+            observedSetSpecs.values.forEach { spec ->
+                val items = spec.getter(prefs)
+                if (items.isNotEmpty()) {
+                    put(spec.key, items)
+                }
+            }
         }
     }
 
@@ -288,6 +309,7 @@ object RuntimeEnvironmentInfo {
         key: String,
         items: Set<String>,
     ) {
+        if (items.isEmpty()) return
         val localItems = prefs.getStringSet(key, emptySet()).orEmpty()
         val updated = if (key == ModuleSettings.KEY_KNOWN_COMPONENT_POOLS) {
             mergeComponentPools(localItems, items)
@@ -295,14 +317,7 @@ object RuntimeEnvironmentInfo {
             if (items.size < localItems.size) localItems else items
         }
         editor.putStringSet(key, updated.toMutableSet())
-        when (key) {
-            ModuleSettings.KEY_KNOWN_BOTTOM_BAR_ITEMS -> ModuleSettings.cacheKnownBottomBarItems(updated)
-            ModuleSettings.KEY_KNOWN_HOME_RECOMMEND_TABS -> ModuleSettings.cacheKnownHomeRecommendTabs(updated)
-            ModuleSettings.KEY_KNOWN_HOME_COMPONENTS -> ModuleSettings.cacheKnownHomeComponents(updated)
-            ModuleSettings.KEY_KNOWN_MINE_COMPONENTS -> ModuleSettings.cacheKnownMineComponents(updated)
-            ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES -> ModuleSettings.cacheKnownVideoDetailRelateTypes(updated)
-            ModuleSettings.KEY_KNOWN_COMPONENT_POOLS -> ModuleSettings.cacheKnownComponentPools(updated)
-        }
+        observedSetSpecs[key]?.cacher?.invoke(updated)
     }
 
     private fun mergeComponentPools(local: Set<String>, incoming: Set<String>): Set<String> {
@@ -332,68 +347,94 @@ object RuntimeEnvironmentInfo {
         runCatching { packageVersion(context, packageName) }.getOrNull()
 
     private fun packageVersion(context: Context, packageName: String): VersionInfo {
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+        val pm = context.packageManager
+        val info: PackageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
         } else {
             @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(packageName, 0)
+            pm.getPackageInfo(packageName, 0)
         }
         return VersionInfo(
             packageName = packageName,
             versionName = info.versionName ?: UNKNOWN,
-            versionCode = info.longVersionCodeCompat().toString(),
+            versionCode = info.longVersionCode.toString(),
         )
     }
 
-    private fun PackageInfo.longVersionCodeCompat(): Long =
-        longVersionCode
-
-    private fun readRuntimeString(prefs: SharedPreferences, key: String): String {
-        return prefs.getString(key, null)?.takeIf { it.isNotBlank() && it != UNKNOWN } ?: UNKNOWN
+    private inline fun readRuntimeString(
+        prefs: SharedPreferences,
+        key: String,
+        fallback: () -> String? = { null },
+    ): String {
+        val stored = prefs.getString(key, null)?.takeIf { it.isNotBlank() && it != UNKNOWN }
+        return stored ?: fallback()?.takeIf { it.isNotBlank() && it != UNKNOWN } ?: UNKNOWN
     }
 
     private fun formatRuntimeUpdateTime(raw: String): String {
         val millis = raw.toLongOrNull() ?: return raw
-        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
+        return formatTimestamp(millis)
     }
+
+    private fun formatTimestamp(millis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
 
     private fun isDebuggable(context: Context): Boolean =
-        (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-    private fun resolveHostSourceKind(context: Context, prefs: SharedPreferences, hostPackageName: String): String {
-        val recorded = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_HOST_SOURCE_KIND)
-        if (recorded != UNKNOWN) return recorded
-        return packageSourceKindOrNull(context, hostPackageName) ?: UNKNOWN
-    }
+    private fun resolveHostSourceKind(context: Context, prefs: SharedPreferences, hostPackageName: String): String =
+        readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_HOST_SOURCE_KIND) {
+            packageSourceKindOrNull(context, hostPackageName)
+        }
 
     private fun packageSourceKindOrNull(context: Context, packageName: String): String? {
         if (packageName.isBlank() || packageName == UNKNOWN) return null
+        val pm = context.packageManager
         val info = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getApplicationInfo(
-                    packageName,
-                    PackageManager.ApplicationInfoFlags.of(0),
-                )
+                pm.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
             } else {
                 @Suppress("DEPRECATION")
-                context.packageManager.getApplicationInfo(packageName, 0)
+                pm.getApplicationInfo(packageName, 0)
             }
         }.getOrNull() ?: return null
         return classifyHostSource(info.sourceDir)
     }
 
+    enum class FrameworkGate { ALLOWED, NEEDS_ROOT, BLOCKED }
+
+    fun frameworkGate(prefs: SharedPreferences): FrameworkGate {
+        val serviceInfo = ModuleRemotePreferences.getFrameworkInfo()
+        val name = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME) {
+            serviceInfo?.frameworkName
+        }
+        val versionCode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_VERSION_CODE) {
+            serviceInfo?.frameworkVersionCode
+        }
+        if (name == BLOCKED_FRAMEWORK_NAME && versionCode in BLOCKED_FRAMEWORK_VERSION_CODES) {
+            return FrameworkGate.BLOCKED
+        }
+        val kind = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_KIND) {
+            classifyRuntimeKind(name)
+        }
+        return when (kind) {
+            "lsposed" -> FrameworkGate.NEEDS_ROOT
+            "npatch", "vector", UNKNOWN -> FrameworkGate.ALLOWED
+            else -> FrameworkGate.BLOCKED
+        }
+    }
+
     fun classifyRuntimeKind(frameworkName: String): String {
+        if (frameworkName.isBlank() || frameworkName == UNKNOWN) return UNKNOWN
         val lowerName = frameworkName.lowercase(Locale.ROOT)
         return when {
-            lowerName.contains("npatch") -> "npatch"
-            lowerName.contains("lsposed") -> "lsposed"
-            lowerName.contains("lspatch") -> "lspatch"
-            lowerName.contains("edxposed") -> "edxposed"
-            lowerName.contains("sandhook") -> "sandhook"
-            lowerName.contains("yahfa") -> "yahfa"
-            lowerName.contains("vector") -> "vector"
-            lowerName.contains("xposed") -> "xposed"
-            frameworkName.isBlank() || frameworkName == UNKNOWN -> UNKNOWN
+            "npatch" in lowerName -> "npatch"
+            "lsposed" in lowerName -> "lsposed"
+            "lspatch" in lowerName -> "lspatch"
+            "edxposed" in lowerName -> "edxposed"
+            "sandhook" in lowerName -> "sandhook"
+            "yahfa" in lowerName -> "yahfa"
+            "vector" in lowerName -> "vector"
+            "xposed" in lowerName -> "xposed"
             else -> "xposed-compatible"
         }
     }
@@ -402,8 +443,8 @@ object RuntimeEnvironmentInfo {
         val value = sourceDir?.replace('\\', '/')?.lowercase(Locale.ROOT).orEmpty()
         return when {
             value.isBlank() -> UNKNOWN
-            value.contains("/cache/npatch/origin/") -> "npatch-origin"
-            value.contains("/cache/lspatch/origin/") -> "lspatch-origin"
+            "/cache/npatch/origin/" in value -> "npatch-origin"
+            "/cache/lspatch/origin/" in value -> "lspatch-origin"
             value.endsWith(".apk") -> "apk"
             else -> "other"
         }
@@ -415,21 +456,12 @@ object RuntimeEnvironmentInfo {
             ?.lowercase(Locale.ROOT)
             .orEmpty()
         return when {
-            hostSourceKind == "npatch-origin" || source.contains("/npatch/") || source.contains("-npatched.apk") -> "integrated"
-            hostSourceKind == "lspatch-origin" || source.contains("/lspatch/") || source.contains("-lspatched.apk") -> "integrated"
-            source.contains("/cache/") -> UNKNOWN
+            hostSourceKind == "npatch-origin" || "/npatch/" in source || "-npatched.apk" in source -> "integrated"
+            hostSourceKind == "lspatch-origin" || "/lspatch/" in source || "-lspatched.apk" in source -> "integrated"
+            "/cache/" in source -> UNKNOWN
             else -> "none"
         }
     }
-
-    private val OBSERVED_STRING_SET_KEYS = setOf(
-        ModuleSettings.KEY_KNOWN_BOTTOM_BAR_ITEMS,
-        ModuleSettings.KEY_KNOWN_HOME_RECOMMEND_TABS,
-        ModuleSettings.KEY_KNOWN_HOME_COMPONENTS,
-        ModuleSettings.KEY_KNOWN_MINE_COMPONENTS,
-        ModuleSettings.KEY_KNOWN_VIDEO_DETAIL_RELATE_TYPES,
-        ModuleSettings.KEY_KNOWN_COMPONENT_POOLS,
-    )
 
     private data class VersionInfo(
         val packageName: String,
