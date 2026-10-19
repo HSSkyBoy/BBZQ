@@ -187,7 +187,7 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (Modifier.isStatic(method.modifiers)) continue
                 val methodName = method.name
                 val isRootViewGetter = View::class.java.isAssignableFrom(method.returnType) &&
-                    (methodName == "onCreateContentView" || methodName == "getContentView" || methodName == "getView" || methodName == "getRoot")
+                    methodName in ROOT_VIEW_GETTERS
 
                 if (isRootViewGetter) {
                     env.hookAfter(method) { param ->
@@ -305,5 +305,9 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         log("VideoEndRecommend: installDisableRelatedTransformerHook hooked $count methods")
         return count
+    }
+
+    private companion object {
+        private val ROOT_VIEW_GETTERS = setOf("onCreateContentView", "createContentView", "getContentView", "getView", "getRoot")
     }
 }
