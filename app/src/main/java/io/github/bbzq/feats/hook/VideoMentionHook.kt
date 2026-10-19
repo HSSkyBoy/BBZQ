@@ -179,13 +179,18 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun installSeedVideoMentionedBlock(): Int {
-        val seedClass = classLoader.findClassOrNull("com.bilibili.ship.theseus.united.page.intro.module.videomentioned.seed.s")
-            ?: return 0
+        // The seed card and its header are obfuscated UIComponents; match them by their component methods.
+        val seedMethods = ('a'..'z').mapNotNull { classLoader.findClassOrNull("$SEED_PACKAGE.$it") }
+            .map { type ->
+                type.declaredMethods.filter {
+                    !Modifier.isStatic(it.modifiers) && (it.name == "bindToView" || it.name == "createViewEntry")
+                }
+            }
+            .filter { methods -> methods.any { it.name == "bindToView" } && methods.any { it.name == "createViewEntry" } }
+            .flatten()
         var count = 0
 
-        seedClass.declaredMethods.filter {
-            !Modifier.isStatic(it.modifiers) && (it.name == "bindToView" || it.name == "createViewEntry")
-        }.forEach { method ->
+        seedMethods.forEach { method ->
             env.hookAfter(method) { param ->
                 runCatching {
                     if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@runCatching
@@ -206,9 +211,16 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             ?: return 0
         var count = 0
 
-        dialogClass.declaredMethods.filter {
+        // showDialog() is obfuscated in newer builds; its coroutine lambdas keep the original name.
+        val showMethods = dialogClass.declaredMethods.filter {
             it.name == "showDialog" && !Modifier.isStatic(it.modifiers)
-        }.forEach { method ->
+        }.ifEmpty {
+            if (classLoader.findClassOrNull("${dialogClass.name}\$showDialog\$1") == null) return@ifEmpty emptyList()
+            dialogClass.declaredMethods.filter {
+                !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == Void.TYPE
+            }.let { if (it.size == 1) it else emptyList() }
+        }
+        showMethods.forEach { method ->
             env.hookBefore(method) { param ->
                 if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@hookBefore
                 logBlocked("VideoMentionedDialogService.showDialog")
@@ -264,5 +276,9 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (count <= 20 || count % 20 == 0) {
             log("VideoMentionHook blocked  count=")
         }
+    }
+
+    private companion object {
+        private const val SEED_PACKAGE = "com.bilibili.ship.theseus.united.page.intro.module.videomentioned.seed"
     }
 }
