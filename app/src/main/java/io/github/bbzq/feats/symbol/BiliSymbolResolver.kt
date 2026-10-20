@@ -329,7 +329,7 @@ object BiliSymbolResolver {
             scanStoryFullscreen(classLoader)
         }
         val storyDanmaku = scanHookPoint(HP_STORY_DANMAKU, hookPoints, scanErrors, log) {
-            scanStoryDanmaku(classLoader)
+            scanStoryDanmaku(classLoader, ::bridge)
         }
         val storyComponentAlpha = scanHookPoint(HP_STORY_COMPONENT_ALPHA, hookPoints, scanErrors, log) {
             scanStoryComponentAlpha(classLoader)
@@ -1932,6 +1932,7 @@ object BiliSymbolResolver {
 
     private fun scanStoryDanmaku(
         classLoader: ClassLoader,
+        bridge: () -> DexKitBridge? = { null },
     ): SymbolScanResult<StoryDanmakuSymbols> {
         val storyDetail = classLoader.loadClassOrNull(STORY_DETAIL)
             ?: return SymbolScanResult.Missing("story detail class not found")
@@ -1943,95 +1944,141 @@ object BiliSymbolResolver {
             .mapNotNull { classLoader.loadClassOrNull(it) }
             .firstOrNull { it.findStoryIntroCommentShow() != null }
 
-        var matchedSignature: Array<Class<*>>? = null
-        var matchedVerticalContainer: Class<*>? = null
-        var matchedLandscapeContainer: Class<*>? = null
+        fun isStoryCommentShowMethod(method: Method): Boolean {
+            val params = method.parameterTypes
+            return method.returnType == Void.TYPE &&
+                params.size in 6..10 &&
+                params[0] == storyDetail &&
+                params.getOrNull(2) == Long::class.javaPrimitiveType &&
+                params.getOrNull(3) == Long::class.javaPrimitiveType &&
+                params.getOrNull(4) == String::class.java
+        }
 
-        for (name in STORY_COMMENT_OUTER_CANDIDATES) {
-            val prefix = "com.bilibili.video.story.action.$name"
-            val outerClass = classLoader.loadClassOrNull(prefix)
-            val interfaceCandidates = buildList {
-                for (suffix in listOf("b", "c", "d", "a", "e", "f")) {
-                    classLoader.loadClassOrNull("$prefix\$$suffix")?.let(::add)
+        fun isStoryCommentHideMethod(method: Method, showMethodName: String? = null): Boolean {
+            return (showMethodName == null || method.name != showMethodName) &&
+                method.parameterCount == 0 &&
+                (method.returnType == Void.TYPE || method.returnType == Boolean::class.javaPrimitiveType)
+        }
+
+        val showMethods = ArrayList<Method>()
+        val hideMethods = ArrayList<Method>()
+
+        // 1. DexKit-based resolution (fast & version-independent)
+        val currentBridge = bridge()
+        if (currentBridge != null) {
+            runCatching {
+                val candidateMethods = currentBridge.findMethod(
+                    FindMethod.create()
+                        .searchPackages("com.bilibili.video.story")
+                        .matcher(MethodMatcher.create().returnType("void"))
+                ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .filter { isStoryCommentShowMethod(it) }
+
+                val ifaceMethod = candidateMethods.firstOrNull { it.declaringClass.isInterface }
+                val ifaceHideName = ifaceMethod?.declaringClass?.allMethods()
+                    ?.firstOrNull { isStoryCommentHideMethod(it, ifaceMethod.name) }?.name
+
+                val targetClasses = candidateMethods
+                    .filter { !it.declaringClass.isInterface && !Modifier.isAbstract(it.declaringClass.modifiers) }
+                    .map { it.declaringClass }
+                    .toMutableSet()
+
+                if (ifaceMethod != null) {
+                    val ifaceName = ifaceMethod.declaringClass.name
+                    currentBridge.findClass(
+                        FindClass.create().matcher(ClassMatcher.create().addInterface(ifaceName))
+                    ).forEach { classData ->
+                        classLoader.loadClassOrNull(classData.name)?.let { cls ->
+                            if (!cls.isInterface && !Modifier.isAbstract(cls.modifiers)) {
+                                targetClasses.add(cls)
+                            }
+                        }
+                    }
                 }
-                outerClass?.declaredClasses?.filterTo(this) { it.isInterface }
-            }.distinct()
 
-            var containerInterface: Class<*>? = null
-            var sig: Array<Class<*>>? = null
-            for (iface in interfaceCandidates) {
-                val candidateSig = iface.allMethods().firstOrNull { method ->
-                    method.name == "a" &&
-                        method.returnType == Void.TYPE &&
-                        method.parameterCount == 8 &&
-                        method.parameterTypes[0] == storyDetail &&
-                        method.parameterTypes[2] == Long::class.javaPrimitiveType &&
-                        method.parameterTypes[3] == Long::class.javaPrimitiveType &&
-                        method.parameterTypes[4] == String::class.java
-                }?.parameterTypes
-                if (candidateSig != null) {
-                    containerInterface = iface
-                    sig = candidateSig
-                    break
+                for (cls in targetClasses) {
+                    val showM = cls.allMethods().firstOrNull { isStoryCommentShowMethod(it) } ?: continue
+                    val hideM = (ifaceHideName?.let { cls.findMethod(it, Void.TYPE) ?: cls.findMethod(it, Boolean::class.javaPrimitiveType!!) })
+                        ?: cls.allMethods().firstOrNull { isStoryCommentHideMethod(it, showM.name) }
+                    if (hideM != null) {
+                        showMethods.add(showM.apply { isAccessible = true })
+                        hideMethods.add(hideM.apply { isAccessible = true })
+                    }
                 }
             }
-            if (sig == null || containerInterface == null) continue
+        }
 
-            matchedSignature = sig
-            val implCandidates = buildList {
-                listOf("VerticalContainerV2", "VerticalContainer", "LandscapeContainer", "f", "g", "d", "e").forEach { suffix ->
-                    classLoader.loadClassOrNull("$prefix\$$suffix")?.let(::add)
+        // 2. Pure reflection fallback if DexKit unavailable or found nothing
+        if (showMethods.isEmpty() || hideMethods.isEmpty()) {
+            showMethods.clear()
+            hideMethods.clear()
+
+            val packagePrefixes = listOf(
+                "com.bilibili.video.story.action",
+                "com.bilibili.video.story.action.widget.comment",
+                "com.bilibili.video.story.comment",
+            )
+            val outerNames = listOf("StoryCommentHelper", "C", "B", "A") +
+                ('a'..'z').map { it.toString() } +
+                ('D'..'Z').map { it.toString() }
+
+            searchLoop@ for (pkg in packagePrefixes) {
+                for (name in outerNames) {
+                    val prefix = "$pkg.$name"
+                    val outerClass = classLoader.loadClassOrNull(prefix) ?: continue
+
+                    val interfaceCandidates = buildList {
+                        for (suffix in listOf("b", "c", "d", "a", "e", "f", "h", "g", "i")) {
+                            classLoader.loadClassOrNull("$prefix\$$suffix")?.let(::add)
+                        }
+                        outerClass.declaredClasses.filterTo(this) { it.isInterface }
+                    }.distinct()
+
+                    var containerInterface: Class<*>? = null
+                    var ifaceShow: Method? = null
+                    for (iface in interfaceCandidates) {
+                        val showCandidate = iface.allMethods().firstOrNull { isStoryCommentShowMethod(it) }
+                        if (showCandidate != null) {
+                            containerInterface = iface
+                            ifaceShow = showCandidate
+                            break
+                        }
+                    }
+
+                    if (containerInterface == null || ifaceShow == null) continue
+
+                    val ifaceHideName = containerInterface.allMethods()
+                        .firstOrNull { isStoryCommentHideMethod(it, ifaceShow.name) }?.name
+
+                    val concreteImplementors = buildList {
+                        listOf("VerticalContainerV2", "VerticalContainer", "LandscapeContainer", "f", "g", "d", "e", "h", "i", "c", "b").forEach { suffix ->
+                            classLoader.loadClassOrNull("$prefix\$$suffix")?.let(::add)
+                        }
+                        outerClass.declaredClasses.forEach(::add)
+                    }.distinct().filter { cls ->
+                        !cls.isInterface && !Modifier.isAbstract(cls.modifiers) && (
+                            containerInterface.isAssignableFrom(cls) ||
+                                cls.allMethods().any { isStoryCommentShowMethod(it) }
+                        )
+                    }
+
+                    for (cls in concreteImplementors) {
+                        val showM = cls.allMethods().firstOrNull { isStoryCommentShowMethod(it) } ?: continue
+                        val hideM = (ifaceHideName?.let { cls.findMethod(it, Void.TYPE) ?: cls.findMethod(it, Boolean::class.javaPrimitiveType!!) })
+                            ?: cls.allMethods().firstOrNull { isStoryCommentHideMethod(it, showM.name) }
+                        if (hideM != null) {
+                            showMethods.add(showM.apply { isAccessible = true })
+                            hideMethods.add(hideM.apply { isAccessible = true })
+                        }
+                    }
+
+                    if (showMethods.isNotEmpty() && hideMethods.isNotEmpty()) {
+                        break@searchLoop
+                    }
                 }
-                outerClass?.declaredClasses?.filterTo(this) {
-                    !it.isInterface && containerInterface.isAssignableFrom(it)
-                }
-            }.distinct()
-
-            matchedVerticalContainer = implCandidates.firstOrNull { cls ->
-                cls.name.contains("VerticalContainer") ||
-                    cls.name.endsWith("\$f") ||
-                    cls.name.endsWith("\$g") ||
-                    cls.allFields().any { it.type.name.contains("StoryCommentConstraintLayout") }
-            } ?: classLoader.loadClassOrNull("$prefix\$VerticalContainerV2")
-                ?: classLoader.loadClassOrNull("$prefix\$f")
-                ?: classLoader.loadClassOrNull("$prefix\$g")
-
-            matchedLandscapeContainer = implCandidates.firstOrNull { cls ->
-                cls != matchedVerticalContainer && (
-                    cls.name.contains("LandscapeContainer") ||
-                        cls.name.endsWith("\$d") ||
-                        cls.name.endsWith("\$e")
-                )
-            } ?: classLoader.loadClassOrNull("$prefix\$LandscapeContainer")
-                ?: classLoader.loadClassOrNull("$prefix\$d")
-                ?: classLoader.loadClassOrNull("$prefix\$e")
-
-            break
+            }
         }
 
-        val showSignature = matchedSignature ?: return SymbolScanResult.Missing("story comment show signature not found")
-        val verticalContainer = matchedVerticalContainer
-            ?: STORY_COMMENT_VERTICAL_CONTAINER_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
-            ?: return SymbolScanResult.Missing("story vertical comment container class not found")
-        val landscapeContainer = matchedLandscapeContainer
-            ?: STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES.firstNotNullOfOrNull(classLoader::loadClassOrNull)
-
-        val showMethods = buildList {
-            verticalContainer.findMethod("a", Void.TYPE, *showSignature)
-                ?.apply { isAccessible = true }
-                ?.let(::add)
-            landscapeContainer?.findMethod("a", Void.TYPE, *showSignature)
-                ?.apply { isAccessible = true }
-                ?.let(::add)
-        }
-        val hideMethods = buildList {
-            verticalContainer.findMethod("c", Void.TYPE)
-                ?.apply { isAccessible = true }
-                ?.let(::add)
-            landscapeContainer?.findMethod("c", Void.TYPE)
-                ?.apply { isAccessible = true }
-                ?.let(::add)
-        }
         val introCommentShow = introCommentService?.findStoryIntroCommentShow()
             ?.apply { isAccessible = true }
         // dismissSheet() returns Boolean since 9.15; older builds return Unit.
@@ -2042,6 +2089,15 @@ object BiliSymbolResolver {
                     (method.returnType == Void.TYPE || method.returnType == Boolean::class.javaPrimitiveType)
             }
             ?.apply { isAccessible = true }
+
+        // Fallback to intro comment show/dismiss if normal show/hide are still empty
+        if (showMethods.isEmpty() && introCommentShow != null) {
+            showMethods.add(introCommentShow)
+        }
+        if (hideMethods.isEmpty() && introCommentDismiss != null) {
+            hideMethods.add(introCommentDismiss)
+        }
+
         val setDanmakuOpacity = interactLayerService.findMethod(
             "setDanmakuOpacity",
             Void.TYPE,
@@ -2055,28 +2111,31 @@ object BiliSymbolResolver {
         }.toList()
         val updateCanvas = updateCanvasCandidates.singleOrNull()?.apply { isAccessible = true }
 
-        if (showMethods.isEmpty() || hideMethods.isEmpty() || setDanmakuOpacity == null || updateCanvas == null) {
+        val distinctShow = showMethods.distinctBy(Method::toGenericString)
+        val distinctHide = hideMethods.distinctBy(Method::toGenericString)
+
+        if (distinctShow.isEmpty() || distinctHide.isEmpty() || setDanmakuOpacity == null || updateCanvas == null) {
             return SymbolScanResult.Missing(
                 "story danmaku hook points not found: " +
-                    "show=${showMethods.size},hide=${hideMethods.size}," +
+                    "show=${distinctShow.size},hide=${distinctHide.size}," +
                     "setOpacity=${setDanmakuOpacity != null},updateCanvas=${updateCanvas != null}",
             )
         }
 
         val symbols = StoryDanmakuSymbols(
-            commentShowMethods = showMethods.map(MethodDescriptor::of),
-            commentHideMethods = hideMethods.map(MethodDescriptor::of),
+            commentShowMethods = distinctShow.map(MethodDescriptor::of),
+            commentHideMethods = distinctHide.map(MethodDescriptor::of),
             introCommentShowMethod = introCommentShow?.let(MethodDescriptor::of),
             introCommentDismissMethod = introCommentDismiss?.let(MethodDescriptor::of),
             setDanmakuOpacity = MethodDescriptor.of(setDanmakuOpacity),
             updateCanvas = MethodDescriptor.of(updateCanvas),
-            evidence = "show=${showMethods.size},hide=${hideMethods.size}," +
+            evidence = "show=${distinctShow.size},hide=${distinctHide.size}," +
                 "introShow=${introCommentShow != null},introDismiss=${introCommentDismiss != null}," +
                 "setOpacity=true,updateCanvas=true",
         )
         val hookPoints = listOf(
-            childHookPoint(HP_STORY_DANMAKU_COMMENT_SHOW, showMethods.isNotEmpty(), "comment show method not found", "methods=${showMethods.size}"),
-            childHookPoint(HP_STORY_DANMAKU_COMMENT_HIDE, hideMethods.isNotEmpty(), "comment hide method not found", "methods=${hideMethods.size}"),
+            childHookPoint(HP_STORY_DANMAKU_COMMENT_SHOW, distinctShow.isNotEmpty(), "comment show method not found", "methods=${distinctShow.size}"),
+            childHookPoint(HP_STORY_DANMAKU_COMMENT_HIDE, distinctHide.isNotEmpty(), "comment hide method not found", "methods=${distinctHide.size}"),
             optionalChildHookPoint(
                 HP_STORY_DANMAKU_INTRO_COMMENT_SHOW,
                 introCommentShow != null,
