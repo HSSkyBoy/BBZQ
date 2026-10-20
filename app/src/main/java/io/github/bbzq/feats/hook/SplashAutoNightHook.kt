@@ -46,8 +46,10 @@ class SplashAutoNightHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun applyNightBackground(root: View) {
         val night = root.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        val target = root.findSplashContainer() ?: root
-        target.setBackgroundColor(if (night) Color.BLACK else Color.WHITE)
+        if (night) {
+            val target = root.findSplashContainer() ?: root
+            target.setBackgroundColor(Color.BLACK)
+        }
     }
 
     private fun View.findSplashContainer(): View? {
