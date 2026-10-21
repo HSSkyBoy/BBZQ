@@ -73,7 +73,11 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun isCalledFromViewPage(): Boolean =
         Thread.currentThread().stackTrace.any { it.className == VIEW_PAGE_FRAGMENT_CLASS }
 
-    /** mine/v2 and v3 decode AccountMineV2 with kotlinx, so filter the menu groups at their getter. */
+    /**
+     * mine/v2 and v3 decode AccountMineV2 with kotlinx, so filter the menu groups at their getter.
+     * The host mutates the returned list in place (e.g. appends the local "设置" entry to the last group),
+     * so items are removed from the original list instead of returning a filtered copy.
+     */
     private fun hookMenuGroupItems() {
         val getItemList = classLoader.findClassOrNull(MENU_GROUP_CLASS)
             ?.declaredMethods
@@ -98,7 +102,15 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 title !in hidden
             }
             if (titles.isNotEmpty() && seenMenuTitles.addAll(titles)) saveKnownComponents(titles)
-            if (kept.size != items.size) param.result = kept
+            if (kept.size == items.size) return@hookAfter
+            @Suppress("UNCHECKED_CAST")
+            val removedInPlace = runCatching {
+                (items as MutableList<Any?>).apply {
+                    clear()
+                    addAll(kept)
+                }
+            }.isSuccess
+            if (!removedInPlace) param.result = kept
         }
     }
 
