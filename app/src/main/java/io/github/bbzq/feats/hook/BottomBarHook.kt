@@ -17,6 +17,7 @@ import java.util.WeakHashMap
 class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var cachedBottomEntriesLoaded = false
     private var cacheReaderFailureLogged = false
+    private var unmatchedHiddenLogged = false
     private val attachedContainerListeners =
         Collections.synchronizedMap(WeakHashMap<ViewGroup, View.OnLayoutChangeListener>())
 
@@ -127,6 +128,14 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
+        if (enabled && hiddenKeys.isNotEmpty() && !unmatchedHiddenLogged) {
+            val entries = tabs.mapNotNull { it?.extractBottomEntry() }
+            if (entries.isNotEmpty() && entries.none { isEntryHidden(it, hiddenKeys, knownItems) }) {
+                unmatchedHiddenLogged = true
+                log("Bottom bar hidden items matched no tab: hidden=$hiddenKeys tabs=${entries.joinToString { "${it.id}/${it.name}" }}")
+            }
+        }
+
         applyTabVisibilities()
         attachContainerLayoutListener(container, ::applyTabVisibilities)
     }
@@ -202,7 +211,8 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 }
             }
             if (entries.size >= MIN_BOTTOM_BAR_ITEMS) {
-                saveKnownEntries(entries, preserveMissing = false)
+                // Tab ids are server-assigned; keep hidden ones that are no longer served so they still match by name.
+                saveKnownEntries(entries, preserveMissing = shouldPreserveMissing(entries.map(BottomBarEntry::id)))
                 cachedBottomEntriesLoaded = true
             }
         }.onFailure {
@@ -222,7 +232,9 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
             .filter { it.isNotEmpty() }
             .distinct()
 
-        val guessedUri = strings.firstOrNull(::looksLikeUri)
+        // Tab items also carry icon URLs, so prefer an app scheme over http(s).
+        val guessedUri = strings.firstOrNull { looksLikeUri(it) && !looksLikeHttpUrl(it) }
+            ?: strings.firstOrNull(::looksLikeUri)
         val guessedName = strings.firstOrNull(::looksLikeDisplayName)
         val guessedId = strings.firstOrNull { it != guessedUri && it != guessedName && looksLikeAsciiId(it) }
             ?: strings.firstOrNull { it != guessedUri && it != guessedName && looksLikeBottomBarId(it) }
@@ -283,6 +295,9 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
             value.startsWith("activity://", ignoreCase = true) ||
             value.startsWith("http://", ignoreCase = true) ||
             value.startsWith("https://", ignoreCase = true)
+
+    private fun looksLikeHttpUrl(value: String): Boolean =
+        value.startsWith("http://", ignoreCase = true) || value.startsWith("https://", ignoreCase = true)
 
     private fun looksLikeDisplayName(value: String): Boolean {
         if (looksLikeUri(value)) return false
