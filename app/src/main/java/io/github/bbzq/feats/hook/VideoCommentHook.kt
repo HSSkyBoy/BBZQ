@@ -180,11 +180,18 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (KotlinMossBridge.isRaw()) return@runCatching
                 if (!ModuleSettings.isCommentNoSearchEnabled(prefs)) return@runCatching
                 val urls = param.result as? Map<*, *> ?: return@runCatching
-                val kept = urls.filterValues { value ->
+                val searchKeys = urls.filter { (_, value) ->
                     val schema = value?.let { noArgMethod(it.javaClass, "getAppUrlSchema")?.invoke(it) as? String }
-                    schema == null || !isSearchUrl(schema)
-                }
-                if (kept.size != urls.size) param.result = kept
+                    schema != null && isSearchUrl(schema)
+                }.keys
+                if (searchKeys.isEmpty()) return@runCatching
+                // internalGetUrls() is typed as protobuf MapFieldLite, so return a filtered copy of the same type.
+                val mapType = urls.javaClass
+                @Suppress("UNCHECKED_CAST")
+                val kept = mapType.getMethod("mutableCopy").invoke(urls) as MutableMap<Any?, Any?>
+                searchKeys.forEach(kept::remove)
+                mapType.getMethod("makeImmutable").invoke(kept)
+                param.result = kept
             }.onFailure {
                 log("VideoComment search url hook failed", it)
             }
