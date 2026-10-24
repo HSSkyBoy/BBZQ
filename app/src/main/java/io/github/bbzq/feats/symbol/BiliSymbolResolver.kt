@@ -3124,7 +3124,7 @@ object BiliSymbolResolver {
                     method.returnType == Void.TYPE &&
                         method.parameterCount >= 1 &&
                         !method.name.contains("lambda", ignoreCase = true) &&
-                        method.name in FOLLOW_WIDGET_METHOD_NAMES
+                        (method.name in FOLLOW_WIDGET_METHOD_NAMES || method.isFollowWidgetBindOverride(type))
                 }
             }
             .distinctBy(Method::toGenericString)
@@ -3198,6 +3198,13 @@ object BiliSymbolResolver {
         )
         return SymbolScanResult.Found(symbols, "VideoComment", symbols.evidence, hookPoints)
     }
+
+    // 关注按钮的绑定入口是它直接实现的单方法接口(9.15 为 r,9.17 为 g0),名称随混淆漂移
+    private fun Method.isFollowWidgetBindOverride(owner: Class<*>): Boolean =
+        parameterCount == 1 &&
+            owner.interfaces.any { iface ->
+                iface.declaredMethods.any { it.name == name && it.parameterTypes.contentEquals(parameterTypes) }
+            }
 
     private fun scanVideoCommentEmptyPageHooks(classLoader: ClassLoader): List<VideoCommentEmptyPageSymbols> {
         val subjectControl = COMMENT_SUBJECT_CONTROL_CLASSES.mapNotNull { classLoader.loadClassOrNull(it) }
