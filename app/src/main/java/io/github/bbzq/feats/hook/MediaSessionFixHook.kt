@@ -13,6 +13,8 @@ import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import java.lang.reflect.Modifier
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
@@ -315,14 +317,11 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             ?: classLoader.findClassOrNull("androidx.media.MediaMetadataCompat\$Builder")
 
         // 1) 拦截封面具体回调类中的 onFetched(String, Bitmap, Bitmap)
-        val listenerImplClasses = listOfNotNull(
-            classLoader.findClassOrNull("Su0.a\$a"),
-            classLoader.findClassOrNull("tv.danmaku.bili.ui.player.notification.a\$b"),
-            classLoader.findClassOrNull("lI.a"),
-            classLoader.findClassOrNull("lI.c"),
-        )
-
-        for (clazz in listenerImplClasses) {
+        // FetchListener 的子类都是混淆名且随版本变化,除固定的 a$b 外,在 fetch() 传入时按实际类型补挂
+        val hookedListenerClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+        fun hookListenerClass(clazz: Class<*>): Int {
+            if (!hookedListenerClasses.add(clazz)) return 0
+            var hooked = 0
             for (method in clazz.declaredMethods) {
                 if (method.name == "onFetched") {
                     env.hookAfter(method) { param ->
@@ -336,14 +335,24 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             updateCoverToSessions(currentActiveMediaKey, bitmap, builderClass)
                         }
                     }
-                    count++
+                    hooked++
                 }
             }
+            return hooked
         }
+        classLoader.findClassOrNull("tv.danmaku.bili.ui.player.notification.a\$b")?.let { count += hookListenerClass(it) }
 
         // 2) 拦截 MusicCoverImageCache 缓存写入入口（putLocalBigImage）
         val cacheClass = classLoader.findClassOrNull("tv.danmaku.bili.ui.player.notification.MusicCoverImageCache")
         if (cacheClass != null) {
+            cacheClass.declaredMethods.filter { it.name == "fetch" }.forEach { method ->
+                env.hookBefore(method) { param ->
+                    val listener = param.args.lastOrNull() ?: return@hookBefore
+                    runCatching { hookListenerClass(listener.javaClass) }
+                        .onFailure { log("MediaSessionFix: cover listener hook failed for ${listener.javaClass.name}", it) }
+                }
+                count++
+            }
             for (method in cacheClass.declaredMethods) {
                 if (method.name == "putLocalBigImage") {
                     env.hookAfter(method) { param ->
