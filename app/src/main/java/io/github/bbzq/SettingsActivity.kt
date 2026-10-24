@@ -532,16 +532,22 @@ class SettingsActivity : Activity() {
         PAGE_UPDATE -> getString(R.string.about_update_title)
         PAGE_CONFIG_BACKUP -> getString(R.string.about_config_backup_title)
         PAGE_SEA_BANGUMI_UNLOCK -> getString(R.string.sea_bangumi_unlock_title)
-        else -> getString(R.string.settings_title)
+        PAGE_ABOUT -> getString(R.string.about_page_title)
+        else -> SettingsCategory.forPage(page)?.let { getString(it.titleRes) }
+            ?: getString(R.string.settings_title)
     }
 
     private fun showSettingsSearchDialog() {
         SettingsSearchDialog.show(
             activity = this,
-            targets = currentFactory?.collectSearchTargets().orEmpty(),
+            targets = globalSearchFactory().collectSearchTargets(),
             onPick = ::revealSearchTarget,
         )
     }
+
+    // 分类页只收录自己的设置项，搜索需要覆盖全部页面，所以统一由首页工厂建立索引。
+    private fun globalSearchFactory(): SettingsContentFactory =
+        currentFactory?.takeIf { pageStack.lastOrNull() == PAGE_ROOT } ?: buildFactory(PAGE_ROOT)
 
     private fun revealSearchTarget(target: SettingsSearchTarget) {
         if (target.page != pageStack.lastOrNull()) {
@@ -549,7 +555,7 @@ class SettingsActivity : Activity() {
             openSearchTargetPage(target.page)
             return
         }
-        val view = target.view ?: currentFactory?.findSearchTarget(target.item.key)?.view ?: return
+        val view = currentFactory?.findSearchTarget(target.item.key)?.view ?: target.view ?: return
         scrollAndHighlightSearchTarget(view)
     }
 
@@ -732,6 +738,19 @@ class SettingsActivity : Activity() {
         const val PAGE_UPDATE = "update"
         const val PAGE_CONFIG_BACKUP = "config_backup"
         const val PAGE_SEA_BANGUMI_UNLOCK = "sea_bangumi_unlock"
+        const val PAGE_ABOUT = "about"
+        const val PAGE_CATEGORY_APPEARANCE = "category_appearance"
+        const val PAGE_CATEGORY_SHARE = "category_share"
+        const val PAGE_CATEGORY_STARTUP = "category_startup"
+        const val PAGE_CATEGORY_NETWORK = "category_network"
+        const val PAGE_CATEGORY_HOME = "category_home"
+        const val PAGE_CATEGORY_SEARCH = "category_search"
+        const val PAGE_CATEGORY_PLAYBACK = "category_playback"
+        const val PAGE_CATEGORY_STORY = "category_story"
+        const val PAGE_CATEGORY_LIVE = "category_live"
+        const val PAGE_CATEGORY_COMMENT = "category_comment"
+        const val PAGE_CATEGORY_DYNAMIC = "category_dynamic"
+        const val PAGE_CATEGORY_MINE = "category_mine"
         private const val REQUEST_EXPORT_CONFIG = 0x5001
         private const val REQUEST_IMPORT_CONFIG = 0x5002
         private const val REQUEST_IMPORT_CUSTOM_SKIN = 0x5003

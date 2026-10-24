@@ -583,4 +583,46 @@
     <string name="framework_gate_retry">重试</string>
     <string name="framework_gate_exit">离开</string>
     <string name="component_pool_item_format">%1$s（%2$d 个模块）</string>
+
+    <!-- 設定首頁分類 -->
+    <string name="home_section_general">通用</string>
+    <string name="home_section_pages">按页面</string>
+    <string name="home_section_advanced">进阶功能</string>
+    <string name="home_section_more">模块</string>
+    <string name="category_appearance_title">外观</string>
+    <string name="category_appearance_summary">自定义底栏 · 自制主题 · 皮肤</string>
+    <string name="category_share_title">分享与复制</string>
+    <string name="category_share_summary">净化分享 · 普通链接 · 自由复制</string>
+    <string name="category_startup_title">启动与更新</string>
+    <string name="category_startup_summary">开屏页 · 青少年弹窗 · 检查更新</string>
+    <string name="category_network_title">下载与网络</string>
+    <string name="category_network_summary">下载线程 · 视频 CDN · 组件库</string>
+    <string name="category_home_title">首页</string>
+    <string name="category_home_summary">推荐卡片 · Tab · 首页组件</string>
+    <string name="category_search_title">搜索</string>
+    <string name="category_search_summary">热搜榜 · 联想词 · 搜索结果</string>
+    <string name="category_playback_title">视频播放</string>
+    <string name="category_playback_summary">播放器 · 倍速 · 互动组件 · 结束推荐</string>
+    <string name="category_story_title">竖屏视频</string>
+    <string name="category_story_summary">启动进入 · 沉浸全屏 · 弹幕显示</string>
+    <string name="category_live_title">直播</string>
+    <string name="category_live_summary">预约弹窗 · 效果弹窗 · 模糊遮罩 · 上下滑动</string>
+    <string name="category_comment_title">评论区</string>
+    <string name="category_comment_summary">关键词 · 用户等级 · 投票 · 关注按钮</string>
+    <string name="category_dynamic_title">动态</string>
+    <string name="category_dynamic_summary">首选视频标签 · 同城 / 校园标签</string>
+    <string name="category_mine_title">我的页</string>
+    <string name="category_mine_summary">大会员入口 · 组件隐藏 · 完整数字</string>
+    <string name="section_search">搜索</string>
+    <string name="section_live">直播间</string>
+    <string name="section_playback_promo">推广与弹窗</string>
+    <string name="section_playback_player">播放器</string>
+    <string name="section_playback_speed">倍速</string>
+    <string name="section_playback_recommend">推荐与结束页</string>
+    <string name="section_playback_interact">互动</string>
+    <string name="about_page_title">关于</string>
+    <string name="hidden_features_entry_summary">空降助手 · AccessKey · 画质与下载</string>
+    <string name="badge_restart">重启</string>
+    <string name="badge_unfinished">未完成</string>
+    <string name="badge_experimental">实验</string>
 </resources>

@@ -139,14 +139,105 @@ class SettingsContentFactory(
     private val searchTargets = mutableListOf<SettingsSearchTarget>()
     private var currentSearchSection: String = ""
     private var indexSearchTargets = true
+    private var indexPage: String = page
+    private var globalIndexed = false
 
-    fun collectSearchTargets(): List<SettingsSearchTarget> = searchTargets.toList()
+    private class SectionSpec(val label: String, val build: () -> List<View>)
+
+    fun collectSearchTargets(): List<SettingsSearchTarget> {
+        if (page == SettingsActivity.PAGE_ROOT) indexAllPages()
+        return searchTargets.toList()
+    }
 
     fun findSearchTarget(key: String): SettingsSearchTarget? =
         searchTargets.firstOrNull { it.item.key == key }
 
+    // 首页只展示分类入口，设置项的搜索索引通过离屏构建各分类页的内容得到。
+    private fun indexAllPages() {
+        if (globalIndexed) return
+        globalIndexed = true
+        indexSearchTargets = true
+        SettingsCategory.entries.forEach { category ->
+            indexPage = category.page
+            categorySections(category).forEach { spec ->
+                currentSearchSection = spec.label
+                spec.build()
+            }
+        }
+        if (hasHiddenFeatures()) {
+            indexPage = SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK
+            seaSections().forEach { spec ->
+                currentSearchSection = spec.label
+                spec.build()
+            }
+        }
+        indexPage = page
+        registerRemoteSearchTargets()
+    }
+
+    private fun LinearLayout.addSections(specs: List<SectionSpec>) {
+        specs.forEach { addSettingsSection(it.label, it.build) }
+    }
+
+    private fun categorySections(category: SettingsCategory): List<SectionSpec> = when (category) {
+        SettingsCategory.APPEARANCE -> listOf(
+            SectionSpec(context.getString(R.string.section_ui_customize)) { appearanceRows() },
+        )
+        SettingsCategory.SHARE -> listOf(
+            SectionSpec(context.getString(R.string.section_share_link)) { shareRows() },
+            SectionSpec(context.getString(R.string.section_copy_enhance)) { copyRows() },
+        )
+        SettingsCategory.STARTUP -> listOf(
+            SectionSpec(context.getString(R.string.section_startup_purify)) { startupRows() },
+        )
+        SettingsCategory.NETWORK -> listOf(
+            SectionSpec(context.getString(R.string.section_download_features)) { downloadRows() },
+            SectionSpec(context.getString(R.string.section_video_cdn)) { customCdnRows() },
+            SectionSpec(context.getString(R.string.section_component_pool)) { componentPoolRows() },
+        )
+        SettingsCategory.HOME -> listOf(
+            SectionSpec(context.getString(R.string.section_home_recommend_purify)) { homeRecommendRows() },
+        )
+        SettingsCategory.SEARCH -> listOf(
+            SectionSpec(context.getString(R.string.section_search)) { searchRows() },
+        )
+        SettingsCategory.PLAYBACK -> listOf(
+            SectionSpec(context.getString(R.string.section_playback_promo)) { playbackPromoRows() },
+            SectionSpec(context.getString(R.string.section_playback_player)) { playbackPlayerRows() },
+            SectionSpec(context.getString(R.string.section_playback_speed)) { playbackSpeedRows() },
+            SectionSpec(context.getString(R.string.section_playback_recommend)) { playbackRecommendRows() },
+            SectionSpec(context.getString(R.string.section_playback_interact)) { playbackInteractRows() },
+        )
+        SettingsCategory.STORY -> listOf(
+            SectionSpec(context.getString(R.string.section_story_purify)) { storyRows() },
+        )
+        SettingsCategory.LIVE -> listOf(
+            SectionSpec(context.getString(R.string.section_live)) { liveRows() },
+        )
+        SettingsCategory.COMMENT -> listOf(
+            SectionSpec(context.getString(R.string.section_comment_purify)) { commentRows() },
+        )
+        SettingsCategory.DYNAMIC -> listOf(
+            SectionSpec(context.getString(R.string.section_dynamic_page)) { dynamicRows() },
+        )
+        SettingsCategory.MINE -> listOf(
+            SectionSpec(context.getString(R.string.section_mine_customize)) { mineProfileRows() },
+        )
+    }
+
+    private fun seaSections(): List<SectionSpec> = listOf(
+        SectionSpec(context.getString(R.string.sea_unlock_section_overview)) { seaBangumiUnlockRows() },
+        SectionSpec(context.getString(R.string.sea_unlock_section_resolver)) { seaResolverRows() },
+        SectionSpec(context.getString(R.string.sea_unlock_section_cdn)) { seaCdnSectionRows() },
+        SectionSpec(context.getString(R.string.sea_unlock_section_scope)) { seaScopeRows() },
+        SectionSpec(context.getString(R.string.sea_unlock_section_privacy)) { seaPrivacyRows() },
+        SectionSpec(context.getString(R.string.sea_unlock_section_notes)) { seaNotesRows() },
+    )
+
     fun createScrollView(): ScrollView {
         searchTargets.clear()
+        globalIndexed = false
+        indexPage = page
         currentSearchSection = ""
         indexSearchTargets = page !in hiddenSearchPages
         val pageRoot = LinearLayout(context).apply {
@@ -192,49 +283,33 @@ class SettingsContentFactory(
                 }
             }
 
-            SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK -> {
-                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_overview)) {
-                    seaBangumiUnlockRows()
+            SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK -> pageRoot.addSections(seaSections())
+
+            SettingsActivity.PAGE_ABOUT -> {
+                pageRoot.addSettingsSection(context.getString(R.string.section_about)) { aboutRows() }
+            }
+
+            SettingsActivity.PAGE_ROOT -> {
+                // 首页的入口行只负责跳转，不进入搜索索引。
+                indexSearchTargets = false
+                pageRoot.addSettingsSection(context.getString(R.string.home_section_general)) {
+                    categoryEntryRows(general = true)
                 }
-                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_resolver)) {
-                    seaResolverRows()
+                pageRoot.addSettingsSection(context.getString(R.string.home_section_pages)) {
+                    categoryEntryRows(general = false)
                 }
-                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_cdn)) {
-                    seaCdnSectionRows()
+                if (hasHiddenFeatures()) {
+                    pageRoot.addSettingsSection(context.getString(R.string.home_section_advanced)) {
+                        advancedEntryRows()
+                    }
                 }
-                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_scope)) {
-                    seaScopeRows()
-                }
-                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_privacy)) {
-                    seaPrivacyRows()
-                }
-                pageRoot.addSettingsSection(context.getString(R.string.sea_unlock_section_notes)) {
-                    seaNotesRows()
-                }
+                pageRoot.addSettingsSection(context.getString(R.string.home_section_more)) { moduleEntryRows() }
+                indexSearchTargets = true
             }
 
             else -> {
-                pageRoot.addSettingsSection(context.getString(R.string.section_share_link)) { shareRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_copy_enhance)) { copyRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_startup_purify)) { startupRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_download_features)) { downloadRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_component_pool)) { componentPoolRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_video_cdn)) { customCdnRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_home_recommend_purify)) { homeRecommendRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_dynamic_page)) { dynamicRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_ui_customize)) { bottomBarRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_playback_purify)) { playbackRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_comment_purify)) { commentRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_mine_customize)) { mineProfileRows() }
-                pageRoot.addSettingsSection(context.getString(R.string.section_story_purify)) { storyRows() }
-                if (hasHiddenFeatures()) {
-                    indexSearchTargets = false
-                    pageRoot.addSettingsSection(context.getString(R.string.about_hidden_features_title)) {
-                        hiddenFeaturesEntryRows()
-                    }
-                    indexSearchTargets = true
-                }
-                pageRoot.addSettingsSection(context.getString(R.string.section_about)) { aboutRows() }
+                val category = SettingsCategory.forPage(page)
+                if (category != null) pageRoot.addSections(categorySections(category))
             }
         }
         registerRemoteSearchTargets()
@@ -292,14 +367,13 @@ class SettingsContentFactory(
 
     private fun startupRows(): List<View> {
         val rows = mutableListOf<View>()
-        if (hasHiddenFeatures()) {
-            rows += createSwitchRow(
-                context.getString(R.string.startup_skip_splash_title),
-                context.getString(R.string.startup_skip_splash_summary),
-                ModuleSettings.KEY_SKIP_SPLASH_AD_ENABLED,
-                true,
-            )
-        }
+        rows += createSwitchRow(
+            context.getString(R.string.startup_skip_splash_title),
+            context.getString(R.string.startup_skip_splash_summary),
+            ModuleSettings.KEY_SKIP_SPLASH_AD_ENABLED,
+            true,
+            badges = unfinishedBadges(),
+        )
         rows += createSwitchRow(
             context.getString(R.string.startup_splash_auto_night_title),
             context.getString(R.string.startup_splash_auto_night_summary),
@@ -446,7 +520,7 @@ class SettingsContentFactory(
         )
     }
 
-    private fun bottomBarRows(): List<View> {
+    private fun appearanceRows(): List<View> {
         val rows = mutableListOf<View>()
         rows += createSwitchRow(
             context.getString(R.string.bottom_bar_title),
@@ -494,38 +568,36 @@ class SettingsContentFactory(
             ModuleSettings.KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED,
             false,
         )
-        rows += createSwitchRow(
+        return rows
+    }
+
+    private fun searchRows(): List<View> = listOf(
+        createSwitchRow(
             context.getString(R.string.home_search_default_word_title),
             context.getString(R.string.home_search_default_word_summary),
             ModuleSettings.KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED,
             false,
-        )
-        rows += createSwitchRow(
+        ),
+        createSwitchRow(
             context.getString(R.string.search_hot_clean_title),
             context.getString(R.string.search_hot_clean_summary),
             ModuleSettings.KEY_SEARCH_HOT_CLEAN_ENABLED,
             false,
-        )
-        rows += createSwitchRow(
+        ),
+        createSwitchRow(
             context.getString(R.string.search_suggest_clean_title),
             context.getString(R.string.search_suggest_clean_summary),
             ModuleSettings.KEY_SEARCH_SUGGEST_CLEAN_ENABLED,
             false,
-        )
-        rows += createSwitchRow(
+        ),
+        createSwitchRow(
             context.getString(R.string.search_result_ad_block_title),
             context.getString(R.string.search_result_ad_block_summary),
             ModuleSettings.KEY_SEARCH_RESULT_AD_BLOCK_ENABLED,
             false,
-        )
-        rows += createClickableInfoRow(
-            context.getString(R.string.sea_bangumi_unlock_title),
-            seaUnlockEntrySummary(),
-        ) {
-            openPage(SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK)
-        }
-        return rows
-    }
+            badges = unfinishedBadges(),
+        ),
+    )
 
     private fun seaUnlockEntrySummary(): String {
         val servers = ResolverServers.configured(prefs)
@@ -868,8 +940,7 @@ class SettingsContentFactory(
             .show()
     }
 
-    private fun playbackRows(): List<View> {
-        if (!hasHiddenFeatures()) return emptyList()
+    private fun playbackPromoRows(): List<View> {
         val rows = mutableListOf<View>()
         if (ModuleSettings.isSkipVideoAdSettingsVisible(prefs)) {
             rows += createInfoRow(
@@ -882,25 +953,124 @@ class SettingsContentFactory(
             context.getString(R.string.playback_hide_banner_summary),
             ModuleSettings.KEY_BLOCK_VIDEO_DETAIL_BANNER_AD_ENABLED,
             false,
+            badges = unfinishedBadges(),
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_block_chronos_promotion_title),
+            context.getString(R.string.playback_block_chronos_promotion_summary),
+            ModuleSettings.KEY_BLOCK_CHRONOS_PROMOTION_ENABLED,
+            false,
+            badges = unfinishedBadges(),
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_block_activity_meta_sticker_title),
+            context.getString(R.string.playback_block_activity_meta_sticker_summary),
+            ModuleSettings.KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED,
+            false,
+            badges = unfinishedBadges(),
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.playback_block_pgc_activity_popup_title),
+            context.getString(R.string.playback_block_pgc_activity_popup_summary),
+            ModuleSettings.KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED,
+            false,
+            badges = unfinishedBadges() + restartBadges(),
         )
         rows += createSwitchRow(
             context.getString(R.string.playback_hide_video_mention_title),
             context.getString(R.string.playback_hide_video_mention_summary),
             ModuleSettings.KEY_PURIFY_VIDEO_MENTION_ENABLED,
             false,
+            badges = unfinishedBadges(),
         )
         rows += createSwitchRow(
-            context.getString(R.string.disable_background_play_title),
-            context.getString(R.string.disable_background_play_summary),
-            ModuleSettings.KEY_DISABLE_BACKGROUND_PLAY_ENABLED,
+            context.getString(R.string.playback_block_ai_declared_video_title),
+            context.getString(R.string.playback_block_ai_declared_video_summary),
+            ModuleSettings.KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED,
             false,
+            badges = unfinishedBadges() + restartBadges(),
         )
         rows += createSwitchRow(
+            context.getString(R.string.playback_skip_reward_title),
+            context.getString(R.string.playback_skip_reward_summary),
+            ModuleSettings.KEY_SKIP_REWARD_AD_ENABLED,
+            false,
+            badges = unfinishedBadges(),
+        )
+        rows += createSwitchRow(
+            context.getString(R.string.skip_mini_game_reward_ad_title),
+            context.getString(R.string.skip_mini_game_reward_ad_summary),
+            ModuleSettings.KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED,
+            false,
+            badges = unfinishedBadges(),
+        )
+        return rows
+    }
+
+    private fun playbackPlayerRows(): List<View> = listOf(
+        createSwitchRow(
+            context.getString(R.string.playback_transparent_status_bar_title),
+            context.getString(R.string.playback_transparent_status_bar_summary),
+            ModuleSettings.KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED,
+            false,
+        ),
+        createSwitchRow(
+            context.getString(R.string.playback_portrait_control_title),
+            context.getString(R.string.playback_portrait_control_summary),
+            ModuleSettings.KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED,
+            false,
+            badges = restartBadges(),
+        ),
+        createSwitchRow(
             context.getString(R.string.split_screen_fullscreen_title),
             context.getString(R.string.split_screen_fullscreen_summary),
             ModuleSettings.KEY_SPLIT_SCREEN_FULLSCREEN_ENABLED,
             false,
-        )
+            badges = restartBadges(),
+        ),
+        createSwitchRow(
+            context.getString(R.string.disable_background_play_title),
+            context.getString(R.string.disable_background_play_summary),
+            ModuleSettings.KEY_DISABLE_BACKGROUND_PLAY_ENABLED,
+            false,
+        ),
+        createSwitchRow(
+            context.getString(R.string.playback_fix_media_session_card_title),
+            context.getString(R.string.playback_fix_media_session_card_summary),
+            ModuleSettings.KEY_FIX_MEDIA_SESSION_CARD,
+            false,
+        ),
+    )
+
+    private fun playbackSpeedRows(): List<View> = listOf(
+        createSwitchRow(
+            context.getString(R.string.playback_triple_speed_title),
+            context.getString(R.string.playback_triple_speed_summary),
+            ModuleSettings.KEY_PLAYER_TRIPLE_SPEED_ENABLED,
+            false,
+            badges = restartBadges(),
+        ),
+        createSwitchRow(
+            context.getString(R.string.playback_long_press_speed_lock_title),
+            context.getString(R.string.playback_long_press_speed_lock_summary),
+            ModuleSettings.KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED,
+            false,
+            badges = restartBadges(),
+        ),
+        createSwitchRow(
+            context.getString(R.string.playback_custom_long_press_speed_title),
+            context.getString(R.string.playback_custom_long_press_speed_summary),
+            ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED,
+            false,
+            badges = restartBadges(),
+        ) {
+            customLongPressSpeedSwitch = it
+        },
+        createCustomLongPressSpeedRow(),
+    )
+
+    private fun playbackRecommendRows(): List<View> {
+        val rows = mutableListOf<View>()
         rows += createSwitchRow(
             context.getString(R.string.video_detail_relate_custom_filter_title),
             context.getString(R.string.video_detail_relate_custom_filter_summary),
@@ -909,30 +1079,6 @@ class SettingsContentFactory(
         ) {
             videoDetailRelateFilterSwitch = it
         }
-        rows += createSwitchRow(
-            context.getString(R.string.block_live_reservation_title),
-            context.getString(R.string.block_live_reservation_summary),
-            ModuleSettings.KEY_BLOCK_LIVE_RESERVATION_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.block_live_room_qoe_popup_title),
-            context.getString(R.string.block_live_room_qoe_popup_summary),
-            ModuleSettings.KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.remove_live_room_blur_mask_title),
-            context.getString(R.string.remove_live_room_blur_mask_summary),
-            ModuleSettings.KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.disable_live_room_vertical_swipe_title),
-            context.getString(R.string.disable_live_room_vertical_swipe_summary),
-            ModuleSettings.KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED,
-            false,
-        )
         rows += createVideoDetailRelateTitleKeywordRow()
         val relateTypes = videoDetailRelateTypes()
         if (relateTypes.isEmpty()) {
@@ -948,81 +1094,6 @@ class SettingsContentFactory(
             rows += createVideoDetailRelateTypeGroup(relateTypes)
         }
         rows += createSwitchRow(
-            context.getString(R.string.playback_block_chronos_promotion_title),
-            context.getString(R.string.playback_block_chronos_promotion_summary),
-            ModuleSettings.KEY_BLOCK_CHRONOS_PROMOTION_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_block_pgc_activity_popup_title),
-            context.getString(R.string.playback_block_pgc_activity_popup_summary),
-            ModuleSettings.KEY_BLOCK_PGC_ACTIVITY_POPUP_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_block_ai_declared_video_title),
-            context.getString(R.string.playback_block_ai_declared_video_summary),
-            ModuleSettings.KEY_BLOCK_AI_DECLARED_VIDEO_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_block_activity_meta_sticker_title),
-            context.getString(R.string.playback_block_activity_meta_sticker_summary),
-            ModuleSettings.KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_skip_reward_title),
-            context.getString(R.string.playback_skip_reward_summary),
-            ModuleSettings.KEY_SKIP_REWARD_AD_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.skip_mini_game_reward_ad_title),
-            context.getString(R.string.skip_mini_game_reward_ad_summary),
-            ModuleSettings.KEY_SKIP_MINI_GAME_REWARD_AD_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_auto_like_title),
-            context.getString(R.string.playback_auto_like_summary),
-            ModuleSettings.KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_transparent_status_bar_title),
-            context.getString(R.string.playback_transparent_status_bar_summary),
-            ModuleSettings.KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_portrait_control_title),
-            context.getString(R.string.playback_portrait_control_summary),
-            ModuleSettings.KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_triple_speed_title),
-            context.getString(R.string.playback_triple_speed_summary),
-            ModuleSettings.KEY_PLAYER_TRIPLE_SPEED_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_long_press_speed_lock_title),
-            context.getString(R.string.playback_long_press_speed_lock_summary),
-            ModuleSettings.KEY_PLAYER_LONG_PRESS_SPEED_LOCK_ENABLED,
-            false,
-        )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_custom_long_press_speed_title),
-            context.getString(R.string.playback_custom_long_press_speed_summary),
-            ModuleSettings.KEY_PLAYER_CUSTOM_LONG_PRESS_SPEED_ENABLED,
-            false,
-        ) {
-            customLongPressSpeedSwitch = it
-        }
-        rows += createCustomLongPressSpeedRow()
-        rows += createSwitchRow(
             context.getString(R.string.playback_disable_half_end_page_title),
             context.getString(R.string.playback_disable_half_end_page_summary),
             ModuleSettings.KEY_DISABLE_HALF_END_PAGE,
@@ -1034,14 +1105,44 @@ class SettingsContentFactory(
             ModuleSettings.KEY_DISABLE_ALL_END_PAGE,
             false,
         )
-        rows += createSwitchRow(
-            context.getString(R.string.playback_fix_media_session_card_title),
-            context.getString(R.string.playback_fix_media_session_card_summary),
-            ModuleSettings.KEY_FIX_MEDIA_SESSION_CARD,
-            false,
-        )
         return rows
     }
+
+    private fun playbackInteractRows(): List<View> = listOf(
+        createSwitchRow(
+            context.getString(R.string.playback_auto_like_title),
+            context.getString(R.string.playback_auto_like_summary),
+            ModuleSettings.KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED,
+            false,
+        ),
+    )
+
+    private fun liveRows(): List<View> = listOf(
+        createSwitchRow(
+            context.getString(R.string.block_live_reservation_title),
+            context.getString(R.string.block_live_reservation_summary),
+            ModuleSettings.KEY_BLOCK_LIVE_RESERVATION_ENABLED,
+            false,
+        ),
+        createSwitchRow(
+            context.getString(R.string.block_live_room_qoe_popup_title),
+            context.getString(R.string.block_live_room_qoe_popup_summary),
+            ModuleSettings.KEY_BLOCK_LIVE_ROOM_QOE_POPUP_ENABLED,
+            false,
+        ),
+        createSwitchRow(
+            context.getString(R.string.remove_live_room_blur_mask_title),
+            context.getString(R.string.remove_live_room_blur_mask_summary),
+            ModuleSettings.KEY_REMOVE_LIVE_ROOM_BLUR_MASK_ENABLED,
+            false,
+        ),
+        createSwitchRow(
+            context.getString(R.string.disable_live_room_vertical_swipe_title),
+            context.getString(R.string.disable_live_room_vertical_swipe_summary),
+            ModuleSettings.KEY_DISABLE_LIVE_ROOM_VERTICAL_SWIPE_ENABLED,
+            false,
+        ),
+    )
 
     private fun customCdnRows(): List<View> = listOf(
         createCustomCdnWifiRow(),
@@ -1259,15 +1360,16 @@ class SettingsContentFactory(
             false,
         )
         rows += createStoryVideoComponentAlphaRow()
+        rows += createSwitchRow(
+            context.getString(R.string.purify_story_video_ad_title),
+            context.getString(R.string.purify_story_video_ad_summary),
+            ModuleSettings.KEY_PURIFY_STORY_VIDEO_AD_ENABLED,
+            false,
+            badges = unfinishedBadges(),
+        ) {
+            storyVideoAdSwitch = it
+        }
         if (hasHiddenFeatures()) {
-            rows += createSwitchRow(
-                context.getString(R.string.purify_story_video_ad_title),
-                context.getString(R.string.purify_story_video_ad_summary),
-                ModuleSettings.KEY_PURIFY_STORY_VIDEO_AD_ENABLED,
-                false,
-            ) {
-                storyVideoAdSwitch = it
-            }
             rows += createInfoRow(
                 context.getString(R.string.story_filter_selected_tags_title),
                 context.getString(R.string.story_filter_selected_tags_summary),
@@ -1280,14 +1382,6 @@ class SettingsContentFactory(
 
     private fun aboutRows(): List<View> {
         val rows = mutableListOf<View>()
-        rows += createClickableInfoRow(
-            context.getString(R.string.action_restart_bilibili_title),
-            context.getString(R.string.action_restart_bilibili_summary),
-        ) {
-            (context as? Activity)?.let { activity ->
-                RootUtils.showRestartBilibiliDialog(activity, prefs)
-            }
-        }
         rows += createSwitchRow(
             context.getString(R.string.about_hide_desktop_icon_title),
             context.getString(R.string.about_hide_desktop_icon_summary),
@@ -1299,18 +1393,6 @@ class SettingsContentFactory(
             RuntimeEnvironmentInfo.versionSummary(context, prefs),
         ) {
             handleVersionRowClick()
-        }
-        rows += createClickableInfoRow(
-            context.getString(R.string.about_update_title),
-            context.getString(R.string.about_update_summary),
-        ) {
-            openPage(SettingsActivity.PAGE_UPDATE)
-        }
-        rows += createClickableInfoRow(
-            context.getString(R.string.about_config_backup_title),
-            context.getString(R.string.about_config_backup_summary),
-        ) {
-            openPage(SettingsActivity.PAGE_CONFIG_BACKUP)
         }
         rows += createClickableInfoRow(
             context.getString(R.string.about_project_repository_title),
@@ -1811,7 +1893,7 @@ class SettingsContentFactory(
         title: String,
         detail: String,
         key: String,
-        pageOverride: String = page,
+        pageOverride: String = indexPage,
         sectionOverride: String = currentSearchSection,
     ) {
         if (!indexSearchTargets) return
@@ -2950,6 +3032,7 @@ class SettingsContentFactory(
         summary: String,
         key: String,
         defaultValue: Boolean,
+        badges: List<RowBadge> = emptyList(),
         onSwitchReady: ((Switch) -> Unit)? = null,
     ): View {
         val switchView = Switch(context).apply {
@@ -2966,7 +3049,7 @@ class SettingsContentFactory(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            addView(createTextColumn(title, summary), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(createTextColumn(title, summary, badges), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(switchView)
             registerSearchTarget(this, title, summary, key)
         }
@@ -3027,15 +3110,11 @@ class SettingsContentFactory(
         }
     }
 
-    private fun createTextColumn(title: String, summary: String): View {
+    private fun createTextColumn(title: String, summary: String, badges: List<RowBadge> = emptyList()): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, 0, dp(14), 0)
-            addView(TextView(context).apply {
-                text = title
-                textSize = 15f
-                setTextColor(titleTextColor)
-            })
+            addView(createTitleLine(title, badges))
             addView(TextView(context).apply {
                 text = summary
                 textSize = 12f
@@ -3044,6 +3123,131 @@ class SettingsContentFactory(
             })
         }
     }
+
+    private enum class RowBadge(
+        val labelRes: Int,
+        val textColorRes: Int,
+        val backgroundColorRes: Int,
+    ) {
+        RESTART(R.string.badge_restart, R.color.badge_restart_text, R.color.badge_restart_background),
+        UNFINISHED(R.string.badge_unfinished, R.color.badge_unfinished_text, R.color.badge_unfinished_background),
+        EXPERIMENTAL(R.string.badge_experimental, R.color.badge_restart_text, R.color.badge_restart_background),
+    }
+
+    /** 去广告相关功能在未解锁隐藏功能前标记为“未完成”。 */
+    private fun unfinishedBadges(): List<RowBadge> =
+        if (hasHiddenFeatures()) emptyList() else listOf(RowBadge.UNFINISHED)
+
+    private fun restartBadges(): List<RowBadge> = listOf(RowBadge.RESTART)
+
+    private fun createTitleLine(title: String, badges: List<RowBadge>): View {
+        val titleView = TextView(context).apply {
+            text = title
+            textSize = 15f
+            setTextColor(titleTextColor)
+        }
+        if (badges.isEmpty()) return titleView
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(titleView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            badges.forEach { addView(createBadgeView(it)) }
+        }
+    }
+
+    private fun createBadgeView(badge: RowBadge): View {
+        return TextView(context).apply {
+            text = context.getString(badge.labelRes)
+            textSize = 10f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(context.getColor(badge.textColorRes))
+            setPadding(dp(6), dp(1), dp(6), dp(1))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(6).toFloat()
+                setColor(context.getColor(badge.backgroundColorRes))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = dp(8) }
+        }
+    }
+
+    private fun createNavigationRow(
+        title: String,
+        summary: String,
+        badges: List<RowBadge> = emptyList(),
+        onClick: () -> Unit,
+    ): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            addView(createTextColumn(title, summary, badges), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply {
+                text = "›"
+                textSize = 22f
+                setTextColor(summaryTextColor)
+            })
+        }
+    }
+
+    private fun categoryEntryRows(general: Boolean): List<View> =
+        SettingsCategory.entries.filter { it.general == general }.map { category ->
+            createNavigationRow(
+                context.getString(category.titleRes),
+                context.getString(category.summaryRes),
+                categoryBadges(category),
+            ) { openPage(category.page) }
+        }
+
+    // 入口上的“未完成”只在整页都属于去广告功能时才有意义，其余分类由具体设置项自己标注。
+    private fun categoryBadges(category: SettingsCategory): List<RowBadge> = when (category) {
+        SettingsCategory.SEARCH,
+        SettingsCategory.PLAYBACK,
+        SettingsCategory.STORY,
+        SettingsCategory.STARTUP,
+        -> unfinishedBadges()
+        else -> emptyList()
+    }
+
+    private fun advancedEntryRows(): List<View> = listOf(
+        createNavigationRow(
+            context.getString(R.string.sea_bangumi_unlock_title),
+            seaUnlockEntrySummary(),
+            listOf(RowBadge.EXPERIMENTAL),
+        ) { openPage(SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK) },
+        createNavigationRow(
+            context.getString(R.string.about_hidden_features_title),
+            context.getString(R.string.hidden_features_entry_summary),
+        ) { openPage(SettingsActivity.PAGE_HIDDEN_FEATURES) },
+    )
+
+    private fun moduleEntryRows(): List<View> = listOf(
+        createClickableInfoRow(
+            context.getString(R.string.action_restart_bilibili_title),
+            context.getString(R.string.action_restart_bilibili_summary),
+        ) {
+            (context as? Activity)?.let { activity ->
+                RootUtils.showRestartBilibiliDialog(activity, prefs)
+            }
+        },
+        createNavigationRow(
+            context.getString(R.string.about_config_backup_title),
+            context.getString(R.string.about_config_backup_summary),
+        ) { openPage(SettingsActivity.PAGE_CONFIG_BACKUP) },
+        createNavigationRow(
+            context.getString(R.string.about_update_title),
+            context.getString(R.string.about_update_summary),
+        ) { openPage(SettingsActivity.PAGE_UPDATE) },
+        createNavigationRow(
+            context.getString(R.string.about_page_title),
+            RuntimeEnvironmentInfo.versionSummary(context, prefs),
+        ) { openPage(SettingsActivity.PAGE_ABOUT) },
+    )
 
     private fun showSkipVideoAdAutoLikeDisableDialog() {
         val dialog = AlertDialog.Builder(context)

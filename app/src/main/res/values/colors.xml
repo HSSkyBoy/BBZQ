@@ -14,4 +14,9 @@
     <color name="disable_confirm">#F6B000</color>
     <color name="cancel_action">#00A1D6</color>
     <color name="watermark">#2AB41E41</color>
+
+    <color name="badge_restart_text">#8A4B00</color>
+    <color name="badge_restart_background">#FDF0DC</color>
+    <color name="badge_unfinished_text">#5B3FA8</color>
+    <color name="badge_unfinished_background">#EEEAF8</color>
 </resources>
