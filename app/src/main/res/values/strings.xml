@@ -54,7 +54,7 @@
     <string name="fix_live_quality_url_title">直播画质 URL 修复</string>
     <string name="fix_live_quality_url_summary">尝试修复部分版本直播画质切换失败或 URL 错误问题。</string>
     <string name="skip_mini_game_reward_ad_title">跳过小游戏激励广告</string>
-    <string name="skip_mini_game_reward_ad_summary">小游戏内观看激励广告时直接完成并获得奖励。</string>
+    <string name="skip_mini_game_reward_ad_summary">小游戏内的激励广告直接完成并领取奖励。</string>
     <string name="custom_download_thread_title">自定义下载线程</string>
     <string name="custom_download_thread_summary">开启后在下载设置中启用独立的自定义线程数选项。</string>
     <string name="custom_download_concurrency_title">自定义同时缓存数</string>
@@ -149,9 +149,9 @@
 
     <!-- 分享與複製 -->
     <string name="share_purify_title">净化分享</string>
-    <string name="share_purify_summary">将 b23.tv 等短链还原为原始链接，保留必要参数。</string>
+    <string name="share_purify_summary">展开 b23.tv 等短链并去除追踪参数，仅保留必要参数。</string>
     <string name="share_mini_program_title">普通链接分享</string>
-    <string name="share_mini_program_summary">禁用微信/QQ 小程序分享模式，并尽可能转换为 AV 号链接。</string>
+    <string name="share_mini_program_summary">禁用微信 / QQ 小程序分享，并尽量把链接转为 AV 号。</string>
     <string name="copy_disable_title">去除长按复制</string>
     <string name="copy_disable_summary">禁用应用内各处的长按直接复制行为，防止误触。</string>
     <string name="copy_enhance_title">长按自由复制</string>
@@ -210,7 +210,7 @@
 
     <!-- 底欄 -->
     <string name="bottom_bar_title">自定义底栏</string>
-    <string name="bottom_bar_summary">隐藏不需要的底栏入口；首次使用需重启 B 站并打开首页后加载底栏数据。</string>
+    <string name="bottom_bar_summary">隐藏不需要的底栏入口。首次使用需重启哔哩哔哩并打开首页，以加载底栏数据。</string>
     <string name="bottom_bar_item_title">底栏项目</string>
     <string name="bottom_bar_unavailable_summary">尚未读取到底栏数据。开启后重启 B 站并打开首页，再回到 BBZQ 设置中选择需要隐藏的项目。</string>
     <string name="bottom_bar_info_summary">勾选代表保留在底栏；取消勾选后会被隐藏。</string>
@@ -251,7 +251,7 @@
     <string name="sea_unlock_section_privacy">隐私</string>
     <string name="sea_unlock_section_notes">已知限制</string>
     <string name="sea_unlock_overview_title">功能说明</string>
-    <string name="sea_unlock_overview_summary">借助你设置的解析服务器，观看和搜索官方因地区限制而无法使用的番剧。可以分别设置香港/澳门、台湾、东南亚、中国大陆的服务器，只填你需要的即可，多个服务器会依次尝试。仅在官方因地区拒绝时才会请求播放和详情。</string>
+    <string name="sea_unlock_overview_summary">借助你设置的解析服务器，观看和搜索官方因地区限制而无法使用的番剧。可分别设置香港 / 澳门、台湾、东南亚、中国大陆的服务器，只填需要的即可，多个服务器会依次尝试。仅在官方因地区拒绝时才会请求播放和详情。</string>
     <string name="sea_resolver_test_title">测试连接</string>
     <string name="sea_resolver_test_summary">检查解析服务器是否可以访问</string>
     <string name="sea_resolver_test_running">正在测试…</string>
@@ -283,33 +283,33 @@
 
     <!-- 播放页 -->
     <string name="playback_hide_banner_title">屏蔽视频页广告</string>
-    <string name="playback_hide_banner_summary">阻止视频详情页播放器下方横幅、推荐列表、应用下载、好物推荐和暂停广告创建。</string>
+    <string name="playback_hide_banner_summary">移除视频页播放器下方的横幅、推荐列表、应用下载、好物推荐及暂停广告。</string>
     <string name="playback_hide_video_mention_title">隐藏视频提及</string>
-    <string name="playback_hide_video_mention_summary">屏蔽播放页简介下方的视频提及、推荐提及等联动卡片与弹窗。</string>
+    <string name="playback_hide_video_mention_summary">屏蔽简介下方的视频提及，以及相关的联动卡片和弹窗。</string>
     <string name="playback_block_chronos_promotion_title">屏蔽播放互动组件</string>
-    <string name="playback_block_chronos_promotion_summary">移除播放器里的投票、预约、打卡、关注引导、商业活动卡、广告浮层和商业跳转按钮。</string>
+    <string name="playback_block_chronos_promotion_summary">移除播放器内的投票、预约、打卡、关注引导、活动卡与浮层。</string>
     <string name="playback_block_pgc_activity_popup_title">屏蔽影视页自动活动半屏</string>
-    <string name="playback_block_pgc_activity_popup_summary">屏蔽电影、电视剧和番剧播放页在播放器下方自动展开的大会员促销等活动半屏，保留主动点击的活动链接与购买入口。需重启哔哩哔哩后生效。</string>
+    <string name="playback_block_pgc_activity_popup_summary">屏蔽影视播放页自动展开的大会员促销等活动半屏，保留主动点击的活动与购买入口。</string>
     <string name="playback_block_ai_declared_video_title">屏蔽 AI 生成声明视频</string>
-    <string name="playback_block_ai_declared_video_summary">打开带有“含AI生成内容”声明的视频时改为跳转到相关推荐中的其他视频，没有可用视频时显示屏蔽提示；同时移除首页推荐中标记为 AIGC 的视频，以及播放页推荐里已识别的 AI 视频。需重启哔哩哔哩后生效。</string>
+    <string name="playback_block_ai_declared_video_summary">打开含「AI 生成内容」声明的视频时，改为跳转到相关推荐；同时移除首页与播放页推荐中已识别的 AI 视频。</string>
     <string name="ai_declared_redirect_toast">已跳过含 AI 生成声明的视频，为你换成了相关视频</string>
     <string name="ai_declared_blocked_hint">该视频含 AI 生成声明，已由 BBZQ 屏蔽</string>
-    <string name="playback_block_activity_meta_sticker_title">屏蔽"云视听小电视"贴片</string>
-    <string name="playback_block_activity_meta_sticker_summary">移除视频播放器左上角的"云视听小电视"推广浮层贴片。</string>
+    <string name="playback_block_activity_meta_sticker_title">屏蔽「云视听小电视」贴片</string>
+    <string name="playback_block_activity_meta_sticker_summary">移除播放器左上角的「云视听小电视」推广贴片。</string>
     <string name="playback_skip_reward_title">跳过视频激励广告</string>
-    <string name="playback_skip_reward_summary">自动尝试完成视频激励并获得奖励。</string>
+    <string name="playback_skip_reward_summary">自动完成视频激励并领取奖励。</string>
     <string name="playback_auto_like_title">自动点赞视频</string>
-    <string name="playback_auto_like_summary">进入详情页时自动对未点赞的视频执行点赞。</string>
+    <string name="playback_auto_like_summary">进入详情页时，自动为未点赞的视频点赞。</string>
     <string name="playback_disable_half_end_page_title">去除半屏结束推荐</string>
-    <string name="playback_disable_half_end_page_summary">视频播完时仅去除半屏状态下的结束推荐页，保留重播按键；全屏播放时的结束推荐正常展示。</string>
+    <string name="playback_disable_half_end_page_summary">播完后不显示半屏结束推荐，保留重播按钮；全屏播放时照常显示。</string>
     <string name="playback_disable_all_end_page_title">去除全部结束推荐</string>
-    <string name="playback_disable_all_end_page_summary">视频播完时去除半屏、横屏全屏、竖屏全屏的所有结束推荐页，干净定格在视频末尾。</string>
+    <string name="playback_disable_all_end_page_summary">播完后不显示半屏、横屏与竖屏全屏的结束推荐，画面停在视频末尾。</string>
     <string name="playback_fix_media_session_card_title">修复系统媒体卡片与封面</string>
     <string name="split_screen_fullscreen_title">分屏下允许全屏播放</string>
-    <string name="split_screen_fullscreen_summary">解除分屏模式下点击播放器全屏按钮提示“暂不支持全屏播放”的限制。需重启哔哩哔哩后生效。</string>
+    <string name="split_screen_fullscreen_summary">解除分屏模式下，点击全屏按钮提示「暂不支持全屏播放」的限制。</string>
     <string name="disable_background_play_title">强制关闭后台听视频</string>
-    <string name="disable_background_play_summary">无论云端同步或其他入口如何开启，都不再允许锁屏或切到后台后继续播放视频声音。</string>
-    <string name="playback_fix_media_session_card_summary">修复后台听视频时封面背景模糊变纯色、以及媒体卡片从系统媒体中心消失的问题。</string>
+    <string name="disable_background_play_summary">无论云端同步或其他入口如何设置，锁屏或切到后台后都不再继续播放声音。</string>
+    <string name="playback_fix_media_session_card_summary">修复后台听视频时封面变成模糊纯色、媒体卡片从系统媒体中心消失的问题。</string>
 
     <!-- 關於頁 -->
     <string name="about_version_title">版本</string>
@@ -340,7 +340,7 @@
     <string name="about_import_config_title">导入配置</string>
     <string name="about_import_config_summary">从 ZIP 还原功能开关与手动配置，不影响其他数据。</string>
     <string name="about_hide_desktop_icon_title">隐藏桌面图标</string>
-    <string name="about_hide_desktop_icon_summary">隐藏后可通过B站内设置打开。(须在LSPosed中关闭 “强制显示桌面图标” )</string>
+    <string name="about_hide_desktop_icon_summary">隐藏后可在哔哩哔哩的「设置 → 高级设置」中打开。需先在 LSPosed 中关闭「强制显示桌面图标」。</string>
     <string name="about_hidden_features_title">隐藏功能</string>
     <string name="about_hidden_features_summary">%1$s 隐藏功能已显示。</string>
     <string name="about_skip_video_ad_switch_title">空降助手功能开关</string>
@@ -350,8 +350,8 @@
     <string name="about_access_key_title">获取 AccessKey</string>
     <string name="about_access_key_summary">点击尝试获取当前登录账号的 AccessKey。</string>
     <string name="hidden_features_entry_title">隐藏功能入口</string>
-    <string name="symbol_cache_refresh_title">清除缓存数据</string>
-    <string name="symbol_cache_refresh_no_status">暂无混淆扫描结果。请先启动 B 站，或点击此项发起重扫。</string>
+    <string name="symbol_cache_refresh_title">清除缓存并重新扫描</string>
+    <string name="symbol_cache_refresh_no_status">暂无扫描结果。请先启动哔哩哔哩，或点击此项重新扫描。</string>
     <string name="symbol_cache_refresh_no_report">暂无混淆扫描报告。</string>
     <string name="symbol_cache_refresh_summary_with_time">%1$s\n更新时间：%2$s</string>
     <string name="symbol_cache_refresh_dialog_title">混淆扫描缓存</string>
@@ -446,15 +446,15 @@
     <string name="dynamic_remove_school_tab_title">移除校园标签</string>
     <string name="dynamic_remove_school_tab_summary">隐藏动态页里的校园入口。</string>
     <string name="playback_transparent_status_bar_title">透明播放器状态栏</string>
-    <string name="playback_transparent_status_bar_summary">视频详情页延伸到状态栏区域并将状态栏背景设为透明；部分系统可能仍显示状态栏图标。</string>
-    <string name="playback_portrait_control_title">屏蔽播放器竖屏控件</string>
-    <string name="playback_portrait_control_summary">隐藏播放器控制层中的“竖屏”切换按钮。需重启哔哩哔哩后生效。</string>
+    <string name="playback_transparent_status_bar_summary">视频详情页延伸到状态栏并将其设为透明；部分系统仍会显示状态栏图标。</string>
+    <string name="playback_portrait_control_title">隐藏播放器竖屏按钮</string>
+    <string name="playback_portrait_control_summary">隐藏播放器控制层中的「竖屏」切换按钮。</string>
     <string name="playback_triple_speed_title">解锁播放器 3 倍速</string>
-    <string name="playback_triple_speed_summary">3 倍速是服务端灰度 A/B 实验，开启后强制进入实验组，倍速菜单新增 3.0X 档位並去除原有的 50 帧限制。需重启哔哩哔哩后生效。</string>
+    <string name="playback_triple_speed_summary">3 倍速由服务端灰度控制，开启后强制进入实验组：倍速菜单新增 3.0x，并取消 50 帧限制。</string>
     <string name="playback_long_press_speed_lock_title">长按倍速锁定</string>
-    <string name="playback_long_press_speed_lock_summary">仅横屏：长按播放时向下滑可锁定倍速；再次长按并向下滑动可解除。需重启哔哩哔哩后生效。</string>
-    <string name="playback_custom_long_press_speed_title">自定义长按倍速数值</string>
-    <string name="playback_custom_long_press_speed_summary">需先开启“解锁播放器 3 倍速”。开启后可将长按快进使用的倍速替换为下方自定义数值（如 2.5×、4×），不再局限于固定的 3.0 倍速。需重启哔哩哔哩后生效。</string>
+    <string name="playback_long_press_speed_lock_summary">仅横屏：长按播放时向下滑动可锁定倍速，再次长按并下滑即可解除。</string>
+    <string name="playback_custom_long_press_speed_title">自定义长按倍速</string>
+    <string name="playback_custom_long_press_speed_summary">需先开启「解锁播放器 3 倍速」。把长按快进的倍速改为下方的自定义数值（如 2.5x、4x）。</string>
     <string name="playback_custom_long_press_speed_value_title">长按倍速数值</string>
     <string name="playback_custom_long_press_speed_value_summary">当前：%1$.1f 倍</string>
     <string name="cdn_wifi_priority_title">CDN 设置</string>
@@ -529,7 +529,7 @@
 
     <!-- 播放页下方推荐信息流过滤 -->
     <string name="video_detail_relate_custom_filter_title">下方推荐过滤</string>
-    <string name="video_detail_relate_custom_filter_summary">屏蔽播放页下方信息流中的指定类型卡片及标题关键词。</string>
+    <string name="video_detail_relate_custom_filter_summary">按类型和标题关键词，屏蔽播放页下方信息流中的卡片。</string>
     <string name="video_detail_relate_title_keyword_title">推荐标题关键词屏蔽</string>
     <string name="video_detail_relate_title_keyword_empty_summary">未设置关键词。点击添加后可按视频标题过滤推荐内容。</string>
     <string name="video_detail_relate_title_keyword_enabled_summary">已设置 %1$d 个关键词：%2$s</string>
@@ -558,7 +558,7 @@
     <string name="video_detail_relate_type_unknown">未知分类 (%1$s)</string>
     <string name="toolbar_save_and_restart">保存并重启</string>
     <string name="action_restart_bilibili_title">保存并重启哔哩哔哩</string>
-    <string name="action_restart_bilibili_summary">使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，使所有修改立即生效。</string>
+    <string name="action_restart_bilibili_summary">使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，让所有修改立即生效。</string>
     <string name="restart_dialog_title">确认保存并重启哔哩哔哩</string>
     <string name="restart_dialog_message">将使用 Root 或 Shizuku 权限强制停止并重新启动哔哩哔哩，以使所有模块设置立即生效。是否继续？</string>
     <string name="restart_dialog_confirm">确认重启</string>
