@@ -1,13 +1,18 @@
 package io.github.bbzq.feats.hook
 
+import android.graphics.Matrix
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.allFields
+import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import org.json.JSONObject
@@ -20,6 +25,11 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var unmatchedHiddenLogged = false
     private val attachedContainerListeners =
         Collections.synchronizedMap(WeakHashMap<ViewGroup, View.OnLayoutChangeListener>())
+    private val attachedBgListeners =
+        Collections.synchronizedMap(WeakHashMap<ImageView, View.OnLayoutChangeListener>())
+    private val attachedHostListeners =
+        Collections.synchronizedMap(WeakHashMap<ViewGroup, View.OnLayoutChangeListener>())
+    private val adjustingBg = ThreadLocal<Boolean>()
 
     override fun startHook() {
         ModuleSettings.refreshKnownBottomBarItemsCache(prefs)
@@ -45,7 +55,9 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
             env.hookAfter(method) { param ->
                 runCatching {
                     val tabs = param.args.getOrNull(0) as? List<*> ?: return@runCatching
-                    hideTabs(param.thisObject, tabs)
+                    val host = param.thisObject as? ViewGroup
+                    hideTabs(host, tabs)
+                    adjustTabBackground(host)
                 }.onFailure {
                     log("Bottom bar TabHost post processor failed at ${method.declaringClass.name}.${method.name}", it)
                 }
@@ -53,6 +65,25 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         val tabHostClass = tabHostSetTabsMethods.firstOrNull()?.declaringClass
+        if (tabHostClass != null) {
+            tabHostClass.allMethods()
+                .filter { method ->
+                    method.parameterCount == 2 &&
+                        method.parameterTypes[1] == Boolean::class.javaPrimitiveType &&
+                        method.returnType == Void.TYPE &&
+                        method.parameterTypes[0].name.endsWith(".Garb")
+                }
+                .forEach { method ->
+                    env.hookAfter(method) { param ->
+                        runCatching {
+                            adjustTabBackground(param.thisObject as? ViewGroup)
+                        }.onFailure {
+                            log("Bottom bar TabHost garb processor failed", it)
+                        }
+                    }
+                }
+        }
+
         baseOnViewCreatedMethods.forEach { method ->
             env.hookAfter(method) { param ->
                 runCatching {
@@ -66,12 +97,13 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
                                 preserveMissing = shouldPreserveMissing(entries.map(BottomBarEntry::id)),
                             )
                         }
-                    val host = fragment.findTabHost(tabHostClass) ?: return@runCatching
+                    val host = fragment.findTabHost(tabHostClass) as? ViewGroup ?: return@runCatching
                     val getTabs = tabHostGetTabsMethods.firstOrNull { it.declaringClass.isInstance(host) }
                         ?: return@runCatching
                     val tabs = getTabs.invoke(host) as? List<*> ?: return@runCatching
                     dispatch(tabs)
                     hideTabs(host, tabs)
+                    adjustTabBackground(host)
                 }.onFailure {
                     log("Bottom bar onViewCreated processor failed at ${method.declaringClass.name}.${method.name}", it)
                 }
@@ -147,6 +179,103 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         container.addOnLayoutChangeListener(listener)
         attachedContainerListeners[container] = listener
+    }
+
+    private fun adjustTabBackground(host: ViewGroup?) {
+        if (host == null) return
+        val imageView = host.findTabBackground() ?: return
+
+        fun apply() {
+            if (adjustingBg.get() == true) return
+            val drawable = imageView.drawable ?: return
+            val dw = drawable.intrinsicWidth.toFloat()
+            val dh = drawable.intrinsicHeight.toFloat()
+            if (dw <= 0f || dh <= 0f) return
+
+            try {
+                adjustingBg.set(true)
+                val viewWidth = if (imageView.width > 0) imageView.width else host.width
+                val effectiveWidth = if (viewWidth > 0) {
+                    viewWidth.toFloat()
+                } else {
+                    host.context.resources.displayMetrics.widthPixels.toFloat()
+                }
+                val scale = effectiveWidth / dw
+                val scaledHeight = (dh * scale).toInt()
+
+                val hostHeight = host.height
+                val targetHeight = if (hostHeight > 0) maxOf(hostHeight, scaledHeight) else scaledHeight
+
+                var lpChanged = false
+                val lp = imageView.layoutParams
+                if (lp != null && lp.height != targetHeight && targetHeight > 0) {
+                    lp.height = targetHeight
+                    if (lp is FrameLayout.LayoutParams) {
+                        lp.gravity = Gravity.BOTTOM
+                    }
+                    imageView.layoutParams = lp
+                    lpChanged = true
+                }
+
+                val matrix = Matrix()
+                matrix.setScale(scale, scale, 0f, 0f)
+                val currentViewHeight = if (imageView.height > 0) imageView.height else targetHeight
+                if (currentViewHeight > scaledHeight) {
+                    matrix.postTranslate(0f, (currentViewHeight - scaledHeight).toFloat())
+                }
+                imageView.scaleType = ImageView.ScaleType.MATRIX
+                imageView.imageMatrix = matrix
+
+                host.clipChildren = false
+                host.clipToPadding = false
+
+                if (lpChanged) {
+                    imageView.requestLayout()
+                } else {
+                    imageView.invalidate()
+                }
+            } finally {
+                adjustingBg.set(false)
+            }
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            apply()
+        } else {
+            imageView.post(::apply)
+        }
+        attachBgLayoutListener(imageView) { apply() }
+        attachHostLayoutListener(host) { apply() }
+    }
+
+    private fun ViewGroup.findTabBackground(): ImageView? {
+        val bgId = context.resources.getIdentifier("tab_background", "id", context.packageName)
+        if (bgId != 0) {
+            findViewById<ImageView>(bgId)?.let { return it }
+        }
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child is ImageView) return child
+        }
+        return null
+    }
+
+    private fun attachBgLayoutListener(imageView: ImageView, onLayout: () -> Unit) {
+        if (attachedBgListeners.containsKey(imageView)) return
+        val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            onLayout()
+        }
+        imageView.addOnLayoutChangeListener(listener)
+        attachedBgListeners[imageView] = listener
+    }
+
+    private fun attachHostLayoutListener(host: ViewGroup, onLayout: () -> Unit) {
+        if (attachedHostListeners.containsKey(host)) return
+        val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            onLayout()
+        }
+        host.addOnLayoutChangeListener(listener)
+        attachedHostListeners[host] = listener
     }
 
     private fun isEntryHidden(
