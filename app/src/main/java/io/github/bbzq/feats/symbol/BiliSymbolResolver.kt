@@ -1495,8 +1495,9 @@ object BiliSymbolResolver {
         val restoreErrors = ArrayList<String>()
         // The reader lives in a synthetic kotlin Function0 whose zero-arg invoke() maps the
         // "sp_play_speed_experiment" preference int onto LongPressSpeedExperiment. The other match
-        // is the A/B writer (invokeSuspend, 1 parameter), which we exclude by shape.
-        val candidates = methodData
+        // is the A/B writer (invokeSuspend, 1 parameter), which we exclude by shape. Since 9.17
+        // playerbizcommonv2 and playerbizcommon3 each ship their own reader, so keep all of them.
+        val readers = methodData
             .mapNotNull { data ->
                 runCatching { data.getMethodInstance(classLoader) }.getOrElse { throwable ->
                     restoreErrors += "${data.descriptor}: ${throwable.scanMessage()}"
@@ -1506,15 +1507,10 @@ object BiliSymbolResolver {
             .filter { it.name == "invoke" && it.parameterCount == 0 && it.returnType == Any::class.java }
             .distinctBy(Method::toGenericString)
             .toList()
-        val reader = when {
-            candidates.size == 1 -> candidates.single()
-            candidates.isEmpty() -> return SymbolScanResult.Missing(
+        if (readers.isEmpty()) {
+            return SymbolScanResult.Missing(
                 "play speed experiment reader not found: strings=${methodData.size}" +
                     (restoreErrors.take(2).joinToString("; ").takeIf { it.isNotBlank() }?.let { ",restore=$it" } ?: ""),
-            )
-            else -> return SymbolScanResult.Missing(
-                "play speed experiment reader ambiguous: candidates=${candidates.size}," +
-                    candidates.joinToString(limit = 4) { it.declaringClass.name },
             )
         }
         val qualityResetCandidates = qualityResetData
@@ -1562,11 +1558,11 @@ object BiliSymbolResolver {
             ?.singleOrNull()
             ?.apply { isAccessible = true }
         val symbols = TripleSpeedSymbols(
-            experimentReaderMethod = MethodDescriptor.of(reader),
+            experimentReaderMethods = readers.map(MethodDescriptor::of),
             qualitySpeedResetMethod = qualityReset?.let(MethodDescriptor::of),
             highFrameRateSpeedGuardMethod = highFrameRateSpeedGuard?.let(MethodDescriptor::of),
             longPressSpeedMethod = longPressSpeed?.let(MethodDescriptor::of),
-            evidence = "${reader.declaringClass.name}.${reader.name},strings=${methodData.size}," +
+            evidence = "readers=${readers.joinToString("|") { it.declaringClass.name }},strings=${methodData.size}," +
                 "qualityReset=${qualityReset?.let { "${it.declaringClass.name}.${it.name}" } ?: "missing"}," +
                 "qualityStrings=${qualityResetData.size}," +
                 "highFrameGuard=${highFrameRateSpeedGuard?.let { "${it.declaringClass.name}.${it.name}" } ?: "missing"}," +

@@ -92,7 +92,7 @@ data class BiliHookSymbols(
         .putOpt("videoQuality", videoQuality?.toJson())
 
     companion object {
-        const val CACHE_SCHEMA_VERSION = 39
+        const val CACHE_SCHEMA_VERSION = 40
 
         fun fromJson(raw: String?): BiliHookSymbols? {
             if (raw.isNullOrBlank()) return null
@@ -1962,23 +1962,24 @@ data class ConstructorDescriptor(
 }
 
 data class TripleSpeedSymbols(
-    val experimentReaderMethod: MethodDescriptor,
+    // 9.17 起 playerbizcommonv2 与 playerbizcommon3 各有一个长按倍速实验读取点
+    val experimentReaderMethods: List<MethodDescriptor>,
     val qualitySpeedResetMethod: MethodDescriptor? = null,
     val highFrameRateSpeedGuardMethod: MethodDescriptor? = null,
     val longPressSpeedMethod: MethodDescriptor? = null,
     val evidence: String,
 ) {
     fun toJson(): JSONObject = JSONObject()
-        .put("experimentReaderMethod", experimentReaderMethod.toJson())
+        .put("experimentReaderMethods", experimentReaderMethods.toJsonArray { it.toJson() })
         .putOpt("longPressSpeedMethod", longPressSpeedMethod?.toJson())
         .putOpt("qualitySpeedResetMethod", qualitySpeedResetMethod?.toJson())
         .putOpt("highFrameRateSpeedGuardMethod", highFrameRateSpeedGuardMethod?.toJson())
         .put("evidence", evidence)
 
     fun restore(classLoader: ClassLoader): RestoredTripleSpeedSymbols? {
-        val method = experimentReaderMethod.restoreOptional(classLoader) ?: return null
+        val methods = experimentReaderMethods.restoreAvailable(classLoader).takeIf { it.isNotEmpty() } ?: return null
         return RestoredTripleSpeedSymbols(
-            experimentReaderMethod = method,
+            experimentReaderMethods = methods,
             qualitySpeedResetMethod = qualitySpeedResetMethod.restoreOptional(classLoader),
             highFrameRateSpeedGuardMethod = highFrameRateSpeedGuardMethod.restoreOptional(classLoader),
             longPressSpeedMethod = longPressSpeedMethod.restoreOptional(classLoader),
@@ -1987,7 +1988,7 @@ data class TripleSpeedSymbols(
 
     companion object {
         fun fromJson(obj: JSONObject): TripleSpeedSymbols = TripleSpeedSymbols(
-            experimentReaderMethod = MethodDescriptor.fromJson(obj.getJSONObject("experimentReaderMethod")),
+            experimentReaderMethods = obj.optJSONArray("experimentReaderMethods").toList { MethodDescriptor.fromJson(it) },
             qualitySpeedResetMethod = obj.optJSONObject("qualitySpeedResetMethod")?.let(MethodDescriptor::fromJson),
             highFrameRateSpeedGuardMethod = obj.optJSONObject("highFrameRateSpeedGuardMethod")
                 ?.let(MethodDescriptor::fromJson),
@@ -1998,7 +1999,7 @@ data class TripleSpeedSymbols(
 }
 
 data class RestoredTripleSpeedSymbols(
-    val experimentReaderMethod: Method,
+    val experimentReaderMethods: List<Method>,
     val qualitySpeedResetMethod: Method?,
     val highFrameRateSpeedGuardMethod: Method?,
     val longPressSpeedMethod: Method?,

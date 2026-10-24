@@ -7,40 +7,40 @@ import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.hookAfter
 import java.lang.reflect.Modifier
+import java.util.concurrent.ConcurrentHashMap
 
 class TripleSpeedHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
         if (env.processName != env.packageName) return
 
         val symbols = env.symbols?.tripleSpeed?.restore(classLoader)
-        val readerMethod = symbols?.experimentReaderMethod ?: run {
+        val readerMethods = symbols?.experimentReaderMethods ?: listOfNotNull(
             classLoader.findClassOrNull("F4.b")?.declaredMethods?.firstOrNull {
                 it.name == "invoke" && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers)
-            }
-        }
-        if (readerMethod == null) {
+            },
+        )
+        if (readerMethods.isEmpty()) {
             log("startHook: TripleSpeed skipped because experimentReaderMethod is unavailable")
             return
         }
 
-        val experimentClass = classLoader.findClassOrNull(LONG_PRESS_SPEED_EXPERIMENT) ?: run {
-            log("startHook: TripleSpeed skipped because $LONG_PRESS_SPEED_EXPERIMENT is unavailable")
-            return
-        }
-        val target = experimentClass.enumConstants?.firstOrNull { readEnumValue(experimentClass, it) == TARGET_GROUP_VALUE }
-            ?: run {
-                log("startHook: TripleSpeed skipped because group value=$TARGET_GROUP_VALUE was not found")
-                return
+        // playerbizcommonv2 与 playerbizcommon3 各有一份同名枚举,按结果字段的实际类型取目标分组
+        val targets = ConcurrentHashMap<Class<*>, Any>()
+        readerMethods.forEach { readerMethod ->
+            env.hookAfter(readerMethod) { param ->
+                if (!ModuleSettings.isPlayerTripleSpeedEnabled(prefs)) return@hookAfter
+                val result = param.result ?: return@hookAfter
+                val field = result.javaClass.declaredFields
+                    .firstOrNull { it.type.isEnum && it.type.simpleName == LONG_PRESS_SPEED_EXPERIMENT } ?: return@hookAfter
+                val target = targets[field.type] ?: field.type.enumConstants
+                    ?.firstOrNull { readEnumValue(field.type, it) == TARGET_GROUP_VALUE }
+                    ?.also { targets[field.type] = it }
+                    ?: return@hookAfter
+                field.isAccessible = true
+                if (field.get(result) !== target) field.set(result, target)
             }
-
-        env.hookAfter(readerMethod) { param ->
-            if (!ModuleSettings.isPlayerTripleSpeedEnabled(prefs)) return@hookAfter
-            val result = param.result ?: return@hookAfter
-            val field = result.javaClass.declaredFields
-                .firstOrNull { it.type == experimentClass } ?: return@hookAfter
-            field.isAccessible = true
-            if (field.get(result) !== target) field.set(result, target)
         }
+        log("startHook: TripleSpeed, experiment readers=${readerMethods.joinToString { it.declaringClass.name }}")
 
         symbols?.longPressSpeedMethod?.let { speedMethod ->
             env.hookBefore(speedMethod) { param ->
@@ -80,8 +80,7 @@ class TripleSpeedHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private companion object {
-        private const val LONG_PRESS_SPEED_EXPERIMENT =
-            "com.bilibili.playerbizcommonv2.utils.LongPressSpeedExperiment"
+        private const val LONG_PRESS_SPEED_EXPERIMENT = "LongPressSpeedExperiment"
 
         private const val TARGET_GROUP_VALUE = 5
         private const val HIGH_FRAME_RATE_THRESHOLD = 50f
