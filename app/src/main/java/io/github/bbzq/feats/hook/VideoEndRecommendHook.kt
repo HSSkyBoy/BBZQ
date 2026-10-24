@@ -248,9 +248,10 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "com.bilibili.ship.theseus.ugc.endpage.relatedrecommand.cm.UGCEndPageCMRelatedComponentsTransformer"
         ) ?: return 0
         var count = 0
-        // a(RelateCard, boolean): 广告卡片判定 -> 永远返回 false，让推荐引擎按纯普通视频处理
+        // (RelateCard, boolean): 广告卡片判定 -> 永远返回 false，让推荐引擎按纯普通视频处理
+        // 混淆名随版本互换(9.15 为 a,9.17 为 b),按签名匹配
         val isCmMethod = transformerClass.declaredMethods.firstOrNull {
-            it.name == "a" && it.parameterCount == 2 && it.returnType == Boolean::class.javaPrimitiveType
+            it.isRelateCardMethod() && it.parameterCount == 2 && it.returnType == Boolean::class.javaPrimitiveType
         }
         if (isCmMethod != null) {
             env.hookBefore(isCmMethod) { param ->
@@ -258,10 +259,8 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
             count++
         }
-        // b(RelateCard, int, ScreenModeType): 创建 CM 组件 -> 返回 null
-        val createCmMethodB = transformerClass.declaredMethods.firstOrNull {
-            it.name == "b" && it.parameterCount == 3
-        }
+        // (RelateCard, int, ScreenModeType): 创建 CM 组件 -> 返回 null
+        val createCmMethodB = transformerClass.findRelateCardComponentMethod()
         if (createCmMethodB != null) {
             env.hookBefore(createCmMethodB) { param ->
                 param.result = null
@@ -270,6 +269,8 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         // c(EndPageCMModel, ...): 创建 CM 组件 -> 返回 null
         val createCmMethodC = transformerClass.declaredMethods.firstOrNull {
+            it.parameterCount >= 3 && it.parameterTypes[0].name.endsWith(".EndPageCMModel")
+        } ?: transformerClass.declaredMethods.firstOrNull {
             it.name == "c" && it.parameterCount >= 3
         }
         if (createCmMethodC != null) {
@@ -291,10 +292,8 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "com.bilibili.ship.theseus.ugc.endpage.relatedrecommand.UGCEndPageRelatedComponentsTransformer"
         ) ?: return 0
         var count = 0
-        // b(RelateCard, int, ScreenModeType): 将服务端推荐卡片转换为端上 UI 组件 -> 去除全部结束推荐时返回 null
-        val createRelatedMethod = transformerClass.declaredMethods.firstOrNull {
-            it.name == "b" && it.parameterCount == 3
-        }
+        // (RelateCard, int, ScreenModeType): 将服务端推荐卡片转换为端上 UI 组件 -> 去除全部结束推荐时返回 null
+        val createRelatedMethod = transformerClass.findRelateCardComponentMethod()
         if (createRelatedMethod != null) {
             env.hookBefore(createRelatedMethod) { param ->
                 if (ModuleSettings.isDisableAllEndPage(prefs)) {
@@ -306,6 +305,15 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("VideoEndRecommend: installDisableRelatedTransformerHook hooked $count methods")
         return count
     }
+
+    private fun java.lang.reflect.Method.isRelateCardMethod(): Boolean =
+        parameterTypes.firstOrNull()?.name?.endsWith(".RelateCard") == true
+
+    private fun Class<*>.findRelateCardComponentMethod(): java.lang.reflect.Method? =
+        declaredMethods.firstOrNull {
+            it.isRelateCardMethod() && it.parameterCount == 3 &&
+                it.parameterTypes[1] == Int::class.javaPrimitiveType && it.returnType != Void.TYPE
+        }
 
     private companion object {
         private val ROOT_VIEW_GETTERS = setOf("onCreateContentView", "createContentView", "getContentView", "getView", "getRoot")
