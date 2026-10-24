@@ -2755,12 +2755,16 @@ object BiliSymbolResolver {
         }.distinctBy { it.getItems.declaringClassName + "#" + it.getItems.name }
 
         val detailRelateServiceClass = classLoader.loadClassOrNull(DETAIL_RELATE_SERVICE_CLASS)
-        val detailRelateServiceMethod = detailRelateServiceClass?.allMethods()?.firstOrNull { method ->
+        // 9.17 起同类还有多个接收卡片模型的方法(返回 ExtraParams / void),只有返回组件的才是卡片创建入口
+        val detailRelateServiceCandidates = detailRelateServiceClass?.allMethods()?.filter { method ->
             !Modifier.isStatic(method.modifiers) &&
                 !Modifier.isAbstract(method.modifiers) &&
                 method.parameterCount == 1 &&
                 (method.name == "d" || method.parameterTypes[0].name.endsWith("D0") || method.returnType.name.contains("RunningUIComponent"))
-        }
+        }?.toList().orEmpty()
+        val detailRelateServiceMethod = detailRelateServiceCandidates.firstOrNull { it.returnType.name.contains("RunningUIComponent") }
+            ?: detailRelateServiceCandidates.firstOrNull { it.name == "d" }
+            ?: detailRelateServiceCandidates.firstOrNull()
 
         if (responseGetItems.isEmpty() && detailRelateServiceMethod == null) {
             return SymbolScanResult.Missing("VideoDetailRelate response and service methods not found")
