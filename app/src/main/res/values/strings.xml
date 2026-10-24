@@ -585,6 +585,12 @@
     <string name="component_pool_item_format">%1$s（%2$d 个模块）</string>
 
     <!-- 設定首頁分類 -->
+    <string name="home_status_connected">已连接哔哩哔哩 %1$s</string>
+    <string name="home_status_disconnected">尚未连接哔哩哔哩</string>
+    <string name="home_status_disconnected_hint">请在哔哩哔哩的「设置 → 高级设置」中进入 BBZQ</string>
+    <string name="home_status_account">UID %1$s</string>
+    <string name="home_status_account_named">%1$s · UID %2$s</string>
+    <string name="home_status_scan_report">扫描报告</string>
     <string name="home_section_general">通用</string>
     <string name="home_section_pages">按页面</string>
     <string name="home_section_advanced">进阶功能</string>

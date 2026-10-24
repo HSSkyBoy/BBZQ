@@ -21,6 +21,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.CompoundButton
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.NumberPicker
 import android.widget.ScrollView
@@ -292,6 +293,7 @@ class SettingsContentFactory(
             SettingsActivity.PAGE_ROOT -> {
                 // 首页的入口行只负责跳转，不进入搜索索引。
                 indexSearchTargets = false
+                pageRoot.addView(createStatusCard())
                 pageRoot.addSettingsSection(context.getString(R.string.home_section_general)) {
                     categoryEntryRows(general = true)
                 }
@@ -3173,24 +3175,49 @@ class SettingsContentFactory(
         }
     }
 
+    private enum class TileTone(val backgroundRes: Int, val iconColorRes: Int) {
+        GENERAL(R.color.tile_general_background, R.color.tile_general_icon),
+        PAGE(R.color.tile_page_background, R.color.tile_page_icon),
+        ADVANCED(R.color.tile_advanced_background, R.color.tile_advanced_icon),
+    }
+
+    private fun createIconTile(iconRes: Int, tone: TileTone): View {
+        return ImageView(context).apply {
+            setImageResource(iconRes)
+            setColorFilter(context.getColor(tone.iconColorRes))
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(context.getColor(tone.backgroundRes))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(14) }
+        }
+    }
+
     private fun createNavigationRow(
         title: String,
         summary: String,
         badges: List<RowBadge> = emptyList(),
+        iconRes: Int? = null,
+        tone: TileTone = TileTone.PAGE,
         onClick: () -> Unit,
     ): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            minimumHeight = dp(68)
+            setPadding(dp(16), dp(12), dp(14), dp(12))
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
+            if (iconRes != null) addView(createIconTile(iconRes, tone))
             addView(createTextColumn(title, summary, badges), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(TextView(context).apply {
-                text = "›"
-                textSize = 22f
-                setTextColor(summaryTextColor)
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_chevron_right)
+                setColorFilter(summaryTextColor)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
             })
         }
     }
@@ -3201,8 +3228,120 @@ class SettingsContentFactory(
                 context.getString(category.titleRes),
                 context.getString(category.summaryRes),
                 categoryBadges(category),
+                category.iconRes,
+                if (general) TileTone.GENERAL else TileTone.PAGE,
             ) { openPage(category.page) }
         }
+
+    private fun createStatusCard(): View {
+        val hostVersion = prefs.getString(ModuleSettings.KEY_RUNTIME_HOST_VERSION_NAME, null)
+            ?.takeIf { it.isNotBlank() && it != UNKNOWN_RUNTIME_VALUE }
+        val uid = prefs.getString(ModuleSettings.KEY_HOST_ACCOUNT_UID, "").orEmpty()
+        val userName = prefs.getString(ModuleSettings.KEY_HOST_ACCOUNT_NAME, "").orEmpty()
+        val account = when {
+            uid.isBlank() -> null
+            userName.isBlank() -> context.getString(R.string.home_status_account, uid)
+            else -> context.getString(R.string.home_status_account_named, userName, uid)
+        }
+        val connected = hostVersion != null
+        val statusIcon = ImageView(context).apply {
+            setImageResource(if (connected) R.drawable.ic_status_check else R.drawable.ic_status_alert)
+            setColorFilter(context.getColor(if (connected) R.color.status_ok_icon else R.color.status_warn_icon))
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(context.getColor(if (connected) R.color.status_ok_background else R.color.status_warn_background))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(14) }
+        }
+        val textColumn = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(context).apply {
+                text = if (connected) {
+                    context.getString(R.string.home_status_connected, hostVersion)
+                } else {
+                    context.getString(R.string.home_status_disconnected)
+                }
+                textSize = 16f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(titleTextColor)
+            })
+            addView(TextView(context).apply {
+                text = account ?: if (connected) "" else context.getString(R.string.home_status_disconnected_hint)
+                textSize = 13f
+                setTextColor(summaryTextColor)
+                setPadding(0, dp(2), 0, 0)
+                if (text.isNullOrBlank()) visibility = View.GONE
+            })
+            addView(TextView(context).apply {
+                text = symbolScanSummary()
+                textSize = 12f
+                setTextColor(summaryTextColor)
+                setPadding(0, dp(2), 0, 0)
+            })
+        }
+        val primaryButton = createCardButton(
+            context.getString(R.string.action_restart_bilibili_title),
+            R.color.accent_primary,
+            R.color.on_accent_primary,
+        ) {
+            (context as? Activity)?.let { activity ->
+                RootUtils.showRestartBilibiliDialog(activity, prefs)
+            }
+        }
+        val secondaryButton = createCardButton(
+            context.getString(R.string.home_status_scan_report),
+            R.color.secondary_button_background,
+            R.color.title_text,
+        ) { handleSymbolCacheRefreshClick() }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(16))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(cardBackgroundColor)
+            }
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(statusIcon)
+                addView(textColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            })
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(primaryButton, LinearLayout.LayoutParams(0, dp(44), 1f))
+                    addView(
+                        secondaryButton,
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply { marginStart = dp(10) },
+                    )
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(14) },
+            )
+        }
+    }
+
+    private fun createCardButton(label: String, backgroundRes: Int, textColorRes: Int, onClick: () -> Unit): View {
+        return TextView(context).apply {
+            text = label
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(dp(18), 0, dp(18), 0)
+            setTextColor(context.getColor(textColorRes))
+            setTypeface(typeface, Typeface.BOLD)
+            isClickable = true
+            isFocusable = true
+            background = GradientDrawable().apply {
+                cornerRadius = dp(22).toFloat()
+                setColor(context.getColor(backgroundRes))
+            }
+            setOnClickListener { onClick() }
+        }
+    }
 
     // 入口上的“未完成”只在整页都属于去广告功能时才有意义，其余分类由具体设置项自己标注。
     private fun categoryBadges(category: SettingsCategory): List<RowBadge> = when (category) {
@@ -3219,33 +3358,39 @@ class SettingsContentFactory(
             context.getString(R.string.sea_bangumi_unlock_title),
             seaUnlockEntrySummary(),
             listOf(RowBadge.EXPERIMENTAL),
+            R.drawable.ic_advanced_sea,
+            TileTone.ADVANCED,
         ) { openPage(SettingsActivity.PAGE_SEA_BANGUMI_UNLOCK) },
         createNavigationRow(
             context.getString(R.string.about_hidden_features_title),
             context.getString(R.string.hidden_features_entry_summary),
+            emptyList(),
+            R.drawable.ic_advanced_hidden,
+            TileTone.ADVANCED,
         ) { openPage(SettingsActivity.PAGE_HIDDEN_FEATURES) },
     )
 
     private fun moduleEntryRows(): List<View> = listOf(
-        createClickableInfoRow(
-            context.getString(R.string.action_restart_bilibili_title),
-            context.getString(R.string.action_restart_bilibili_summary),
-        ) {
-            (context as? Activity)?.let { activity ->
-                RootUtils.showRestartBilibiliDialog(activity, prefs)
-            }
-        },
         createNavigationRow(
             context.getString(R.string.about_config_backup_title),
             context.getString(R.string.about_config_backup_summary),
+            emptyList(),
+            R.drawable.ic_more_backup,
+            TileTone.GENERAL,
         ) { openPage(SettingsActivity.PAGE_CONFIG_BACKUP) },
         createNavigationRow(
             context.getString(R.string.about_update_title),
             context.getString(R.string.about_update_summary),
+            emptyList(),
+            R.drawable.ic_more_update,
+            TileTone.GENERAL,
         ) { openPage(SettingsActivity.PAGE_UPDATE) },
         createNavigationRow(
             context.getString(R.string.about_page_title),
             RuntimeEnvironmentInfo.versionSummary(context, prefs),
+            emptyList(),
+            R.drawable.ic_more_about,
+            TileTone.GENERAL,
         ) { openPage(SettingsActivity.PAGE_ABOUT) },
     )
 

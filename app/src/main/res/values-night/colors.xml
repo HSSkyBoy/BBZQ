@@ -19,4 +19,18 @@
     <color name="badge_restart_background">#3A2D17</color>
     <color name="badge_unfinished_text">#CDBFF5</color>
     <color name="badge_unfinished_background">#2F2848</color>
+
+    <color name="accent_primary">#F06595</color>
+    <color name="on_accent_primary">#1E1E1E</color>
+    <color name="secondary_button_background">#2C2C2C</color>
+    <color name="tile_general_background">#1E2A3F</color>
+    <color name="tile_general_icon">#8EB0F0</color>
+    <color name="tile_page_background">#3A1F2B</color>
+    <color name="tile_page_icon">#F78FB3</color>
+    <color name="tile_advanced_background">#2F2848</color>
+    <color name="tile_advanced_icon">#CDBFF5</color>
+    <color name="status_ok_background">#16301F</color>
+    <color name="status_ok_icon">#7FD6A1</color>
+    <color name="status_warn_background">#3A2D17</color>
+    <color name="status_warn_icon">#F2C27A</color>
 </resources>
