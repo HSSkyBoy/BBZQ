@@ -4549,10 +4549,10 @@ object BiliSymbolResolver {
     private val STORY_COMMENT_OUTER_CANDIDATES = listOf("StoryCommentHelper", "C", "B") + ('D'..'Z').map { it.toString() }
     private val STORY_COMMENT_VERTICAL_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$VerticalContainerV2", "C\$f", "B\$f") + ('D'..'Z').map { "$it\$f" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
     private val STORY_COMMENT_LANDSCAPE_CONTAINER_CLASSES = (listOf("StoryCommentHelper\$d", "C\$d", "B\$d") + ('D'..'Z').map { "$it\$d" }).map { "com.bilibili.video.story.action.$it" }.toTypedArray()
-    private val STORY_INTRO_COMMENT_SERVICES = listOf(
-        "com.bilibili.video.story.action.widget.comment.t",
-        "com.bilibili.video.story.action.widget.comment.p",
-    )
+    // 混淆字母随版本漂移(9.15 为 t,9.17 为 w),已知名称优先,其余按结构逐个检查
+    private val STORY_INTRO_COMMENT_SERVICES = (listOf("w", "t", "p") + ('a'..'z').map { it.toString() })
+        .distinct()
+        .map { "com.bilibili.video.story.action.widget.comment.$it" }
     private const val STORY_TAB_PACKAGE_PREFIX = "com.bilibili.video.story.tab."
     private const val KOTLIN_UNIT = "kotlin.Unit"
     private const val ANDROIDX_VIEW_BINDING = "androidx.viewbinding.ViewBinding"
