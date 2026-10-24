@@ -1030,35 +1030,8 @@ object BiliSymbolResolver {
         bridge: () -> DexKitBridge?,
     ): SymbolScanResult<VideoQualitySymbols> {
         val currentBridge = bridge() ?: return SymbolScanResult.Missing("DexKitBridge unavailable")
-        
-        // 1. AutoSupremumQuality constructor
-        val autoSupremumQualityClass = runCatching {
-            currentBridge.findClass(
-                FindClass.create().matcher(ClassMatcher.create().usingStrings("AutoSupremumQuality(loginHalfScreen=")),
-            ).mapNotNull { classLoader.loadClassOrNull(it.name) }.firstOrNull()
-        }.getOrNull()
 
-        val autoSupremumCtor = autoSupremumQualityClass?.declaredConstructors?.firstOrNull { ctor ->
-            ctor.parameterTypes.size == 6 && ctor.parameterTypes.all { it == Int::class.javaPrimitiveType }
-        }?.apply { isAccessible = true }
-
-        // 2. QualityStrategyProvider selectQuality method
-        val buildStrategyMethod = runCatching {
-            currentBridge.findMethod(
-                FindMethod.create().matcher(MethodMatcher.create().usingStrings("Quality Strategy share:")),
-            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }.firstOrNull()
-        }.getOrNull()
-
-        val providerClass = buildStrategyMethod?.declaringClass
-        val selectQualityMethod = providerClass?.declaredMethods?.firstOrNull { method ->
-            method.parameterCount == 3 &&
-                autoSupremumQualityClass != null &&
-                method.parameterTypes[0] == autoSupremumQualityClass &&
-                method.parameterTypes[1] == Boolean::class.javaPrimitiveType &&
-                method.parameterTypes[2] == Boolean::class.javaPrimitiveType
-        }?.apply { isAccessible = true }
-
-        // 3. PlayerPreloadHolder (PreloadData(type=)
+        // 1. PlayerPreloadHolder (PreloadData(type=)
         val preloadMethods = runCatching {
             val preloadClass = currentBridge.findClass(
                 FindClass.create().matcher(ClassMatcher.create().usingStrings("PreloadData(type=")),
@@ -1069,15 +1042,7 @@ object BiliSymbolResolver {
             }?.onEach { it.isAccessible = true }.orEmpty()
         }.getOrElse { emptyList() }
 
-        // 4. PlayerQualityService (player.unite_login_qn)
-        val qualityServiceMethods = runCatching {
-            currentBridge.findMethod(
-                FindMethod.create().matcher(MethodMatcher.create().usingStrings("player.unite_login_qn")),
-            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
-                .onEach { it.isAccessible = true }
-        }.getOrElse { emptyList() }
-
-        // 5. PlayerSettingHelper (quality settings:)
+        // 2. PlayerSettingHelper (quality settings:)
         val defaultQnMethod = runCatching {
             currentBridge.findMethod(
                 FindMethod.create().matcher(MethodMatcher.create().usingStrings("quality settings:").paramCount(0)),
@@ -1101,17 +1066,14 @@ object BiliSymbolResolver {
         }.getOrNull()
 
         val symbols = VideoQualitySymbols(
-            autoSupremumQualityConstructor = autoSupremumCtor?.let(ConstructorDescriptor::of),
-            qualityStrategySelectMethod = selectQualityMethod?.let(MethodDescriptor::of),
             playerPreloadGetMethods = preloadMethods.map(MethodDescriptor::of),
-            playerQualityServiceMethods = qualityServiceMethods.map(MethodDescriptor::of),
             playerSettingHelperGetDefaultQnMethod = defaultQnMethod?.let(MethodDescriptor::of),
             rangeQualityUpdateMethod = rangeUpdateMethod?.let(MethodDescriptor::of),
-            evidence = "autoSupremum=${autoSupremumCtor != null},strategy=${selectQualityMethod != null},preload=${preloadMethods.size},service=${qualityServiceMethods.size},setting=${defaultQnMethod != null},range=${rangeUpdateMethod != null}",
+            evidence = "preload=${preloadMethods.size},setting=${defaultQnMethod != null},range=${rangeUpdateMethod != null}",
         )
 
-        return if (autoSupremumCtor != null || selectQualityMethod != null || preloadMethods.isNotEmpty() || qualityServiceMethods.isNotEmpty() || defaultQnMethod != null || rangeUpdateMethod != null) {
-            SymbolScanResult.Found(symbols, autoSupremumQualityClass?.name ?: "VideoQuality", symbols.evidence)
+        return if (preloadMethods.isNotEmpty() || defaultQnMethod != null || rangeUpdateMethod != null) {
+            SymbolScanResult.Found(symbols, "VideoQuality", symbols.evidence)
         } else {
             SymbolScanResult.Missing("video quality hook points not found")
         }
