@@ -26,6 +26,7 @@ internal object HostAccountResolver {
             }
             if (!loggedIn) return@runCatching Snapshot.LOGGED_OUT
 
+            val profile = resolveProfile(classLoader)
             val uid = accountClass.allMethods().asSequence()
                 .filter { method ->
                     method.parameterCount == 0 && method.returnType == Long::class.javaPrimitiveType &&
@@ -37,10 +38,14 @@ internal object HostAccountResolver {
                     }.getOrNull()
                 }
                 .firstOrNull { it > 0L }
-                ?.toString()
-                .orEmpty()
+                ?: (profile?.callMethod("getMid") as? Long)?.takeIf { it > 0L }
             val accessKey = resolveAccessKey(accountClass, account)
-            Snapshot(true, uid, resolveUserName(classLoader), accessKey)
+            Snapshot(
+                loggedIn = true,
+                uid = uid?.toString().orEmpty(),
+                userName = profile?.callMethod("getUserName")?.toString().orEmpty(),
+                accessKey = accessKey,
+            )
         }.getOrDefault(Snapshot.LOGGED_OUT)
     }
 
@@ -62,15 +67,14 @@ internal object HostAccountResolver {
         }.getOrDefault("")
     }
 
-    private fun resolveUserName(classLoader: ClassLoader): String {
+    private fun resolveProfile(classLoader: ClassLoader): Any? = runCatching {
         val managerClass = ACCOUNT_INFO_CLASS_NAMES.firstNotNullOfOrNull(classLoader::findClassOrNull)
-            ?: return ""
+            ?: return@runCatching null
         val manager = managerClass.allMethods().firstOrNull { method ->
             Modifier.isStatic(method.modifiers) && method.name == "get" && method.parameterCount == 0
-        }?.invoke(null) ?: return ""
-        val profile = manager.callMethod("getAccountInfoFromCache") ?: return ""
-        return profile.callMethod("getUserName")?.toString().orEmpty()
-    }
+        }?.invoke(null) ?: return@runCatching null
+        manager.callMethod("getAccountInfoFromCache")
+    }.getOrNull()
 
     data class Snapshot(
         val loggedIn: Boolean,

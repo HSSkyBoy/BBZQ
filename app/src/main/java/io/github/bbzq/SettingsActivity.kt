@@ -662,17 +662,7 @@ class SettingsActivity : Activity() {
             userName.takeIf { it.isNotBlank() },
             uid.takeIf { it.isNotBlank() }?.let { "UID $it" },
         ).joinToString(" · ")
-        return text.takeIf { it.isNotBlank() }
-            ?.let { AccountWatermarkView(this, it) }
-            ?: runCatching {
-                val snapshot = io.github.bbzq.feats.HostAccountResolver.resolve(this, classLoader)
-                if (!snapshot.loggedIn) return@runCatching null
-                val fallbackText = listOfNotNull(
-                    snapshot.userName.takeIf { it.isNotBlank() },
-                    snapshot.uid.takeIf { it.isNotBlank() }?.let { "UID $it" },
-                ).joinToString(" · ")
-                fallbackText.takeIf { it.isNotBlank() }?.let { AccountWatermarkView(this, it) }
-            }.getOrNull()
+        return text.takeIf { it.isNotBlank() }?.let { AccountWatermarkView(this, it) }
     }
 
     // ── Window Insets ─────────────────────────────────────────────────────────
