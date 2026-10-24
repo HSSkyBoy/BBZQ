@@ -43,6 +43,7 @@ class SettingsContentFactory(
     private val context: Context,
     private val prefs: SharedPreferences,
     private val page: String,
+    private val hostEntry: Boolean = true,
     private val openPage: (String) -> Unit,
     private val onExportClick: () -> Unit,
     private val onImportClick: () -> Unit,

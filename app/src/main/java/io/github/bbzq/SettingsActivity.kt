@@ -37,6 +37,8 @@ class SettingsActivity : Activity() {
         ReadableModulePreferences(this, base)
     }
 
+    private var hostEntry = false
+
     private var pendingImportArchive: ByteArray? = null
     private var currentFactory: SettingsContentFactory? = null
     private var pendingSearchRevealKey: String? = null
@@ -61,6 +63,7 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE)
+        hostEntry = intent.hasExtra(RuntimeEnvironmentInfo.EXTRA_RUNTIME_VALUES)
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
 
@@ -106,7 +109,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun setupContent() {
-        val initialPage = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
+        val initialPage = allowedPage(intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT)
         pageStack.addLast(initialPage)
 
         val toolbar = createToolbar(initialPage)
@@ -171,10 +174,11 @@ class SettingsActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        hostEntry = intent.hasExtra(RuntimeEnvironmentInfo.EXTRA_RUNTIME_VALUES)
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
         if (!::contentContainer.isInitialized) return
-        val targetPage = intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT
+        val targetPage = allowedPage(intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT)
         if (targetPage == PAGE_ROOT) {
             pageStack.clear()
             pageStack.addLast(PAGE_ROOT)
@@ -217,7 +221,11 @@ class SettingsActivity : Activity() {
 
     // ── In-activity Navigation ────────────────────────────────────────────────
 
+    private fun allowedPage(page: String): String =
+        if (hostEntry || page in STANDALONE_PAGES) page else PAGE_ROOT
+
     private fun navigateTo(page: String) {
+        if (!hostEntry && page !in STANDALONE_PAGES) return
         if (pageStack.lastOrNull() == page) return
         pageStack.addLast(page)
         switchContent(page)
@@ -289,6 +297,7 @@ class SettingsActivity : Activity() {
             context = this,
             prefs = prefs,
             page = page,
+            hostEntry = hostEntry,
             openPage = { targetPage -> navigateTo(targetPage) },
             onExportClick = { launchExportConfig() },
             onImportClick = { launchImportConfig() },
@@ -496,11 +505,13 @@ class SettingsActivity : Activity() {
                 isClickable = true
                 isFocusable = true
                 setPadding(dp(8), dp(4), dp(8), dp(4))
+                visibility = if (hostEntry) View.VISIBLE else View.GONE
                 setOnClickListener { showSettingsSearchDialog() }
             })
 
             addView(TextView(this@SettingsActivity).apply {
                 text = getString(R.string.toolbar_save_and_restart)
+                visibility = if (hostEntry) View.VISIBLE else View.GONE
                 textSize = 15f
                 setTextColor(getColor(R.color.accent_pink))
                 isClickable = true
@@ -739,6 +750,7 @@ class SettingsActivity : Activity() {
         const val PAGE_CONFIG_BACKUP = "config_backup"
         const val PAGE_SEA_BANGUMI_UNLOCK = "sea_bangumi_unlock"
         const val PAGE_ABOUT = "about"
+        private val STANDALONE_PAGES = setOf(PAGE_ROOT, PAGE_UPDATE, PAGE_ABOUT)
         const val PAGE_CATEGORY_APPEARANCE = "category_appearance"
         const val PAGE_CATEGORY_SHARE = "category_share"
         const val PAGE_CATEGORY_STARTUP = "category_startup"
