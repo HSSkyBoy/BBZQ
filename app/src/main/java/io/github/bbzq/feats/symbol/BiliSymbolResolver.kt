@@ -1235,38 +1235,61 @@ object BiliSymbolResolver {
         val skinClass = classLoader.loadClassOrNull(BILI_SKIN)
             ?: return SymbolScanResult.Missing("BiliSkin not found")
 
-        val colorArrayMethod = currentBridge.findMethod(
+        // 9.15 起 theme_entries_last_key 只出现在同类的读写方法里,颜色表 getter 本身不再引用它,
+        // 因此先按字符串定位 helper 类,再找与静态 SparseArray 同名的 (Context)int getter
+        val themeHelperCandidates = currentBridge.findMethod(
             FindMethod.create().matcher(MethodMatcher.create().usingStrings("theme_entries_last_key")),
-        ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
-            .firstOrNull {
-                it.parameterTypes.contentEquals(arrayOf(Context::class.java)) &&
-                    it.returnType == Int::class.javaPrimitiveType
-            }
-            ?: return SymbolScanResult.Missing("theme color array method not found")
-        val themeHelperClass = colorArrayMethod.declaringClass
-        val colorArrayField = themeHelperClass.declaredFields.firstOrNull {
-            it.name == colorArrayMethod.name && it.type == SparseArray::class.java && Modifier.isStatic(it.modifiers)
-        }?.apply { isAccessible = true }
-            ?: return SymbolScanResult.Missing("theme color SparseArray not found")
+        ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull()?.declaringClass }
+            .distinctBy { it.name }
+        val (themeHelperClass, colorArrayField) = themeHelperCandidates.firstNotNullOfOrNull { type ->
+            type.declaredMethods.asSequence()
+                .filter {
+                    Modifier.isStatic(it.modifiers) &&
+                        it.parameterTypes.contentEquals(arrayOf(Context::class.java)) &&
+                        it.returnType == Int::class.javaPrimitiveType
+                }
+                .firstNotNullOfOrNull { method ->
+                    type.declaredFields.firstOrNull {
+                        it.name == method.name && it.type == SparseArray::class.java && Modifier.isStatic(it.modifiers)
+                    }
+                }
+                ?.apply { isAccessible = true }
+                ?.let { type to it }
+        } ?: return SymbolScanResult.Missing("theme color SparseArray not found: helpers=${themeHelperCandidates.size}")
 
         val themeColorsClass = currentBridge.findClass(
             FindClass.create().matcher(ClassMatcher.create().usingStrings("GarbThemeColors(garb=")),
         ).mapNotNull { classLoader.loadClassOrNull(it.name) }
             .firstOrNull { type -> type.declaredConstructors.any { Modifier.isPrivate(it.modifiers) } }
 
+        // 新版只剩 (BiliSkinList) 一个参数,旧版带 (BiliSkinList, boolean)
         val skinListMethod = themeStoreActivity.declaredMethods.firstOrNull {
-            it.parameterTypes.size == 2 &&
-                it.parameterTypes[0] == skinListClass &&
-                it.parameterTypes[1] == Boolean::class.javaPrimitiveType
+            it.parameterTypes.firstOrNull() == skinListClass &&
+                (
+                    it.parameterTypes.size == 1 ||
+                        (it.parameterTypes.size == 2 && it.parameterTypes[1] == Boolean::class.javaPrimitiveType)
+                    )
         }?.apply { isAccessible = true }
             ?: return SymbolScanResult.Missing("theme skin list method not found")
 
-        val themeProcessorClass = findClassNamesByNameContains(bridge, listOf("tv.danmaku.bili.ui.theme"))
+        // 主题处理器已移到混淆包(与颜色表 helper 同包),一并搜索
+        val themeProcessorPackages = listOf("tv.danmaku.bili.ui.theme", "${themeHelperClass.name.substringBeforeLast('.')}.")
+        val themeProcessorClass = findClassNamesByNameContains(bridge, themeProcessorPackages)
             .mapNotNull(classLoader::loadClassOrNull)
             .firstOrNull { type -> type.declaredFields.count { it.type == skinListClass } > 1 }
             ?: return SymbolScanResult.Missing("theme processor class not found")
-        val themeResetMethods = themeProcessorClass.declaredMethods.filter {
-            it.parameterCount == 0 && it.modifiers == 0
+        val themeResetMethods = findDeclaredMethods(bridge, classLoader) {
+            matcher(
+                MethodMatcher.create()
+                    .declaredClass(themeProcessorClass)
+                    .paramCount(0)
+                    .returnType(Void.TYPE)
+                    .usingStrings(THEME_DEFAULT_LIST_FILE),
+            )
+        }.ifEmpty {
+            themeProcessorClass.declaredMethods.filter {
+                it.parameterCount == 0 && it.modifiers == 0
+            }
         }.onEach { it.isAccessible = true }
         if (themeResetMethods.isEmpty()) {
             return SymbolScanResult.Missing("theme reset methods not found")
@@ -1336,10 +1359,22 @@ object BiliSymbolResolver {
         ).map { it.name }.toList() + bridge.findClass(
             FindClass.create().matcher(ClassMatcher.create().usingStrings("white")),
         ).map { it.name }.toList()
-        return candidates.asSequence().distinct().mapNotNull(classLoader::loadClassOrNull)
-            .firstOrNull { type ->
+        val types = candidates.asSequence().distinct().mapNotNull(classLoader::loadClassOrNull)
+            .filter { type ->
                 type.declaredFields.any { Modifier.isStatic(it.modifiers) && it.type == Map::class.java }
             }
+            .toList()
+        // "white" 在新版命中多个颜色名映射(如 HtmlColors),按主题 id 映射内容挑出真正的主题名表
+        return types.firstOrNull { type ->
+            type.declaredFields.any { field ->
+                Modifier.isStatic(field.modifiers) && field.type == Map::class.java &&
+                    runCatching {
+                        field.isAccessible = true
+                        val map = field.get(null) as? Map<*, *>
+                        map?.get("white") == 8 && map["pink"] == 2
+                    }.getOrDefault(false)
+            }
+        } ?: types.firstOrNull()
     }
 
     private fun scanBlockUpdate(
@@ -4502,6 +4537,7 @@ object BiliSymbolResolver {
     private const val THEME_STORE_ACTIVITY = "tv.danmaku.bili.ui.theme.ThemeStoreActivity"
     private const val BILI_SKIN_LIST = "tv.danmaku.bili.ui.theme.api.BiliSkinList"
     private const val BILI_SKIN = "tv.danmaku.bili.ui.theme.api.BiliSkin"
+    private const val THEME_DEFAULT_LIST_FILE = "theme2-default"
     private const val STORY_VIDEO_FRAGMENT = "com.bilibili.video.story.StoryVideoFragment"
     private const val STORY_PAGER_PLAYER = "com.bilibili.video.story.player.StoryPagerPlayer"
     private const val STORY_FEED_RESPONSE = "com.bilibili.video.story.api.StoryFeedResponse"
