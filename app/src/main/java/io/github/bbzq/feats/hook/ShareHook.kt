@@ -12,6 +12,7 @@ import io.github.bbzq.feats.hookBeforeAllConstructors
 import io.github.bbzq.feats.setObjectField
 import io.github.bbzq.feats.symbol.RestoredShareSymbols
 import java.lang.reflect.Method
+import java.util.concurrent.atomic.AtomicInteger
 
 class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
@@ -206,12 +207,20 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val transformAv = isMiniProgramEnabled()
             if (!isShareTransformEnabled(transformAv)) return@hookBefore
 
+            val generation = clipGeneration.incrementAndGet()
             val clip = param.args.firstOrNull() as? ClipData ?: return@hookBefore
             val text = clip.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
                 ?: return@hookBefore
             val purified = purifyText(text, transformAv)
             if (purified != text) {
                 param.args[0] = ClipData.newPlainText(clip.description.label, purified)
+            }
+            val clipboard = param.thisObject as? ClipboardManager ?: return@hookBefore
+            if (!ShareLinkPurifier.containsShortLink(purified)) return@hookBefore
+            val label = clip.description.label
+            ShareLinkPurifier.purifyTextAsync(purified, transformAv) { resolved ->
+                if (clipGeneration.get() != generation) return@purifyTextAsync
+                runCatching { clipboard.setPrimaryClip(ClipData.newPlainText(label, resolved)) }
             }
         }
         return 1
@@ -299,6 +308,7 @@ class ShareHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private const val MAX_TITLE_LENGTH = 120
         private const val LINK_MODE_VALUE = 3
         private val MINI_PROGRAM_MODE_VALUES = setOf(6, 7)
+        private val clipGeneration = AtomicInteger()
     }
 }
 
