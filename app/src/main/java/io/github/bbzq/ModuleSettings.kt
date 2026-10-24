@@ -102,6 +102,11 @@ object ModuleSettings {
     const val KEY_DISABLE_LONG_PRESS_COPY_ENABLED = "disable_long_press_copy_enabled"
     const val KEY_ENHANCE_LONG_PRESS_COPY_ENABLED = "enhance_long_press_copy_enabled"
     const val KEY_CUSTOM_BOTTOM_BAR_ENABLED = "custom_bottom_bar_enabled"
+    const val KEY_APP_LANGUAGE = "app_language"
+    const val LANGUAGE_AUTO = "auto"
+    const val LANGUAGE_ZH_CN = "zh-CN"
+    const val LANGUAGE_ZH_TW = "zh-TW"
+    const val LANGUAGE_EN = "en"
     const val KEY_CUSTOM_THEME_ENABLED = "custom_theme_enabled"
     const val KEY_CUSTOM_THEME_COLOR = "custom_theme_color"
     const val KEY_CUSTOM_SKIN_ENABLED = "custom_skin_enabled"
@@ -428,6 +433,9 @@ object ModuleSettings {
         })
         add(ExportableConfigSpec(KEY_CUSTOM_SKIN_JSON, ExportableValueType.STRING) { prefs ->
             getCustomSkinJson(prefs)
+        })
+        add(ExportableConfigSpec(KEY_APP_LANGUAGE, ExportableValueType.STRING) { prefs ->
+            getAppLanguage(prefs)
         })
         add(ExportableConfigSpec(KEY_CUSTOM_CDN_HOST, ExportableValueType.STRING) { prefs ->
             getCustomCdnHost(prefs)
@@ -973,6 +981,13 @@ object ModuleSettings {
 
     fun isCustomThemeEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_THEME_ENABLED, false)
+
+    fun getAppLanguage(prefs: SharedPreferences): String =
+        prefs.getString(KEY_APP_LANGUAGE, LANGUAGE_AUTO).orEmpty().ifBlank { LANGUAGE_AUTO }
+
+    fun setAppLanguage(prefs: SharedPreferences, language: String) {
+        prefs.edit().putString(KEY_APP_LANGUAGE, language).apply()
+    }
 
     fun getCustomThemeColor(prefs: SharedPreferences): Int =
         prefs.getInt(KEY_CUSTOM_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR)

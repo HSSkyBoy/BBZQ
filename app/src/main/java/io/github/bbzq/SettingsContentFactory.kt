@@ -3380,6 +3380,13 @@ class SettingsContentFactory(
             TileTone.GENERAL,
         ) { openPage(SettingsActivity.PAGE_CONFIG_BACKUP) },
         createNavigationRow(
+            context.getString(R.string.settings_language_title),
+            LocaleHelper.getLanguageDisplayName(context, ModuleSettings.getAppLanguage(prefs)),
+            emptyList(),
+            R.drawable.ic_more_language,
+            TileTone.GENERAL,
+        ) { showLanguageSelectDialog() },
+        createNavigationRow(
             context.getString(R.string.about_update_title),
             context.getString(R.string.about_update_summary),
             emptyList(),
@@ -3394,6 +3401,33 @@ class SettingsContentFactory(
             TileTone.GENERAL,
         ) { openPage(SettingsActivity.PAGE_ABOUT) },
     )
+
+    private fun showLanguageSelectDialog() {
+        val currentLang = ModuleSettings.getAppLanguage(prefs)
+        val languages = listOf(
+            ModuleSettings.LANGUAGE_AUTO to context.getString(R.string.settings_language_auto),
+            ModuleSettings.LANGUAGE_ZH_CN to context.getString(R.string.settings_language_zh_cn),
+            ModuleSettings.LANGUAGE_ZH_TW to context.getString(R.string.settings_language_zh_tw),
+            ModuleSettings.LANGUAGE_EN to context.getString(R.string.settings_language_en),
+        )
+        val currentIndex = languages.indexOfFirst { it.first == currentLang }.coerceAtLeast(0)
+        val itemLabels = languages.map { it.second }.toTypedArray()
+
+        AlertDialog.Builder(context)
+            .setTitle(R.string.settings_language_title)
+            .setSingleChoiceItems(itemLabels, currentIndex) { dialog, which ->
+                val selectedLang = languages[which].first
+                if (selectedLang != currentLang) {
+                    ModuleSettings.setAppLanguage(prefs, selectedLang)
+                    dialog.dismiss()
+                    (context as? Activity)?.recreate()
+                } else {
+                    dialog.dismiss()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
 
     private fun showSkipVideoAdAutoLikeDisableDialog() {
         val dialog = AlertDialog.Builder(context)

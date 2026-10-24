@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Rect
@@ -60,8 +61,21 @@ class SettingsActivity : Activity() {
     private var currentBottomInset: Int = 0
     private var toolbarBaseTop: Int = 0
 
+    override fun attachBaseContext(newBase: Context) {
+        val basePrefs = newBase.getSharedPreferences(ModuleSettings.PREFS_NAME, Context.MODE_PRIVATE)
+        val lang = ModuleSettings.getAppLanguage(basePrefs)
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase, lang))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState != null) {
+            val savedStack = savedInstanceState.getStringArrayList(KEY_PAGE_STACK)
+            if (!savedStack.isNullOrEmpty()) {
+                pageStack.clear()
+                savedStack.forEach { pageStack.addLast(allowedPage(it)) }
+            }
+        }
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         hostEntry = intent.hasExtra(RuntimeEnvironmentInfo.EXTRA_RUNTIME_VALUES)
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
@@ -109,8 +123,10 @@ class SettingsActivity : Activity() {
     }
 
     private fun setupContent() {
-        val initialPage = allowedPage(intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT)
-        pageStack.addLast(initialPage)
+        val initialPage = pageStack.lastOrNull() ?: allowedPage(intent.getStringExtra(EXTRA_PAGE) ?: PAGE_ROOT)
+        if (pageStack.isEmpty()) {
+            pageStack.addLast(initialPage)
+        }
 
         val toolbar = createToolbar(initialPage)
         contentContainer = FrameLayout(this)
@@ -161,6 +177,11 @@ class SettingsActivity : Activity() {
         setContentView(root)
         applyWindowInsets(contentRoot, toolbar, scrollView)
         updateBackCallback()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putStringArrayList(KEY_PAGE_STACK, ArrayList(pageStack))
     }
 
     override fun onDestroy() {
@@ -741,6 +762,7 @@ class SettingsActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val KEY_PAGE_STACK = "bbzq_page_stack"
         const val EXTRA_PAGE = "settings_page"
         const val PAGE_ROOT = "root"
         const val PAGE_SKIP_VIDEO_AD_SWITCH = "skip_video_ad_switch"
