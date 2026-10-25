@@ -7,8 +7,11 @@ import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.allFields
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
+import java.lang.reflect.Modifier
 
 class HomeTopBarPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
+    private var composeGameMenuInstalled = false
+
     override fun startHook() {
         if (env.processName != env.packageName) return
         val hideGameMenu = ModuleSettings.isHideHomeTopBarPromotionEnabled(prefs)
@@ -29,14 +32,26 @@ class HomeTopBarPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun hookGameMenuItem(): Int {
-        val method = env.symbols?.homeTopBar?.restore(classLoader)?.gameMenuMethod ?: return 0
-        env.hookBefore(method) { param ->
-            if (!ModuleSettings.isHideHomeTopBarPromotionEnabled(prefs)) return@hookBefore
-            if (param.thisObject.hasGameMenuAction()) {
-                param.result = null
+        val symbols = env.symbols?.homeTopBar?.restore(classLoader) ?: return 0
+        var count = 0
+        symbols.gameMenuMethod?.let { method ->
+            if (env.hookBefore(method) { param ->
+                if (!ModuleSettings.isHideHomeTopBarPromotionEnabled(prefs)) return@hookBefore
+                if (param.thisObject.hasGameMenuAction()) param.result = null
+            }) count++
+        }
+        symbols.composeGameMenuMethod?.takeIf { !composeGameMenuInstalled }?.let { method ->
+            if (env.hookBefore(method) { param ->
+                if (!ModuleSettings.isHideHomeTopBarPromotionEnabled(prefs)) return@hookBefore
+                val source = param.args.firstOrNull() as? List<*> ?: return@hookBefore
+                val kept = source.filter { it == null || !it.hasStringField(::isHomeGameMenuAction) }
+                if (kept.size != source.size) param.args[0] = kept
+            }) {
+                composeGameMenuInstalled = true
+                count++
             }
         }
-        return 1
+        return count
     }
 
     private fun hookSearchDefaultWord(): Int {
@@ -79,13 +94,13 @@ class HomeTopBarPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (this == null) return false
         return javaClass.allFields().any { field ->
             val value = runCatching { field.get(this) }.getOrNull() ?: return@any false
-            value !is String && value.hasStringField(::isGameMenuAction)
+            value !is String && value.hasStringField(::isHomeGameMenuAction)
         }
     }
 
     private fun Any.hasStringField(predicate: (String) -> Boolean): Boolean =
         javaClass.allFields().any { field ->
-            if (field.type != String::class.java) return@any false
+            if (field.type != String::class.java || Modifier.isStatic(field.modifiers)) return@any false
             val value = runCatching { field.get(this) as? String }.getOrNull() ?: return@any false
             predicate(value)
         }
@@ -99,11 +114,11 @@ class HomeTopBarPurifyHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
     }
 
-    private fun isGameMenuAction(action: String): Boolean =
-        action == GAME_MENU_ACTION || action.startsWith("$GAME_MENU_ACTION?")
-
     private companion object {
         private const val SWITCH_TEXT_VIEW_CLASS = "tv.danmaku.bili.widget.SwitchTextView"
-        private const val GAME_MENU_ACTION = "action://game_center/home/menu"
     }
 }
+
+internal fun isHomeGameMenuAction(action: String): Boolean =
+    action == "action://game_center/home/menu" || action.startsWith("action://game_center/home/menu?") ||
+        action == "bilibili://game_center/home" || action.startsWith("bilibili://game_center/home?")

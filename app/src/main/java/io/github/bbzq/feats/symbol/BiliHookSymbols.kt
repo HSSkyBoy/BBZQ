@@ -33,6 +33,7 @@ data class BiliHookSymbols(
     val videoDetailBannerAd: VideoDetailBannerAdSymbols? = null,
     val videoDetailRelateFeed: VideoDetailRelateFeedSymbols? = null,
     val homeTopBar: HomeTopBarSymbols? = null,
+    val homeFrame: HomeFrameSymbols? = null,
     val bottomBar: BottomBarSymbols? = null,
     val homeRecommendFeed: HomeRecommendFeedSymbols? = null,
     val homeRecommendTabs: HomeRecommendTabSymbols? = null,
@@ -76,6 +77,7 @@ data class BiliHookSymbols(
         .putOpt("videoDetailBannerAd", videoDetailBannerAd?.toJson())
         .putOpt("videoDetailRelateFeed", videoDetailRelateFeed?.toJson())
         .putOpt("homeTopBar", homeTopBar?.toJson())
+        .putOpt("homeFrame", homeFrame?.toJson())
         .putOpt("bottomBar", bottomBar?.toJson())
         .putOpt("homeRecommendFeed", homeRecommendFeed?.toJson())
         .putOpt("homeRecommendTabs", homeRecommendTabs?.toJson())
@@ -124,6 +126,7 @@ data class BiliHookSymbols(
                     videoDetailRelateFeed = obj.optJSONObject("videoDetailRelateFeed")
                         ?.let(VideoDetailRelateFeedSymbols::fromJson),
                     homeTopBar = obj.optJSONObject("homeTopBar")?.let(HomeTopBarSymbols::fromJson),
+                    homeFrame = obj.optJSONObject("homeFrame")?.let(HomeFrameSymbols::fromJson),
                     bottomBar = obj.optJSONObject("bottomBar")?.let(BottomBarSymbols::fromJson),
                     homeRecommendFeed = obj.optJSONObject("homeRecommendFeed")?.let(HomeRecommendFeedSymbols::fromJson),
                     homeRecommendTabs = obj.optJSONObject("homeRecommendTabs")?.let(HomeRecommendTabSymbols::fromJson),
@@ -147,7 +150,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 65
+    const val CURRENT = 66
 }
 
 data class HookPointStatus(
@@ -648,27 +651,31 @@ data class SettingsSymbols(
 data class BlockUpdateSymbols(
     val checkMethod: MethodDescriptor,
     val evidence: String,
+    val helperMethods: List<MethodDescriptor> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("checkMethod", checkMethod.toJson())
+        .put("helperMethods", helperMethods.toJsonArray { it.toJson() })
         .put("evidence", evidence)
 
     fun restore(classLoader: ClassLoader): RestoredBlockUpdateSymbols? {
         val owner = classLoader.loadClassOrNull(checkMethod.declaringClassName) ?: return null
         val method = checkMethod.restore(owner) ?: return null
-        return RestoredBlockUpdateSymbols(method)
+        return RestoredBlockUpdateSymbols(method, helperMethods.restoreAvailable(classLoader))
     }
 
     companion object {
         fun fromJson(obj: JSONObject): BlockUpdateSymbols = BlockUpdateSymbols(
             checkMethod = MethodDescriptor.fromJson(obj.getJSONObject("checkMethod")),
             evidence = obj.optString("evidence", "-"),
+            helperMethods = obj.optJSONArray("helperMethods").toList { MethodDescriptor.fromJson(it) },
         )
     }
 }
 
 data class RestoredBlockUpdateSymbols(
     val checkMethod: Method,
+    val helperMethods: List<Method> = emptyList(),
 )
 
 data class MineProfileSymbols(
@@ -1172,9 +1179,11 @@ data class HomeTopBarSymbols(
     val baseOnViewCreated: MethodDescriptor?,
     val defaultWordMethods: List<MethodDescriptor>,
     val evidence: String,
+    val composeGameMenuMethod: MethodDescriptor? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .putOpt("gameMenuMethod", gameMenuMethod?.toJson())
+        .putOpt("composeGameMenuMethod", composeGameMenuMethod?.toJson())
         .putOpt("baseOnViewCreated", baseOnViewCreated?.toJson())
         .put("defaultWordMethods", defaultWordMethods.toJsonArray { it.toJson() })
         .put("evidence", evidence)
@@ -1193,12 +1202,13 @@ data class HomeTopBarSymbols(
             descriptor.restore(owner)
         }
         if (defaultWord.size != defaultWordMethods.size) return null
-        return RestoredHomeTopBarSymbols(gameMenu, onViewCreated, defaultWord)
+        return RestoredHomeTopBarSymbols(gameMenu, onViewCreated, defaultWord, composeGameMenuMethod.restoreOptional(classLoader))
     }
 
     companion object {
         fun fromJson(obj: JSONObject): HomeTopBarSymbols = HomeTopBarSymbols(
             gameMenuMethod = obj.optJSONObject("gameMenuMethod")?.let(MethodDescriptor::fromJson),
+            composeGameMenuMethod = obj.optJSONObject("composeGameMenuMethod")?.let(MethodDescriptor::fromJson),
             baseOnViewCreated = obj.optJSONObject("baseOnViewCreated")?.let(MethodDescriptor::fromJson),
             defaultWordMethods = obj.optJSONArray("defaultWordMethods").toList { MethodDescriptor.fromJson(it) },
             evidence = obj.optString("evidence", "-"),
@@ -1210,6 +1220,7 @@ data class RestoredHomeTopBarSymbols(
     val gameMenuMethod: Method?,
     val baseOnViewCreated: Method?,
     val defaultWordMethods: List<Method>,
+    val composeGameMenuMethod: Method? = null,
 )
 
 data class BottomBarSymbols(
