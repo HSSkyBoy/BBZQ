@@ -19,6 +19,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         env.symbols?.mineProfile?.restore(classLoader)
     }
     private val seenMenuTitles: MutableSet<String> = Collections.synchronizedSet(HashSet())
+    private var composeVipInstalled = false
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -43,7 +44,10 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("MineProfileHook: Mine profile symbols missing for VIP hook")
         }
 
-        hookVipEntranceState()
+        if (!composeVipInstalled) {
+            composeVipInstalled = env.hookComposeMineVip()
+            if (!composeVipInstalled) hookVipEntranceState()
+        }
         hookMineComponentData()
         hookMenuGroupItems()
     }
