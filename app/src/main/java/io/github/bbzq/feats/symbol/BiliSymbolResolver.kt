@@ -1044,7 +1044,9 @@ object BiliSymbolResolver {
 
         // 2. PlayerSettingHelper (quality settings:)
         val defaultQnMethod = runCatching {
-            currentBridge.findMethod(
+            classLoader.loadClassOrNull("tz1.h")?.declaredMethods?.singleOrNull {
+                Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == Int::class.javaPrimitiveType
+            }?.apply { isAccessible = true } ?: currentBridge.findMethod(
                 FindMethod.create().matcher(MethodMatcher.create().usingStrings("quality settings:").paramCount(0)),
             ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
                 .filter { it.returnType == Int::class.javaPrimitiveType || it.returnType == Int::class.javaObjectType }
@@ -1343,6 +1345,24 @@ object BiliSymbolResolver {
         classLoader: ClassLoader,
         bridge: () -> DexKitBridge?,
     ): SymbolScanResult<BlockUpdateSymbols> {
+        val helperMethods = classLoader.loadClassOrNull("tv.danmaku.bili.update.api.UpdateHelper")?.declaredMethods
+            .orEmpty().filter { method ->
+                Modifier.isStatic(method.modifiers) && method.returnType == Void.TYPE && when (method.name) {
+                    "checkUpdateInStartup" -> method.parameterTypes.map { it.name } ==
+                        listOf("android.app.Activity", "tv.danmaku.bili.update.api.updater.IUpdater")
+                    "checkUpdateAndShowDialog" -> method.parameterTypes.map { it.name } ==
+                        listOf("android.content.Context", "tv.danmaku.bili.update.api.updater.IUpdater")
+                    "checkInternalUpdateFlag" -> method.parameterTypes.contentEquals(arrayOf(Context::class.java))
+                    else -> false
+                }
+            }.map(MethodDescriptor::of)
+        val direct = classLoader.loadClassOrNull("Bx1.c")?.declaredMethods?.singleOrNull {
+            it.isBlockUpdateCheckCandidate() && !it.isBridge && !it.isSynthetic
+        }
+        if (direct != null) {
+            val symbols = BlockUpdateSymbols(MethodDescriptor.of(direct), "verifiedNetworkOwner,helpers=${helperMethods.size}", helperMethods)
+            return SymbolScanResult.Found(symbols, "${direct.declaringClass.name}.${direct.name}", symbols.evidence)
+        }
         val currentBridge = bridge() ?: return SymbolScanResult.Missing("DexKitBridge unavailable")
         val searchErrors = ArrayList<String>()
         val signatureMethodData = runCatching {
@@ -1438,6 +1458,7 @@ object BiliSymbolResolver {
         }
         val symbols = BlockUpdateSymbols(
             checkMethod = MethodDescriptor.of(method),
+            helperMethods = helperMethods,
             evidence = "${method.declaringClass.name}.${method.name}," +
                 "signature=${signatureMethodData.size},string=${stringMethodData.size}," +
                 "stringHit=${method.toGenericString() in stringCandidateKeys}",

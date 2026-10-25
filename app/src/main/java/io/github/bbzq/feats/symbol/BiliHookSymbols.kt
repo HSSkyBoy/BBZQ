@@ -147,7 +147,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 65
+    const val CURRENT = 66
 }
 
 data class HookPointStatus(
@@ -648,27 +648,31 @@ data class SettingsSymbols(
 data class BlockUpdateSymbols(
     val checkMethod: MethodDescriptor,
     val evidence: String,
+    val helperMethods: List<MethodDescriptor> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("checkMethod", checkMethod.toJson())
+        .put("helperMethods", helperMethods.toJsonArray { it.toJson() })
         .put("evidence", evidence)
 
     fun restore(classLoader: ClassLoader): RestoredBlockUpdateSymbols? {
         val owner = classLoader.loadClassOrNull(checkMethod.declaringClassName) ?: return null
         val method = checkMethod.restore(owner) ?: return null
-        return RestoredBlockUpdateSymbols(method)
+        return RestoredBlockUpdateSymbols(method, helperMethods.restoreAvailable(classLoader))
     }
 
     companion object {
         fun fromJson(obj: JSONObject): BlockUpdateSymbols = BlockUpdateSymbols(
             checkMethod = MethodDescriptor.fromJson(obj.getJSONObject("checkMethod")),
             evidence = obj.optString("evidence", "-"),
+            helperMethods = obj.optJSONArray("helperMethods").toList { MethodDescriptor.fromJson(it) },
         )
     }
 }
 
 data class RestoredBlockUpdateSymbols(
     val checkMethod: Method,
+    val helperMethods: List<Method> = emptyList(),
 )
 
 data class MineProfileSymbols(

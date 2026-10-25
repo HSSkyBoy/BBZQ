@@ -4,10 +4,11 @@ import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.hookBefore
+import io.github.libxposed.api.XposedInterface
 
 class BlockUpdateHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
-        if (env.processName != env.packageName) return
+        if (env.processName != env.packageName || isInstalled) return
         if (!ModuleSettings.isBlockUpdateEnabled(prefs)) return
 
         val symbols = env.symbols?.blockUpdate?.restore(classLoader) ?: run {
@@ -15,16 +16,21 @@ class BlockUpdateHook(env: RoamingEnv) : BaseRoamingHook(env) {
             return
         }
 
-        env.hookBefore(symbols.checkMethod) { param ->
-            val exception = createUpdateException()
-            if (exception != null) {
-                throw exception
-            } else {
-                param.result = null
+        runCatching {
+            xposed.hook(symbols.checkMethod)
+                .setExceptionMode(XposedInterface.ExceptionMode.PASSTHROUGH)
+                .intercept { chain ->
+                    if (!ModuleSettings.isBlockUpdateEnabled(prefs)) return@intercept chain.proceed()
+                    throw createUpdateException() ?: return@intercept null
+                }
+            isInstalled = true
+            val helpers = symbols.helperMethods.count { method ->
+                env.hookBefore(method) { param ->
+                    if (ModuleSettings.isBlockUpdateEnabled(prefs)) param.result = null
+                }
             }
-        }
-
-        log("startHook: BlockUpdate, methods=1")
+            log("startHook: BlockUpdate, methods=${helpers + 1}")
+        }.onFailure { log("BlockUpdate hook registration failed", it) }
     }
 
     private fun createUpdateException(): Throwable? {
