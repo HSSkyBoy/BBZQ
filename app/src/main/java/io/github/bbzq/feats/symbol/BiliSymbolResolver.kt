@@ -93,6 +93,8 @@ object BiliSymbolResolver {
     private const val HP_VIDEO_DETAIL_RELATE_FEED = "VideoDetailRelateFilterHook.InstallPoints"
     private const val HP_HOME_TOP_BAR = "HomeTopBarPurifyHook.InstallPoints"
     private const val HP_HOME_TOP_BAR_GAME = "HomeTopBarPurifyHook.GameMenu"
+    private const val HP_HOME_TOP_BAR_COMPOSE_GAME = "HomeTopBarPurifyHook.ComposeGameMenu"
+    private const val HP_HOME_FRAME = "HomeFrameHook.TabData"
     private const val HP_HOME_TOP_BAR_VIEW_CREATED = "HomeTopBarPurifyHook.OnViewCreated"
     private const val HP_HOME_TOP_BAR_DEFAULT_WORD = "HomeTopBarPurifyHook.DefaultSearchWord"
     private const val HP_BOTTOM_BAR = "BottomBarHook.InstallPoints"
@@ -343,6 +345,11 @@ object BiliSymbolResolver {
         val homeTopBar = scanHookPoint(HP_HOME_TOP_BAR, hookPoints, scanErrors, log) {
             scanHomeTopBar(classLoader)
         }
+        val homeFrame = scanOptionalHookPoint(HP_HOME_FRAME, hookPoints, scanErrors, log) {
+            val symbols = locateHomeFrameSymbols(classLoader)
+            if (symbols == null) SymbolScanResult.Missing("new home frame model not verified")
+            else SymbolScanResult.Found(symbols, "HomeTabData", symbols.evidence)
+        }
         val bottomBar = scanHookPoint(HP_BOTTOM_BAR, hookPoints, scanErrors, log) {
             scanBottomBar(classLoader, ::bridge)
         }
@@ -410,6 +417,7 @@ object BiliSymbolResolver {
             videoDetailBannerAd = videoDetailBannerAd,
             videoDetailRelateFeed = videoDetailRelateFeed,
             homeTopBar = homeTopBar,
+            homeFrame = homeFrame,
             bottomBar = bottomBar,
             homeRecommendFeed = homeRecommendFeed,
             homeRecommendTabs = homeRecommendTabs,
@@ -2546,6 +2554,12 @@ object BiliSymbolResolver {
             it.name == "b" &&
                 it.parameterTypes.contentEquals(arrayOf(Menu::class.java, MenuInflater::class.java))
         }?.apply { isAccessible = true }
+        val composeGameMenuMethod = classLoader.loadClassOrNull(
+            "tv.danmaku.bili.home.components.topbar.TopRightComponent\$initTopRight\$1\$1",
+        )?.declaredMethods?.singleOrNull {
+            !Modifier.isStatic(it.modifiers) && it.name == "invoke" && it.returnType == Any::class.java &&
+                it.parameterTypes.map { type -> type.name } == listOf("java.util.List", "kotlin.coroutines.Continuation")
+        }?.apply { isAccessible = true }
 
         val baseFragmentClass = HOME_BASE_MAIN_FRAME_FRAGMENTS.firstNotNullOfOrNull(classLoader::loadClassOrNull)
         val baseOnViewCreated = baseFragmentClass?.declaredMethods?.firstOrNull {
@@ -2570,17 +2584,19 @@ object BiliSymbolResolver {
             emptyList()
         }
 
-        if (gameMenuMethod == null && baseOnViewCreated == null && defaultWordMethods.isEmpty()) {
+        if (gameMenuMethod == null && composeGameMenuMethod == null && baseOnViewCreated == null && defaultWordMethods.isEmpty()) {
             return SymbolScanResult.Missing("home top bar hook points not found")
         }
         val symbols = HomeTopBarSymbols(
             gameMenuMethod = gameMenuMethod?.let(MethodDescriptor::of),
+            composeGameMenuMethod = composeGameMenuMethod?.let(MethodDescriptor::of),
             baseOnViewCreated = baseOnViewCreated?.let(MethodDescriptor::of),
             defaultWordMethods = defaultWordMethods.map(MethodDescriptor::of),
-            evidence = "game=${gameMenuMethod != null},onViewCreated=${baseOnViewCreated != null},defaultWord=${defaultWordMethods.size}",
+            evidence = "game=${gameMenuMethod != null},compose=${composeGameMenuMethod != null},onViewCreated=${baseOnViewCreated != null},defaultWord=${defaultWordMethods.size}",
         )
         val hookPoints = listOf(
             childHookPoint(HP_HOME_TOP_BAR_GAME, gameMenuMethod != null, "game menu method not found"),
+            optionalChildHookPoint(HP_HOME_TOP_BAR_COMPOSE_GAME, composeGameMenuMethod != null, "Compose game menu method not found"),
             childHookPoint(HP_HOME_TOP_BAR_VIEW_CREATED, baseOnViewCreated != null, "base onViewCreated method not found"),
             childHookPoint(
                 HP_HOME_TOP_BAR_DEFAULT_WORD,

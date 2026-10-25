@@ -30,6 +30,7 @@ import io.github.bbzq.feats.hook.HomeRecommendTabHook
 import io.github.bbzq.feats.hook.ComponentPoolBlockHook
 import io.github.bbzq.feats.hook.HomeComponentHideHook
 import io.github.bbzq.feats.hook.HomeTopBarPurifyHook
+import io.github.bbzq.feats.hook.HomeFrameHook
 import io.github.bbzq.feats.hook.SearchPurifyHook
 import io.github.bbzq.feats.hook.SeaBangumiDetailHook
 import io.github.bbzq.feats.hook.SeaBangumiPlayHook
@@ -196,6 +197,7 @@ object RoamingRuntime {
                 ::HomeRecommendPreloadHook,
                 ::DynamicPageHook,
                 ::HomeTopBarPurifyHook,
+                ::HomeFrameHook,
                 ::SearchPurifyHook,
                 ::SeaBangumiSearchHook,
                 ::SeaBangumiPlayHook,
