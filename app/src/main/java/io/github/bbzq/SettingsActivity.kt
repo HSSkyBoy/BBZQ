@@ -17,6 +17,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.Window
 import android.view.WindowInsets
 import android.widget.FrameLayout
@@ -49,6 +50,8 @@ class SettingsActivity : Activity() {
     private var searchHighlightRunnable: Runnable? = null
 
     private val pageStack = ArrayDeque<String>()
+    private val pageScrollPositions = mutableMapOf<String, Int>()
+    private var currentPage: String? = null
     private lateinit var toolbarTitleView: TextView
     private lateinit var backButtonView: TextView
     private lateinit var contentContainer: FrameLayout
@@ -74,6 +77,11 @@ class SettingsActivity : Activity() {
             if (!savedStack.isNullOrEmpty()) {
                 pageStack.clear()
                 savedStack.forEach { pageStack.addLast(allowedPage(it)) }
+            }
+            savedInstanceState.getBundle(KEY_PAGE_SCROLL_POSITIONS)?.let { positions ->
+                positions.keySet().forEach { page ->
+                    pageScrollPositions[page] = positions.getInt(page)
+                }
             }
         }
         requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -176,12 +184,17 @@ class SettingsActivity : Activity() {
 
         setContentView(root)
         applyWindowInsets(contentRoot, toolbar, scrollView)
+        restorePageScrollPosition(initialPage, scrollView)
         updateBackCallback()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        saveCurrentScrollPosition()
         outState.putStringArrayList(KEY_PAGE_STACK, ArrayList(pageStack))
+        outState.putBundle(KEY_PAGE_SCROLL_POSITIONS, Bundle().apply {
+            pageScrollPositions.forEach { (page, scrollY) -> putInt(page, scrollY) }
+        })
     }
 
     override fun onDestroy() {
@@ -284,6 +297,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun switchContent(page: String) {
+        saveCurrentScrollPosition()
         clearSettingsSearchHighlight()
         currentFactory?.destroy()
         currentFactory = null
@@ -310,7 +324,28 @@ class SettingsActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
-        scrollView.post { revealPendingSearchTarget() }
+        restorePageScrollPosition(page, scrollView)
+    }
+
+    private fun saveCurrentScrollPosition() {
+        val page = currentPage ?: return
+        if (!::contentContainer.isInitialized) return
+        val scrollView = contentContainer.getChildAt(0) as? ScrollView ?: return
+        pageScrollPositions[page] = scrollView.scrollY
+    }
+
+    private fun restorePageScrollPosition(page: String, scrollView: ScrollView) {
+        currentPage = page
+        val scrollY = pageScrollPositions[page] ?: 0
+        // ScrollView clamps its offset during layout, so restore once the content is measured.
+        scrollView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                scrollView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                if (contentContainer.getChildAt(0) !== scrollView) return
+                scrollView.scrollTo(0, scrollY)
+                revealPendingSearchTarget()
+            }
+        })
     }
 
     private fun buildFactory(page: String): SettingsContentFactory =
@@ -763,6 +798,7 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val KEY_PAGE_STACK = "bbzq_page_stack"
+        private const val KEY_PAGE_SCROLL_POSITIONS = "bbzq_page_scroll_positions"
         const val EXTRA_PAGE = "settings_page"
         const val PAGE_ROOT = "root"
         const val PAGE_SKIP_VIDEO_AD_SWITCH = "skip_video_ad_switch"
