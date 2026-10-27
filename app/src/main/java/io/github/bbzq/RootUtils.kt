@@ -176,6 +176,13 @@ object RootUtils {
             mainHandler.post { callback(false, context.getString(R.string.restart_failed_pkg_not_found), null) }
             return
         }
+        val onRestartFinished: (Boolean, String?, String?) -> Unit = { success, errorMessage, method ->
+            if (success) {
+                launchBilibiliAfterRestart(context, launchIntent, method, callback)
+            } else {
+                callback(false, errorMessage, method)
+            }
+        }
         // -S stops the package and waits briefly before starting; -W reports the launch result.
         // Keep stop AND start privileged: ordinary background startActivity may be blocked.
         // am needs the intent: scheme; a bare #Intent string is parsed as a component name.
@@ -184,13 +191,39 @@ object RootUtils {
         executor.execute {
             val rootResult = restartViaRoot(command)
             if (rootResult.isSuccess) {
-                mainHandler.post { callback(true, null, "Root") }
+                mainHandler.post { onRestartFinished(true, null, "Root") }
                 return@execute
             }
             // Only touch Shizuku/Sui (including its permission dialog) after Root fails.
             mainHandler.post {
-                restartWithShizuku(context, command, rootResult.exceptionOrNull(), callback)
+                restartWithShizuku(context, command, rootResult.exceptionOrNull(), onRestartFinished)
             }
+        }
+    }
+
+    private fun launchBilibiliAfterRestart(
+        context: Context,
+        launchIntent: Intent,
+        method: String?,
+        callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
+    ) {
+        // Called on the main thread, before the success callback can finish SettingsActivity.
+        val result = runCatching {
+            val foregroundIntent = Intent(launchIntent).apply {
+                // Bring the launcher to the front even if SettingsActivity shares the host task.
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val launchContext = if (context is Activity && !context.isFinishing && !context.isDestroyed) {
+                context
+            } else {
+                context.applicationContext
+            }
+            launchContext.startActivity(foregroundIntent)
+        }
+        if (result.isSuccess) {
+            callback(true, null, method)
+        } else {
+            callback(false, "Could not open Bilibili: ${result.exceptionOrNull()?.message}", null)
         }
     }
 
