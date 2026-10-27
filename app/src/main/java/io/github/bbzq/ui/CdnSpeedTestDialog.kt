@@ -270,15 +270,19 @@ class CdnSpeedTestDialog(
 
         val radioGroup = RadioGroup(context)
         val rbParallel = RadioButton(context).apply {
+            id = View.generateViewId()
             text = context.getString(R.string.cdn_speed_test_mode_parallel) + " (" + context.getString(R.string.cdn_speed_test_mode_parallel_hint) + ")"
-            isChecked = ModuleSettings.isCdnSpeedTestParallel(prefs)
+
         }
         val rbSequential = RadioButton(context).apply {
+            id = View.generateViewId()
             text = context.getString(R.string.cdn_speed_test_mode_sequential) + " (" + context.getString(R.string.cdn_speed_test_mode_sequential_hint) + ")"
-            isChecked = !ModuleSettings.isCdnSpeedTestParallel(prefs)
+
         }
         radioGroup.addView(rbParallel)
         radioGroup.addView(rbSequential)
+        val isParallel = ModuleSettings.isCdnSpeedTestParallel(prefs)
+        radioGroup.check(if (isParallel) rbParallel.id else rbSequential.id)
         root.addView(radioGroup)
 
         AlertDialog.Builder(context)
@@ -288,7 +292,7 @@ class CdnSpeedTestDialog(
                 val size = sizeEdit.text.toString().toIntOrNull() ?: 16
                 val warmup = warmupEdit.text.toString().toIntOrNull() ?: 4
                 val cooldown = cooldownEdit.text.toString().toIntOrNull() ?: 0
-                val parallel = rbParallel.isChecked
+                val parallel = radioGroup.checkedRadioButtonId == rbParallel.id
 
                 prefs.edit()
                     .putInt(ModuleSettings.KEY_CDN_SPEED_TEST_SIZE_MB, size)
