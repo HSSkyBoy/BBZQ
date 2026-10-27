@@ -207,7 +207,7 @@ object RootUtils {
         method: String?,
         callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
     ) {
-        // Called on the main thread, before the success callback can finish SettingsActivity.
+        // Called on the main thread, before the dialog's success handler closes the module pages.
         val result = runCatching {
             val foregroundIntent = Intent(launchIntent).apply {
                 // Bring the launcher to the front even if SettingsActivity shares the host task.
@@ -287,7 +287,6 @@ object RootUtils {
     fun showRestartBilibiliDialog(
         activity: Activity,
         prefs: SharedPreferences,
-        onRestartSuccess: (() -> Unit)? = null,
     ) {
         AlertDialog.Builder(activity)
             .setTitle(R.string.restart_dialog_title)
@@ -304,7 +303,11 @@ object RootUtils {
                             activity.getString(R.string.restart_success_fallback)
                         }
                         Toast.makeText(activity.applicationContext, text, Toast.LENGTH_LONG).show()
-                        onRestartSuccess?.invoke()
+                        if (!activity.isDestroyed) {
+                            // Close all BBZQ pages below this one too, so Back from Bilibili
+                            // cannot reveal an old settings/intro page. Bilibili has its own affinity.
+                            activity.finishAffinity()
+                        }
                     } else {
                         if (!activity.isFinishing && !activity.isDestroyed) {
                             AlertDialog.Builder(activity)
