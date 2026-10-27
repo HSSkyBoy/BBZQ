@@ -3,6 +3,7 @@ package io.github.bbzq
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
@@ -177,7 +178,8 @@ object RootUtils {
         }
         // -S stops the package and waits briefly before starting; -W reports the launch result.
         // Keep stop AND start privileged: ordinary background startActivity may be blocked.
-        val intentUri = launchIntent.toUri(0).replace("'", "'\\''")
+        // am needs the intent: scheme; a bare #Intent string is parsed as a component name.
+        val intentUri = launchIntent.toUri(Intent.URI_INTENT_SCHEME).replace("'", "'\\''")
         val command = "am start -S -W --user current '$intentUri'"
         executor.execute {
             val rootResult = restartViaRoot(command)
