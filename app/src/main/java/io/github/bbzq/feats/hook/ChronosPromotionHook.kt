@@ -35,6 +35,7 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val hookedViewProgressClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private val hookedDmViewClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
     private val hookedCommandDmListClasses = Collections.newSetFromMap(ConcurrentHashMap<Class<*>, Boolean>())
+    private val geminiListFieldsCache = ConcurrentHashMap<Class<*>, List<java.lang.reflect.Field>>()
 
     override fun startHook() {
         if (env.processName != env.packageName) return
@@ -1177,20 +1178,25 @@ class ChronosPromotionHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun scrubGeminiOperationMaterials(widget: Any): Int {
         var removed = 0
-        widget.javaClass.allFields()
-            .filter { field -> MutableList::class.java.isAssignableFrom(field.type) }
-            .forEach { field ->
-                @Suppress("UNCHECKED_CAST")
-                val list = runCatching { field.get(widget) as? MutableList<Any?> }.getOrNull() ?: return@forEach
-                val iterator = list.iterator()
-                while (iterator.hasNext()) {
-                    val item = iterator.next() ?: continue
-                    if (materialBlockReason(item) != null) {
-                        iterator.remove()
-                        removed++
-                    }
+        val fields = geminiListFieldsCache.getOrPut(widget.javaClass) {
+            widget.javaClass.allFields()
+                .filter { field -> MutableList::class.java.isAssignableFrom(field.type) }
+                .toList()
+        }
+        fields.forEach { field ->
+            @Suppress("UNCHECKED_CAST")
+            val list = runCatching { field.get(widget) as? MutableList<Any?> }.getOrNull() ?: return@forEach
+            if (list.isEmpty()) return@forEach
+            val iterator = list.iterator()
+            while (iterator.hasNext()) {
+                val item = iterator.next() ?: continue
+                if (item is CharSequence || item is Number || item is Boolean) continue
+                if (materialBlockReason(item) != null) {
+                    iterator.remove()
+                    removed++
                 }
             }
+        }
         return removed
     }
 

@@ -3583,14 +3583,19 @@ object BiliSymbolResolver {
         }
         val geminiOperationWidget = addClass(CHRONOS_ID_GEMINI_OPERATION_WIDGET, GEMINI_OPERATION_WIDGET)
         geminiOperationWidget?.let { widget ->
-            addMethods(
-                CHRONOS_METHOD_GEMINI_OPERATION_RENDER,
+            val declared = widget.declaredMethods.filter {
+                it.name in GEMINI_OPERATION_RENDER_METHOD_NAMES &&
+                    it.parameterCount == 0 &&
+                    it.returnType == java.lang.Void.TYPE
+            }
+            val renderMethods = declared.ifEmpty {
                 widget.allMethods().filter {
                     it.name in GEMINI_OPERATION_RENDER_METHOD_NAMES &&
                         it.parameterCount == 0 &&
                         it.returnType == java.lang.Void.TYPE
-                },
-            )
+                }.take(1).toList()
+            }
+            addMethods(CHRONOS_METHOD_GEMINI_OPERATION_RENDER, renderMethods)
         }
         val geminiOperationObserver = addClass(CHRONOS_ID_GEMINI_OPERATION_OBSERVER, GEMINI_OPERATION_OBSERVER)
         geminiOperationObserver?.let { observer ->

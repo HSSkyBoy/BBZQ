@@ -40,7 +40,9 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private val mainHandler = Handler(Looper.getMainLooper())
         private val coverFetchExecutor = java.util.concurrent.Executors.newFixedThreadPool(2)
 
-        fun createSafeCopy(src: Bitmap, maxDim: Int = 1080): Bitmap? {
+        private const val MAX_COVER_DIM = 720
+
+        fun createSafeCopy(src: Bitmap, maxDim: Int = MAX_COVER_DIM): Bitmap? {
             return runCatching {
                 if (src.isRecycled) return null
                 val w = src.width.coerceAtLeast(1)
@@ -62,6 +64,11 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }.getOrNull()
         }
 
+        fun isMatchingUri(url: String?, activeUri: String?): Boolean {
+            if (url.isNullOrBlank() || activeUri.isNullOrBlank()) return false
+            return url == activeUri || activeUri.contains(url) || url.contains(activeUri)
+        }
+
         fun updateCoverToSessions(
             targetMediaKey: String?,
             bitmap: Bitmap,
@@ -69,11 +76,15 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         ) {
             if (bitmap.isRecycled) return
             val activeKey = currentActiveMediaKey
+            val activeUri = currentActiveArtUri
+            // If there is no active cover URI registered, do not bind arbitrary images
+            if (activeUri.isNullOrBlank()) return
             if (targetMediaKey != null && activeKey != null && targetMediaKey != activeKey) {
                 return
             }
+            if (bitmap === lastValidCoverBitmap) return
 
-            val safeCopy = createSafeCopy(bitmap, 1080) ?: return
+            val safeCopy = createSafeCopy(bitmap, MAX_COVER_DIM) ?: return
             lastValidCoverBitmap = safeCopy
             currentCoverMediaKey = targetMediaKey ?: activeKey
 
@@ -220,6 +231,9 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
             val metadata = arg0
 
+            // If this is our own metadata object, avoid re-processing and re-copying
+            if (metadata === lastCompatMetadataObj) return@hookBefore
+
             val mediaKey = runCatching {
                 val getString = metadata.javaClass.getMethod("getString", String::class.java)
                 (getString.invoke(metadata, "android.media.metadata.MEDIA_ID")
@@ -236,6 +250,10 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             if (isNewMedia) {
                 currentActiveMediaKey = mediaKey
                 currentActiveArtUri = artUri
+                if (currentCoverMediaKey != mediaKey) {
+                    lastValidCoverBitmap = null
+                    currentCoverMediaKey = null
+                }
             }
 
             val coverBitmap = runCatching {
@@ -246,11 +264,13 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
             if (coverBitmap != null && !coverBitmap.isRecycled) {
                 currentCoverMediaKey = mediaKey
-                val safeCopy = createSafeCopy(coverBitmap, 1080) ?: coverBitmap
-                lastValidCoverBitmap = safeCopy
+                if (coverBitmap !== lastValidCoverBitmap) {
+                    val safeCopy = createSafeCopy(coverBitmap, MAX_COVER_DIM) ?: coverBitmap
+                    lastValidCoverBitmap = safeCopy
+                }
                 lastCompatMetadataObj = metadata
             } else {
-                val cached = lastValidCoverBitmap
+                val cached = if (mediaKey != null && mediaKey == currentCoverMediaKey) lastValidCoverBitmap else null
                 if (cached != null && !cached.isRecycled && builderClass != null) {
                     runCatching {
                         val constructor = builderClass.getConstructor(metadata.javaClass)
@@ -289,12 +309,13 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         activeFwkSessionRef = java.lang.ref.WeakReference(fwkSession)
                     }
                     val meta = param.args.getOrNull(0) as? android.media.MediaMetadata ?: return@hookBefore
+                    if (meta === lastFwkMetadataObj) return@hookBefore
                     lastFwkMetadataObj = meta
 
                     val hasArt = meta.getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART) != null ||
                             meta.getBitmap(android.media.MediaMetadata.METADATA_KEY_ART) != null
                     if (!hasArt) {
-                        val cached = lastValidCoverBitmap
+                        val cached = if (currentActiveMediaKey != null && currentActiveMediaKey == currentCoverMediaKey) lastValidCoverBitmap else null
                         if (cached != null && !cached.isRecycled) {
                             val builder = android.media.MediaMetadata.Builder(meta)
                             builder.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, cached)
@@ -331,7 +352,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             ?: (param.args.getOrNull(2) as? Bitmap)
                             ?: return@hookAfter
                         val activeUri = currentActiveArtUri
-                        if (url.isNullOrBlank() || activeUri.isNullOrBlank() || url == activeUri || activeUri.contains(url) || url.contains(activeUri)) {
+                        if (isMatchingUri(url, activeUri)) {
                             updateCoverToSessions(currentActiveMediaKey, bitmap, builderClass)
                         }
                     }
@@ -362,7 +383,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             ?: (param.args.getOrNull(0) as? Bitmap)
                             ?: return@hookAfter
                         val activeUri = currentActiveArtUri
-                        if (url.isNullOrBlank() || activeUri.isNullOrBlank() || url == activeUri || activeUri.contains(url) || url.contains(activeUri)) {
+                        if (isMatchingUri(url, activeUri)) {
                             updateCoverToSessions(currentActiveMediaKey, bitmap, builderClass)
                         }
                     }
@@ -498,5 +519,3 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 }
-
-
