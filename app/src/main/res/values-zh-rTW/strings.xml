@@ -536,7 +536,7 @@
     <string name="component_pool_list_title">已發現的資源池</string>
     <string name="component_pool_unavailable_summary">暫無資源池資料。清單由嗶哩嗶哩依需求分批下發，需正常使用一段時間後逐步收集。</string>
     <string name="framework_gate_title">目前環境不受支援</string>
-    <string name="framework_gate_blocked_message">嗶哩增強僅支援在 LSPosed、NPatch、Vector 環境下使用，目前環境不在支援範圍內。</string>
+    <string name="framework_gate_blocked_message">嗶哩增強僅支援 LSPosed、NPatch、Vector 和支援遠端設定的 LSPatch 管理器模式，目前環境不在支援範圍內。</string>
     <string name="framework_gate_root_title">需要 Root 權限</string>
     <string name="framework_gate_root_message">LSPosed 環境需授予嗶哩增強 Root 權限後才能使用，請在授權管理（Magisk / KernelSU / APatch）中允許。</string>
     <string name="framework_gate_retry">重試</string>

@@ -10,8 +10,10 @@ import android.os.Build
 import android.os.Bundle
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
 import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.service.XposedService
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.util.Base64
 import java.util.Date
 import java.util.Locale
 
@@ -402,7 +404,13 @@ object RuntimeEnvironmentInfo {
 
     enum class FrameworkGate { ALLOWED, NEEDS_ROOT, BLOCKED }
 
-    fun frameworkGate(prefs: SharedPreferences): FrameworkGate {
+    fun frameworkGate(prefs: SharedPreferences, context: Context, intent: Intent?): FrameworkGate {
+        val runtimeValues = intent?.getBundleExtra(EXTRA_RUNTIME_VALUES)
+        val runtimeKind = runtimeValues?.getString(ModuleSettings.KEY_RUNTIME_KIND)
+        if (runtimeKind == "lspatch") {
+            return lspatchFrameworkGate(context, runtimeValues)
+        }
+
         val serviceInfo = ModuleRemotePreferences.getFrameworkInfo()
         val name = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_NAME) {
             serviceInfo?.frameworkName
@@ -419,8 +427,47 @@ object RuntimeEnvironmentInfo {
         return when (kind) {
             "lsposed" -> FrameworkGate.NEEDS_ROOT
             "npatch", "vector", UNKNOWN -> FrameworkGate.ALLOWED
+            // LSPatch 1.0 和 1.1 的宿主侧可能报告为 Vector。
+            "lspatch" -> if (runtimeKind == "vector") {
+                lspatchFrameworkGate(context, runtimeValues)
+            } else {
+                FrameworkGate.BLOCKED
+            }
             else -> FrameworkGate.BLOCKED
         }
+    }
+
+    private fun lspatchFrameworkGate(context: Context, runtimeValues: Bundle): FrameworkGate {
+        val hostPackage = runtimeValues.getString(ModuleSettings.KEY_RUNTIME_HOST_PACKAGE)
+        val metadata = hostPackage?.let { packageName ->
+            runCatching {
+                val pm = context.packageManager
+                val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong()))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+                }
+                info.metaData?.getString("lspatch")
+            }.getOrNull()
+        }
+        return if (isLspatchManagerSupported(
+                runtimeValues.getString(ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION),
+                runtimeValues.getString(ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES),
+                metadata,
+            )
+        ) FrameworkGate.ALLOWED else FrameworkGate.BLOCKED
+    }
+
+    internal fun isLspatchManagerSupported(apiVersion: String?, properties: String?, metadata: String?): Boolean {
+        val api = apiVersion?.toIntOrNull() ?: return false
+        val flags = properties?.toLongOrNull() ?: return false
+        if (api < XposedService.API_102 || (flags and XposedService.PROP_CAP_REMOTE) == 0L) return false
+        val encoded = metadata ?: return false
+        return runCatching {
+            val config = String(Base64.getDecoder().decode(encoded), Charsets.UTF_8)
+            JSONObject(config).opt("useManager") == true
+        }.getOrDefault(false)
     }
 
     fun classifyRuntimeKind(frameworkName: String): String {

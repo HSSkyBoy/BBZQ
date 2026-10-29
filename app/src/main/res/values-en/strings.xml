@@ -536,7 +536,7 @@
     <string name="component_pool_list_title">Discovered resource pools</string>
     <string name="component_pool_unavailable_summary">No resource pool data yet. Bilibili delivers the list in batches on demand, so it builds up after some normal use.</string>
     <string name="framework_gate_title">This environment is not supported</string>
-    <string name="framework_gate_blocked_message">BBZQ only works with LSPosed, NPatch or Vector. The current environment is not supported.</string>
+    <string name="framework_gate_blocked_message">BBZQ only supports LSPosed, NPatch, Vector and LSPatch manager mode with remote configuration. The current environment is not supported.</string>
     <string name="framework_gate_root_title">Root permission required</string>
     <string name="framework_gate_root_message">In LSPosed, BBZQ needs Root permission. Please allow it in your root manager (Magisk / KernelSU / APatch).</string>
     <string name="framework_gate_retry">Retry</string>

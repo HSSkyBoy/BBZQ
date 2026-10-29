@@ -81,7 +81,7 @@ class SettingsActivity : Activity() {
         RuntimeEnvironmentInfo.applyRuntimeSnapshotFromIntent(intent, prefs)
         LinkerGuard.triggerConflict(this)
 
-        when (RuntimeEnvironmentInfo.frameworkGate(prefs)) {
+        when (RuntimeEnvironmentInfo.frameworkGate(prefs, this, intent)) {
             RuntimeEnvironmentInfo.FrameworkGate.ALLOWED -> setupContent()
             RuntimeEnvironmentInfo.FrameworkGate.NEEDS_ROOT -> verifyRootThenSetup()
             RuntimeEnvironmentInfo.FrameworkGate.BLOCKED -> showFrameworkGateDialog(

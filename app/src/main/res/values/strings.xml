@@ -578,7 +578,7 @@
     <string name="component_pool_list_title">已发现的资源池</string>
     <string name="component_pool_unavailable_summary">暂无资源池数据。清单由哔哩哔哩按需分批下发，需正常使用一段时间后逐步收集。</string>
     <string name="framework_gate_title">当前环境不受支持</string>
-    <string name="framework_gate_blocked_message">哔哩增强仅支持在 LSPosed、NPatch、Vector 环境下使用，当前环境不在支持范围内。</string>
+    <string name="framework_gate_blocked_message">哔哩增强仅支持 LSPosed、NPatch、Vector 和支持远程配置的 LSPatch 管理器模式，当前环境不在支持范围内。</string>
     <string name="framework_gate_root_title">需要 Root 权限</string>
     <string name="framework_gate_root_message">LSPosed 环境需授予哔哩增强 Root 权限后才能使用，请在授权管理（Magisk / KernelSU / APatch）中允许。</string>
     <string name="framework_gate_retry">重试</string>
