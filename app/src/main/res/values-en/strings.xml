@@ -525,6 +525,7 @@
     <string name="restart_success_fallback">Bilibili restarted</string>
     <string name="restart_failed_root_required">Could not get Root permission. Make sure the device is rooted and BBZQ is allowed in your root manager (Magisk / KernelSU / APatch). Without Root, Shizuku can also force-stop apps.</string>
     <string name="restart_failed_pkg_not_found">Bilibili is not installed.</string>
+    <string name="restart_failed_details">Restart failed. Check Root or Shizuku permission and the app status.\n\n%1$s</string>
     <string name="section_component_pool">Component pool blocking</string>
     <string name="component_pool_title">App base component pool</string>
     <string name="component_pool_info_summary">Blocks the resource pool list from being delivered and stops component modules from downloading. Matches \"App base components\" in the storage settings.\nNote: this only blocks later downloads. Space already used must be cleared manually in Bilibili\'s storage settings.</string>

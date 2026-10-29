@@ -525,6 +525,7 @@
     <string name="restart_success_fallback">嗶哩嗶哩已重新啟動</string>
     <string name="restart_failed_root_required">取得 Root 權限失敗，請確認裝置已 Root，並在授權管理（Magisk / KernelSU / APatch）中允許 BBZQ 的 Root 權限。如果你沒有 Root 權限，Shizuku 也能提供強制停止應用程式的能力。</string>
     <string name="restart_failed_pkg_not_found">找不到已安裝的嗶哩嗶哩用戶端。</string>
+    <string name="restart_failed_details">重新啟動失敗，請檢查 Root 或 Shizuku 授權及用戶端狀態。\n\n%1$s</string>
     <string name="section_component_pool">元件庫攔截</string>
     <string name="component_pool_title">App 基礎元件庫</string>
     <string name="component_pool_info_summary">攔截資源池清單下發，阻止元件庫模組繼續下載，對應儲存設定中的「App 基礎元件庫」。\n注意：僅攔截後續下載，已佔用的空間需在嗶哩嗶哩儲存設定中手動清理。</string>

@@ -13,6 +13,7 @@ import android.widget.Toast
 import io.github.bbzq.utils.ReflectionUtils
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import rikka.shizuku.Shizuku
 import rikka.sui.Sui
 
@@ -20,6 +21,7 @@ object RootUtils {
     private const val SHIZUKU_REQUEST_CODE = 0xBB29
 
     private val executor = Executors.newSingleThreadExecutor()
+    private val outputExecutor = Executors.newCachedThreadPool()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     val CANDIDATE_PACKAGES = listOf(
@@ -90,16 +92,6 @@ object RootUtils {
         }.getOrDefault(false)
     }
 
-    /**
-     * 通过 Shizuku / Sui 强制停止目标应用。
-     * 利用 Shizuku/Sui 提供的高权限进程执行 `am force-stop`：Sui 下以 root 运行、
-     * Shizuku 下以 adb shell 运行，均等价于 root 但无需设备 root。
-     */
-    private fun forceStopViaShizuku(targetPackage: String): Boolean {
-        if (!isShizukuReady()) return false
-        return runCommandViaShizuku(arrayOf("am", "force-stop", targetPackage))
-    }
-
     private val shizukuNewProcessMethod by lazy {
         runCatching {
             Shizuku::class.java.getDeclaredMethod(
@@ -113,14 +105,15 @@ object RootUtils {
 
     // Shizuku 13.x 将 newProcess 标记为 private（@RestrictTo(LIBRARY)），但运行时仍可用，
     // 通过反射调用以获得高权限进程。
-    private fun runCommandViaShizuku(command: Array<String>): Boolean {
+    private fun restartViaShizuku(command: String): Result<Unit> {
         return runCatching {
-            val method = shizukuNewProcessMethod ?: return false
-            val process = ReflectionUtils.safeInvoke(method, null, command, null, null) as? Process
-            val exitCode = process?.waitFor()
-            process?.destroy()
-            exitCode == 0
-        }.getOrDefault(false)
+            check(isShizukuReady()) { "Shizuku/Sui is unavailable or permission was denied" }
+            val method = checkNotNull(shizukuNewProcessMethod) { "Shizuku process API is unavailable" }
+            val args = arrayOf("sh", "-c", command)
+            val process = ReflectionUtils.safeInvoke(method, null, args, null, null) as? Process
+            checkNotNull(process) { "Could not create Shizuku/Sui process" }
+            awaitRestart(process)
+        }
     }
 
     fun executeSuCommand(vararg commands: String): Result<Int> {
@@ -142,8 +135,29 @@ object RootUtils {
         }
     }
 
-    private fun forceStopViaRoot(targetPackage: String): Boolean {
-        return executeSuCommand("am force-stop $targetPackage").isSuccess
+    private fun restartViaRoot(command: String): Result<Unit> = runCatching {
+        val process = ProcessBuilder("su", "-c", command)
+            .redirectErrorStream(true)
+            .start()
+        awaitRestart(process)
+    }
+
+    private fun awaitRestart(process: Process) {
+        // Drain both pipes while waiting: am -W may produce output before it exits.
+        val stdout = outputExecutor.submit<String> { process.inputStream.bufferedReader().use { it.readText() } }
+        val stderr = outputExecutor.submit<String> { process.errorStream.bufferedReader().use { it.readText() } }
+        try {
+            check(process.waitFor(60, TimeUnit.SECONDS)) { "Restart command timed out" }
+            val output = stdout.get(5, TimeUnit.SECONDS) + "\n" + stderr.get(5, TimeUnit.SECONDS)
+            // Some Android versions return zero even when am could not launch the activity.
+            check(process.exitValue() == 0 && output.lineSequence().any { it.trim() == "Status: ok" }) {
+                output.trim().takeLast(2000).ifBlank { "Restart command exited with code ${process.exitValue()}" }
+            }
+        } finally {
+            process.destroy()
+            stdout.cancel(true)
+            stderr.cancel(true)
+        }
     }
 
     // ---- 对外入口 ----
@@ -154,24 +168,89 @@ object RootUtils {
         callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
     ) {
         val targetPackage = resolveBilibiliPackage(context, prefs)
-        ensureSuiInitialized(context)
+        // Resolve the real launcher before stopping anything; do not hard-code a Bilibili activity.
+        val launchIntent = runCatching {
+            context.packageManager.getLaunchIntentForPackage(targetPackage)
+        }.getOrNull()
+        if (launchIntent?.component == null) {
+            mainHandler.post { callback(false, context.getString(R.string.restart_failed_pkg_not_found), null) }
+            return
+        }
+        val onRestartFinished: (Boolean, String?, String?) -> Unit = { success, errorMessage, method ->
+            if (success) {
+                launchBilibiliAfterRestart(context, launchIntent, method, callback)
+            } else {
+                callback(false, errorMessage, method)
+            }
+        }
+        // -S stops the package and waits briefly before starting; -W reports the launch result.
+        // Keep stop AND start privileged: ordinary background startActivity may be blocked.
+        // am needs the intent: scheme; a bare #Intent string is parsed as a component name.
+        val intentUri = launchIntent.toUri(Intent.URI_INTENT_SCHEME).replace("'", "'\\''")
+        val command = "am start -S -W --user current '$intentUri'"
+        executor.execute {
+            val rootResult = restartViaRoot(command)
+            if (rootResult.isSuccess) {
+                mainHandler.post { onRestartFinished(true, null, "Root") }
+                return@execute
+            }
+            // Only touch Shizuku/Sui (including its permission dialog) after Root fails.
+            mainHandler.post {
+                restartWithShizuku(context, command, rootResult.exceptionOrNull(), onRestartFinished)
+            }
+        }
+    }
 
+    private fun launchBilibiliAfterRestart(
+        context: Context,
+        launchIntent: Intent,
+        method: String?,
+        callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
+    ) {
+        // Called on the main thread, before the dialog's success handler closes the module pages.
+        val result = runCatching {
+            val foregroundIntent = Intent(launchIntent).apply {
+                // Bring the launcher to the front even if SettingsActivity shares the host task.
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val launchContext = if (context is Activity && !context.isFinishing && !context.isDestroyed) {
+                context
+            } else {
+                context.applicationContext
+            }
+            launchContext.startActivity(foregroundIntent)
+        }
+        if (result.isSuccess) {
+            callback(true, null, method)
+        } else {
+            callback(false, "Could not open Bilibili: ${result.exceptionOrNull()?.message}", null)
+        }
+    }
+
+    private fun restartWithShizuku(
+        context: Context,
+        command: String,
+        rootError: Throwable?,
+        callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
+    ) {
+        ensureSuiInitialized(context)
         val shizukuPing = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         val shizukuPerm = runCatching { Shizuku.checkSelfPermission() }.getOrDefault(PackageManager.PERMISSION_DENIED)
         val shizukuNeedsAuth = !Sui.isSui() && shizukuPing && shizukuPerm != PackageManager.PERMISSION_GRANTED
 
-        if (shizukuNeedsAuth && context is Activity) {
+        if (shizukuNeedsAuth && context is Activity && !context.isFinishing && !context.isDestroyed) {
             val listener = object : Shizuku.OnRequestPermissionResultListener {
                 override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
                     if (requestCode != SHIZUKU_REQUEST_CODE) return
                     runCatching { Shizuku.removeRequestPermissionResultListener(this) }
-                    val granted = grantResult == PackageManager.PERMISSION_GRANTED
-                    // 在后台线程执行，避免主线程在 waitFor 或 Root 弹窗授权时发生 ANR
+                    // Run the entire restart off the main thread, including waiting for launch.
                     executor.execute {
-                        val viaShizuku = granted && forceStopViaShizuku(targetPackage)
-                        val effective = if (viaShizuku) true else forceStopViaRoot(targetPackage)
-                        val method = if (effective) (if (viaShizuku) "Shizuku/Sui" else "Root") else null
-                        finishRestart(context, effective, callback, targetPackage, method)
+                        val result = if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                            restartViaShizuku(command)
+                        } else {
+                            Result.failure(IllegalStateException("Shizuku permission was denied"))
+                        }
+                        finishRestart(result, rootError, callback)
                     }
                 }
             }
@@ -181,69 +260,40 @@ object RootUtils {
                 Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
             }.onFailure {
                 runCatching { Shizuku.removeRequestPermissionResultListener(listener) }
-                executor.execute {
-                    val ok = forceStopViaRoot(targetPackage)
-                    finishRestart(context, ok, callback, targetPackage, if (ok) "Root" else null)
-                }
+                finishRestart(Result.failure(it), rootError, callback)
             }
             return
         }
 
         executor.execute {
-            // 1) 优先尝试 Shizuku / Sui（二者共用同一 API）
-            var isSuccess = forceStopViaShizuku(targetPackage)
-            var method: String? = if (isSuccess) "Shizuku/Sui" else null
-            // 2) Shizuku / Sui 失败，再兜底 Root (su)
-            if (!isSuccess) {
-                isSuccess = forceStopViaRoot(targetPackage)
-                method = if (isSuccess) "Root" else null
-            }
-            finishRestart(context, isSuccess, callback, targetPackage, method)
+            finishRestart(restartViaShizuku(command), rootError, callback)
         }
     }
 
     private fun finishRestart(
-        context: Context,
-        success: Boolean,
+        result: Result<Unit>,
+        rootError: Throwable?,
         callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
-        targetPackage: String,
-        method: String? = null,
     ) {
         mainHandler.post {
-            if (success) {
-                launchAndCallback(context, targetPackage, callback, method)
+            if (result.isSuccess) {
+                callback(true, null, "Shizuku/Sui")
             } else {
-                callback(false, "shizuku/sui 与 root 均未能强制停止 $targetPackage", null)
+                callback(false, "Root: ${rootError?.message}\nShizuku/Sui: ${result.exceptionOrNull()?.message}", null)
             }
         }
-    }
-
-    private fun launchAndCallback(
-        context: Context,
-        targetPackage: String,
-        callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
-        method: String?,
-    ) {
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(targetPackage)
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // 授权期间 SettingsActivity 可能已被销毁，必须用 applicationContext 启动
-            runCatching { context.applicationContext.startActivity(launchIntent) }
-        }
-        callback(true, null, method)
     }
 
     fun showRestartBilibiliDialog(
         activity: Activity,
         prefs: SharedPreferences,
-        onRestartSuccess: (() -> Unit)? = null,
     ) {
         AlertDialog.Builder(activity)
             .setTitle(R.string.restart_dialog_title)
             .setMessage(R.string.restart_dialog_message)
             .setPositiveButton(R.string.restart_dialog_confirm) { _, _ ->
                 Toast.makeText(activity.applicationContext, R.string.restart_in_progress, Toast.LENGTH_SHORT).show()
-                restartBilibili(activity, prefs) { success, _, method ->
+                restartBilibili(activity, prefs) { success, errorMessage, method ->
                     if (success) {
                         // 成功后会自动拉起哔哩哔哩，设置页被切到后台；
                         // 必须用 applicationContext，否则依附于后台 Activity 的 toast 不显示。
@@ -253,12 +303,18 @@ object RootUtils {
                             activity.getString(R.string.restart_success_fallback)
                         }
                         Toast.makeText(activity.applicationContext, text, Toast.LENGTH_LONG).show()
-                        onRestartSuccess?.invoke()
+                        if (!activity.isDestroyed) {
+                            // Close all BBZQ pages below this one too, so Back from Bilibili
+                            // cannot reveal an old settings/intro page. Bilibili has its own affinity.
+                            activity.finishAffinity()
+                        }
                     } else {
                         if (!activity.isFinishing && !activity.isDestroyed) {
                             AlertDialog.Builder(activity)
                                 .setTitle(R.string.restart_dialog_title)
-                                .setMessage(R.string.restart_failed_root_required)
+                                .setMessage(errorMessage?.let {
+                                    activity.getString(R.string.restart_failed_details, it)
+                                } ?: activity.getString(R.string.restart_failed_root_required))
                                 .setPositiveButton(android.R.string.ok, null)
                                 .show()
                         }

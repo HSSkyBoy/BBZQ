@@ -539,9 +539,7 @@ class SettingsActivity : Activity() {
                 isFocusable = true
                 setPadding(dp(8), dp(4), dp(8), dp(4))
                 setOnClickListener {
-                    RootUtils.showRestartBilibiliDialog(this@SettingsActivity, prefs) {
-                        finish()
-                    }
+                    RootUtils.showRestartBilibiliDialog(this@SettingsActivity, prefs)
                 }
             })
 
