@@ -1,113 +1,81 @@
 package io.github.bbzq
 
 import android.content.Context
-import android.net.Uri
-import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.concurrent.thread
+import top.nkbe.npatch.remote.NPatchRemoteClient as OfficialNPatchRemoteClient
 
 /**
- * Client for connecting to NPatch Remote Store Provider (top.nkbe.npatch.remote).
- * Enables rootless module configuration synchronization with NPatch Manager.
+ * Client adapter connecting to NPatch Manager via official NPatch-Remote-API SDK.
+ * Enables rootless module configuration synchronization with NPatch Remote Store.
  */
 object NPatchRemoteClient {
     private const val TAG = "BBZQ-Remote"
-    const val DEFAULT_NPATCH_AUTHORITY = "top.nkbe.npatch.remote"
 
     private val isConnecting = AtomicBoolean(false)
     @Volatile private var isConnected = false
 
     fun isConnected(): Boolean = isConnected
 
+    fun isAvailable(context: Context): Boolean = runCatching {
+        OfficialNPatchRemoteClient.isAvailable(context)
+    }.getOrDefault(false)
+
+    fun connect(context: Context): Boolean = runCatching {
+        val client = OfficialNPatchRemoteClient.connect(context)
+        val binder = client.service.asBinder()
+        if (binder.isBinderAlive && feedBinderToXposedHelper(binder)) {
+            isConnected = true
+            Log.i(TAG, "Successfully connected to NPatch Remote XposedService")
+            true
+        } else {
+            false
+        }
+    }.getOrDefault(false)
+
     fun connectAsync(context: Context): CompletableFuture<Boolean> {
         val future = CompletableFuture<Boolean>()
-        thread(name = "BBZQ-NPatchRemoteConnect", isDaemon = true) {
-            val result = connect(context)
-            future.complete(result)
-        }
+        OfficialNPatchRemoteClient.connectAsync(context)
+            .thenAccept { client ->
+                val binder = runCatching { client.service.asBinder() }.getOrNull()
+                val success = if (binder != null && binder.isBinderAlive) {
+                    feedBinderToXposedHelper(binder).also { fed ->
+                        if (fed) isConnected = true
+                    }
+                } else {
+                    false
+                }
+                future.complete(success)
+            }
+            .exceptionally { error ->
+                Log.d(TAG, "NPatch Remote async connection failed: ${error.message}")
+                future.complete(false)
+                null
+            }
         return future
     }
 
-    fun connect(context: Context, customAuthority: String? = null): Boolean {
-        val authority = customAuthority ?: DEFAULT_NPATCH_AUTHORITY
-        val targetPackage = context.packageName
-        val extras = Bundle().apply {
-            putString("modulePackageName", targetPackage)
-            putString("module_package", targetPackage)
-            putInt("calling_uid", android.os.Process.myUid())
-        }
+    fun tryConnectBackground(context: Context) {
+        if (isConnected || !isConnecting.compareAndSet(false, true)) return
 
-        val binder = queryProviderBinder(context, authority, targetPackage, extras)
-        if (binder != null && binder.isBinderAlive) {
-            if (feedBinderToXposedHelper(binder)) {
-                isConnected = true
-                Log.i(TAG, "Successfully connected to NPatch Remote XposedService via authority: $authority")
-                return true
-            }
-        }
-        return false
-    }
-
-    fun tryConnectBackground(context: Context, maxRetries: Int = 3, retryIntervalMs: Long = 1000L) {
-        if (!isConnecting.compareAndSet(false, true)) return
-
-        thread(name = "BBZQ-RemoteProbe", isDaemon = true) {
-            try {
-                for (attempt in 1..maxRetries) {
-                    if (connect(context)) {
-                        break
-                    }
-                    if (attempt < maxRetries) {
-                        Thread.sleep(retryIntervalMs)
+        OfficialNPatchRemoteClient.connectAsync(context)
+            .thenAccept { client ->
+                val binder = runCatching { client.service.asBinder() }.getOrNull()
+                if (binder != null && binder.isBinderAlive) {
+                    if (feedBinderToXposedHelper(binder)) {
+                        isConnected = true
+                        Log.i(TAG, "Successfully connected to NPatch Remote XposedService")
                     }
                 }
-            } catch (t: Throwable) {
-                Log.w(TAG, "NPatch background connect probe error", t)
-            } finally {
                 isConnecting.set(false)
             }
-        }
-    }
-
-    private fun queryProviderBinder(
-        context: Context,
-        authority: String,
-        targetPackage: String,
-        extras: Bundle,
-    ): IBinder? {
-        val uri = Uri.parse("content://$authority")
-        val methods = listOf(
-            "getRemoteService",
-            "getInjectedRemoteService",
-            "connect",
-            "getXposedService",
-            "SendBinder",
-            "getBinder",
-        )
-
-        for (method in methods) {
-            try {
-                val bundle = context.contentResolver.call(uri, method, null, extras)
-                    ?: context.contentResolver.call(uri, method, targetPackage, extras)
-                    ?: continue
-                val binder = bundle.getBinder("binder")
-                    ?: bundle.getBinder("service")
-                    ?: bundle.getBinder("xposed_service")
-                    ?: bundle.getBinder("extra_binder")
-                if (binder != null && binder.isBinderAlive) {
-                    return binder
-                }
-            } catch (e: SecurityException) {
-                Log.d(TAG, "NPatch Provider $authority security exception: ${e.message}")
-                break
-            } catch (t: Throwable) {
-                Log.d(TAG, "Querying NPatch $authority with method $method failed: ${t.message}")
+            .exceptionally { error ->
+                Log.d(TAG, "NPatch Remote background connect skipped: ${error.message}")
+                isConnecting.set(false)
+                null
             }
-        }
-        return null
     }
 
     private fun feedBinderToXposedHelper(binder: IBinder): Boolean {

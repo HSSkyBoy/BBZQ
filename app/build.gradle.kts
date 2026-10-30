@@ -169,11 +169,13 @@ configurations.all {
 
 dependencies {
     compileOnly(libs.libxposed.api)
+    compileOnly(libs.libxposed.aidl)
     implementation(libs.libxposed.service)
     implementation(libs.dexkit)
     implementation(libs.okhttp)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+    implementation(libs.npatch.remote.api)
     testImplementation(libs.junit)
     testImplementation(libs.json)
 }
