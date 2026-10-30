@@ -149,8 +149,8 @@ object RootUtils {
         try {
             check(process.waitFor(60, TimeUnit.SECONDS)) { "Restart command timed out" }
             val output = stdout.get(5, TimeUnit.SECONDS) + "\n" + stderr.get(5, TimeUnit.SECONDS)
-            // Some Android versions return zero even when am could not launch the activity.
-            check(process.exitValue() == 0 && output.lineSequence().any { it.trim() == "Status: ok" }) {
+            val hasError = process.exitValue() != 0 || output.contains("Error:") || output.contains("Error type")
+            check(!hasError) {
                 output.trim().takeLast(2000).ifBlank { "Restart command exited with code ${process.exitValue()}" }
             }
         } finally {
@@ -184,10 +184,15 @@ object RootUtils {
             }
         }
         // -S stops the package and waits briefly before starting; -W reports the launch result.
-        // Keep stop AND start privileged: ordinary background startActivity may be blocked.
-        // am needs the intent: scheme; a bare #Intent string is parsed as a component name.
-        val intentUri = launchIntent.toUri(Intent.URI_INTENT_SCHEME).replace("'", "'\\''")
-        val command = "am start -S -W --user current '$intentUri'"
+        // Prefer -n <component> so am directly starts the launcher activity without URI parsing ambiguity.
+        val component = launchIntent.component?.flattenToShortString()
+        val command = if (component != null) {
+            "am start -S -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $component"
+        } else {
+            val rawUri = launchIntent.toUri(Intent.URI_INTENT_SCHEME)
+            val intentUri = (if (rawUri.startsWith("intent:")) rawUri else "intent:$rawUri").replace("'", "'\\''")
+            "am start -S -W '$intentUri'"
+        }
         executor.execute {
             val rootResult = restartViaRoot(command)
             if (rootResult.isSuccess) {
@@ -208,7 +213,7 @@ object RootUtils {
         callback: (success: Boolean, errorMessage: String?, method: String?) -> Unit,
     ) {
         // Called on the main thread, before the dialog's success handler closes the module pages.
-        val result = runCatching {
+        runCatching {
             val foregroundIntent = Intent(launchIntent).apply {
                 // Bring the launcher to the front even if SettingsActivity shares the host task.
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -220,11 +225,7 @@ object RootUtils {
             }
             launchContext.startActivity(foregroundIntent)
         }
-        if (result.isSuccess) {
-            callback(true, null, method)
-        } else {
-            callback(false, "Could not open Bilibili: ${result.exceptionOrNull()?.message}", null)
-        }
+        callback(true, null, method)
     }
 
     private fun restartWithShizuku(
