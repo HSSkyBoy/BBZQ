@@ -417,10 +417,34 @@ object RuntimeEnvironmentInfo {
             classifyRuntimeKind(name)
         }
         return when (kind) {
-            "lsposed" -> FrameworkGate.NEEDS_ROOT
+            "lsposed" -> {
+                if (isDisguisedLsposed(prefs)) {
+                    FrameworkGate.BLOCKED
+                } else {
+                    FrameworkGate.NEEDS_ROOT
+                }
+            }
             "npatch", "vector", UNKNOWN -> FrameworkGate.ALLOWED
             else -> FrameworkGate.BLOCKED
         }
+    }
+
+    private fun isDisguisedLsposed(prefs: SharedPreferences): Boolean {
+        val patchMode = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_PATCH_MODE)
+        val hostSourceKind = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_HOST_SOURCE_KIND)
+        if (patchMode == "integrated" || hostSourceKind == "lspatch-origin" || "lspatch" in hostSourceKind) {
+            return true
+        }
+        return runCatching {
+            val maps = java.io.File("/proc/self/maps")
+            if (maps.exists() && maps.canRead()) {
+                maps.bufferedReader().useLines { lines ->
+                    lines.any { line ->
+                        "liblspatch" in line || "/lspatch/" in line || "libsandhook" in line || "libwhale" in line
+                    }
+                }
+            } else false
+        }.getOrDefault(false)
     }
 
     fun classifyRuntimeKind(frameworkName: String): String {

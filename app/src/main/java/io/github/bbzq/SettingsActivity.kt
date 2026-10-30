@@ -92,11 +92,7 @@ class SettingsActivity : Activity() {
         when (RuntimeEnvironmentInfo.frameworkGate(prefs)) {
             RuntimeEnvironmentInfo.FrameworkGate.ALLOWED -> setupContent()
             RuntimeEnvironmentInfo.FrameworkGate.NEEDS_ROOT -> verifyRootThenSetup()
-            RuntimeEnvironmentInfo.FrameworkGate.BLOCKED -> showFrameworkGateDialog(
-                R.string.framework_gate_title,
-                R.string.framework_gate_blocked_message,
-                retry = false,
-            )
+            RuntimeEnvironmentInfo.FrameworkGate.BLOCKED -> finish()
         }
     }
 
@@ -108,11 +104,7 @@ class SettingsActivity : Activity() {
                 if (granted) {
                     setupContent()
                 } else {
-                    showFrameworkGateDialog(
-                        R.string.framework_gate_root_title,
-                        R.string.framework_gate_root_message,
-                        retry = true,
-                    )
+                    finish()
                 }
             }
         }.start()
