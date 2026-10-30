@@ -14,6 +14,16 @@ internal fun RoamingEnv.hookJavaMoss(
     replyName: String,
     enabled: () -> Boolean,
     filter: (Any) -> Any,
+): Int = hookJavaMoss(mossName, rpc, requestName, replyName, enabled, null, filter)
+
+internal fun RoamingEnv.hookJavaMoss(
+    mossName: String,
+    rpc: String,
+    requestName: String,
+    replyName: String,
+    enabled: () -> Boolean,
+    requestFilter: ((Any) -> Any)?,
+    filter: (Any) -> Any,
 ): Int {
     val owner = classLoader.findClassOrNull(mossName) ?: return 0
     val request = classLoader.findClassOrNull(requestName) ?: return 0
@@ -31,6 +41,13 @@ internal fun RoamingEnv.hookJavaMoss(
         it.name == "execute${rpc.replaceFirstChar(Char::uppercaseChar)}" && it.returnType == reply &&
             it.parameterTypes.contentEquals(arrayOf(request))
     }?.let { method ->
+        if (requestFilter != null) {
+            hookBefore(method) { param ->
+                if (!enabled()) return@hookBefore
+                val req = param.args.getOrNull(0) ?: return@hookBefore
+                runCatching { requestFilter(req) }.onSuccess { param.args[0] = it }
+            }
+        }
         hookAfter(method) { param ->
             val value = param.result ?: return@hookAfter
             runCatching { transform(value) }.onSuccess { param.result = it }.onFailure(failure)
@@ -44,6 +61,12 @@ internal fun RoamingEnv.hookJavaMoss(
     }?.let { method ->
         if (hookBefore(method) { param ->
                 if (!enabled()) return@hookBefore
+                if (requestFilter != null) {
+                    val req = param.args.getOrNull(0)
+                    if (req != null) {
+                        runCatching { requestFilter(req) }.onSuccess { param.args[0] = it }
+                    }
+                }
                 val delegate = param.args.getOrNull(1) ?: return@hookBefore
                 KotlinMossBridge.wrap(method.parameterTypes[1], delegate, transform, failure)?.let { param.args[1] = it }
             }) installed++

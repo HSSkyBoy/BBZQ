@@ -246,63 +246,91 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             cleanupReplyPayload(payload, currentReplyCleanupOptions(), ::cleanupKotlinReplyDecorations, rpc == "replyInfo")
             payload
         }
+        val requestType = when (rpc) {
+            "mainList" -> "MainListReq"
+            "detailList" -> "DetailListReq"
+            "dialogList" -> "DialogListReq"
+            "foldList" -> "FoldListReq"
+            "replyInfo" -> "ReplyInfoReq"
+            "hotspotPage" -> "HotspotPageReq"
+            else -> "${rpc.replaceFirstChar(Char::uppercaseChar)}Req"
+        }
+        val requestName = "com.bapis.bilibili.main.community.reply.v1.$requestType"
         val javaHooks = if (rpc == "mainList") 0 else env.hookJavaMoss(
             "com.bapis.bilibili.main.community.reply.v1.ReplyMoss", rpc,
-            "com.bapis.bilibili.main.community.reply.v1.${rpc.replaceFirstChar(Char::uppercaseChar)}Req",
+            requestName,
             "com.bapis.bilibili.main.community.reply.v1.$reply", enabled,
+            requestFilter = ::disableSearchUnderline,
         ) { payload -> copyProtobufReply(payload) { cleanup(it) } }
         javaHooks + env.hookKotlinMoss(
             "com.bapis.bilibili.main.community.reply.v1.KReplyMoss",
             rpc,
             "com.bapis.bilibili.main.community.reply.v1.$reply",
             enabled = enabled,
-            requestName = if (rpc == "mainList") "com.bapis.bilibili.main.community.reply.v1.MainListReq" else null,
-            requestFilter = if (rpc == "mainList") ::disableSearchUnderline else null,
+            requestName = requestName,
+            requestFilter = ::disableSearchUnderline,
             filter = cleanup,
         )
     }
 
-    private fun disableSearchUnderline(request: Any): Any {
+    private fun disableSearchUnderline(request: Any): Any = runCatching {
         if (!ModuleSettings.isCommentNoSearchEnabled(prefs)) return request
-        val extra = request.javaClass.getMethod("getExtra").invoke(request) as? String ?: return request
-        val json = if (extra.isBlank()) JSONObject() else JSONObject(extra)
-        if (json.has("disable_underline")) return request
+        val getExtra = noArgMethod(request.javaClass, "getExtra") ?: return request
+        val extra = getExtra.invoke(request) as? String ?: return request
+        val updatedExtra = injectDisableSearchUnderline(extra)
+        if (updatedExtra == extra) return request
         val builder = newProtobufBuilder(request)
-        builder.javaClass.getMethod("setExtra", String::class.java).apply { isAccessible = true }
-            .invoke(builder, json.put("disable_underline", true).toString())
-        return builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder) ?: request
-    }
+        val setExtra = builder.javaClass.methods.firstOrNull {
+            it.name == "setExtra" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java
+        } ?: builder.javaClass.declaredMethods.firstOrNull {
+            it.name == "setExtra" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java
+        } ?: return request
+        setExtra.apply { isAccessible = true }.invoke(builder, updatedExtra)
+        builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder) ?: request
+    }.getOrDefault(request)
 
-    private fun isSearchUrl(value: String): Boolean = runCatching {
-        val uri = Uri.parse(value)
-        uri.scheme.equals("bilibili", ignoreCase = true) && uri.host.equals("search", ignoreCase = true)
-    }.getOrDefault(false)
+    private fun isSearchUrl(value: String): Boolean = isCommentSearchUrl(value)
 
     private fun cleanupKotlinReplyDecorations(reply: Any) {
-        if (ModuleSettings.isCommentNoEmptyPageEnabled(prefs) && noArgMethod(reply.javaClass, "hasSubjectControl")?.invoke(reply) == true) {
-            val control = noArgMethod(reply.javaClass, "getSubjectControl")?.invoke(reply)
-            if (control != null && noArgMethod(control.javaClass, "hasEmptyPage")?.invoke(control) == true) {
-                noArgMethod(control.javaClass, "clearEmptyPage")?.invoke(control)
+        runCatching {
+            if (ModuleSettings.isCommentNoEmptyPageEnabled(prefs) && noArgMethod(reply.javaClass, "hasSubjectControl")?.invoke(reply) == true) {
+                val control = noArgMethod(reply.javaClass, "getSubjectControl")?.invoke(reply)
+                if (control != null && noArgMethod(control.javaClass, "hasEmptyPage")?.invoke(control) == true) {
+                    noArgMethod(control.javaClass, "clearEmptyPage")?.invoke(control)
+                }
             }
+            if (noArgMethod(reply.javaClass, "hasContent")?.invoke(reply) != true) return@runCatching
+            val content = noArgMethod(reply.javaClass, "getContent")?.invoke(reply) ?: return@runCatching
+            if (ModuleSettings.isCommentNoVoteEnabled(prefs) && noArgMethod(content.javaClass, "hasVote")?.invoke(content) == true) {
+                noArgMethod(content.javaClass, "clearVote")?.invoke(content)
+            }
+            if (!ModuleSettings.isCommentNoSearchEnabled(prefs)) return@runCatching
+            val urls = noArgMethod(content.javaClass, "getUrlsMap")?.invoke(content) as? Map<*, *> ?: return@runCatching
+            val kept = urls.filterValues { url ->
+                val schema = url?.let { noArgMethod(it.javaClass, "getAppUrlSchema")?.invoke(it) as? String }
+                schema == null || !isSearchUrl(schema)
+            }
+            if (kept.size == urls.size) return@runCatching
+            val builder = newProtobufBuilder(content)
+            builder.javaClass.getMethod("clearUrls").apply { isAccessible = true }.invoke(builder)
+            builder.javaClass.getMethod("putAllUrls", Map::class.java).apply { isAccessible = true }.invoke(builder, kept)
+            val updated = builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder) ?: return@runCatching
+            val setContent = reply.javaClass.declaredMethods.firstOrNull {
+                it.name == "setContent" && it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(updated.javaClass)
+            } ?: reply.javaClass.methods.firstOrNull {
+                it.name == "setContent" && it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(updated.javaClass)
+            }
+            if (setContent != null) {
+                setContent.apply { isAccessible = true }.invoke(reply, updated)
+            } else {
+                val contentField = reply.javaClass.declaredFields.firstOrNull {
+                    it.type.isAssignableFrom(updated.javaClass) && (it.name == "content_" || it.name.contains("content", ignoreCase = true))
+                }?.apply { isAccessible = true }
+                contentField?.set(reply, updated)
+            }
+        }.onFailure {
+            log("VideoComment reply decoration cleanup failed on ${reply.javaClass.name}", it)
         }
-        if (noArgMethod(reply.javaClass, "hasContent")?.invoke(reply) != true) return
-        val content = noArgMethod(reply.javaClass, "getContent")?.invoke(reply) ?: return
-        if (ModuleSettings.isCommentNoVoteEnabled(prefs) && noArgMethod(content.javaClass, "hasVote")?.invoke(content) == true) {
-            noArgMethod(content.javaClass, "clearVote")?.invoke(content)
-        }
-        if (!ModuleSettings.isCommentNoSearchEnabled(prefs)) return
-        val urls = noArgMethod(content.javaClass, "getUrlsMap")?.invoke(content) as? Map<*, *> ?: return
-        val kept = urls.filterValues { url ->
-            val schema = url?.let { noArgMethod(it.javaClass, "getAppUrlSchema")?.invoke(it) as? String }
-            schema == null || !isSearchUrl(schema)
-        }
-        if (kept.size == urls.size) return
-        val builder = newProtobufBuilder(content)
-        builder.javaClass.getMethod("clearUrls").apply { isAccessible = true }.invoke(builder)
-        builder.javaClass.getMethod("putAllUrls", Map::class.java).apply { isAccessible = true }.invoke(builder, kept)
-        val updated = builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder) ?: return
-        reply.javaClass.getDeclaredMethod("setContent", content.javaClass).apply { isAccessible = true }
-            .invoke(reply, updated)
     }
 
     private fun currentReplyCleanupOptions(): ReplyCleanupOptions {
@@ -472,7 +500,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     !List::class.java.isAssignableFrom(method.returnType)) false else {
                     val element = (method.genericReturnType as? ParameterizedType)?.actualTypeArguments?.singleOrNull()
                     method.name in setOf("getRepliesList", "getTopRepliesList") ||
-                        (element as? Class<*>)?.name == "com.bapis.bilibili.main.community.reply.v1.ReplyInfo"
+                        (element as? Class<*>)?.name?.endsWith(".ReplyInfo") == true
                 }
             }.map { getter ->
                 getter.isAccessible = true
@@ -483,7 +511,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             },
             singleReplies = type.declaredMethods.filter {
                 !Modifier.isStatic(it.modifiers) && it.name.startsWith("get") && it.parameterCount == 0 &&
-                    it.returnType.name == "com.bapis.bilibili.main.community.reply.v1.ReplyInfo"
+                    it.returnType.name?.endsWith(".ReplyInfo") == true
             }.onEach { it.isAccessible = true },
         )
 
@@ -611,3 +639,20 @@ private data class ReplyCleanupMethods(
     val replyLists: List<Pair<Method, Method?>>,
     val singleReplies: List<Method>,
 )
+
+internal fun injectDisableSearchUnderline(extra: String): String {
+    val json = if (extra.isBlank()) JSONObject() else JSONObject(extra)
+    if (json.optBoolean("disable_underline", false)) return extra
+    return json.put("disable_underline", true).toString()
+}
+
+internal fun isCommentSearchUrl(value: String): Boolean = runCatching {
+    val parsed = runCatching {
+        val uri = Uri.parse(value)
+        uri.scheme to uri.host
+    }.getOrNull() ?: runCatching {
+        val uri = java.net.URI.create(value)
+        uri.scheme to uri.host
+    }.getOrNull() ?: return false
+    parsed.first.equals("bilibili", ignoreCase = true) && parsed.second.equals("search", ignoreCase = true)
+}.getOrDefault(false)
