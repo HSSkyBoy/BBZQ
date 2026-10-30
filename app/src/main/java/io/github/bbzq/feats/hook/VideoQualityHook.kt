@@ -51,6 +51,10 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
+        env.hostContext?.let { context ->
+            StorySceneDetector.register(context)
+        }
+
         // 1. VIP privilege spoofing for quality management classes:
         if (unlockHighestBitrate || unlockVideoFeatures) {
             runCatching {
@@ -61,14 +65,21 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (isEffectiveVip != null) {
                     env.hookBefore(isEffectiveVip) { param ->
                         runCatching {
+                            if (StorySceneDetector.isStoryForeground()) return@hookBefore
                             val trace = Thread.currentThread().stackTrace
-                            val limit = minOf(trace.size, 8)
+                            val limit = minOf(trace.size, 15)
+                            var isQualityCaller = false
                             for (i in 0 until limit) {
                                 val cls = trace[i].className
-                                if (cls.contains(".quality.") || cls.contains(".player.")) {
-                                    param.result = true
-                                    break
+                                if (cls.contains("story", ignoreCase = true)) {
+                                    return@hookBefore
                                 }
+                                if (cls.contains(".quality.") || cls.contains(".player.")) {
+                                    isQualityCaller = true
+                                }
+                            }
+                            if (isQualityCaller) {
+                                param.result = true
                             }
                         }
                     }
