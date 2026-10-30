@@ -36,6 +36,26 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         var currentActiveArtUri: String? = null
         @Volatile
         var currentCoverMediaKey: String? = null
+        @Volatile
+        var lastUpdatedCoverUri: String? = null
+
+        fun resolveSessionTag(session: Any?): String? {
+            if (session == null) return null
+            return runCatching {
+                if (session is android.media.session.MediaSession) {
+                    return session.controller.tag
+                }
+                val getController = session.javaClass.methods.firstOrNull { it.name == "getController" && it.parameterCount == 0 }
+                val controller = getController?.invoke(session)
+                val getTag = controller?.javaClass?.methods?.firstOrNull { it.name == "getTag" && it.parameterCount == 0 }
+                getTag?.invoke(controller)?.toString()
+            }.getOrNull()
+        }
+
+        fun isLiveSession(session: Any?): Boolean {
+            val tag = resolveSessionTag(session)
+            return tag?.contains("live", ignoreCase = true) == true
+        }
 
         private val mainHandler = Handler(Looper.getMainLooper())
         private val coverFetchExecutor = java.util.concurrent.Executors.newFixedThreadPool(2)
@@ -66,7 +86,11 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         fun isMatchingUri(url: String?, activeUri: String?): Boolean {
             if (url.isNullOrBlank() || activeUri.isNullOrBlank()) return false
-            return url == activeUri || activeUri.contains(url) || url.contains(activeUri)
+            if (url == activeUri) return true
+            if (url.length >= 12 && activeUri.length >= 12) {
+                return activeUri.contains(url) || url.contains(activeUri)
+            }
+            return false
         }
 
         fun updateCoverToSessions(
@@ -82,10 +106,14 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
             if (targetMediaKey != null && activeKey != null && targetMediaKey != activeKey) {
                 return
             }
+            if (activeUri == lastUpdatedCoverUri && lastValidCoverBitmap != null) {
+                return
+            }
             if (bitmap === lastValidCoverBitmap) return
 
             val safeCopy = createSafeCopy(bitmap, MAX_COVER_DIM) ?: return
             lastValidCoverBitmap = safeCopy
+            lastUpdatedCoverUri = activeUri
             currentCoverMediaKey = targetMediaKey ?: activeKey
 
             mainHandler.post {
@@ -216,6 +244,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         env.hookBefore(setMetadataMethod) { param ->
             if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
             val session = param.thisObject
+            if (isLiveSession(session)) return@hookBefore
             if (session != null) {
                 activeCompatSessionRef = java.lang.ref.WeakReference(session)
             }
@@ -253,6 +282,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (currentCoverMediaKey != mediaKey) {
                     lastValidCoverBitmap = null
                     currentCoverMediaKey = null
+                    lastUpdatedCoverUri = null
                 }
             }
 
@@ -305,6 +335,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 env.hookBefore(fwkSetMetadata) { param ->
                     if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
                     val fwkSession = param.thisObject as? android.media.session.MediaSession
+                    if (isLiveSession(fwkSession)) return@hookBefore
                     if (fwkSession != null) {
                         activeFwkSessionRef = java.lang.ref.WeakReference(fwkSession)
                     }
@@ -427,6 +458,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         // 拦截 addCustomAction：直接丢弃 15s 快退/快进，不加入构建列表
                         env.hookBefore(method) { param ->
                             if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
+                            if (isLiveSession(param.thisObject)) return@hookBefore
                             val is15s = runCatching {
                                 when (param.args.size) {
                                     1 -> {
@@ -475,6 +507,7 @@ class MediaSessionFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 env.hookBefore(fwkSetPlaybackState) { param ->
                     if (!ModuleSettings.isFixMediaSessionCardEnabled(prefs)) return@hookBefore
                     val fwkSession = param.thisObject as? android.media.session.MediaSession
+                    if (isLiveSession(fwkSession)) return@hookBefore
                     if (fwkSession != null && activeFwkSessionRef?.get() == null) {
                         activeFwkSessionRef = java.lang.ref.WeakReference(fwkSession)
                     }
