@@ -68,6 +68,7 @@ import io.github.bbzq.feats.hook.LiveReservationHook
 import io.github.bbzq.feats.hook.LiveRoomBlurMaskHook
 import io.github.bbzq.feats.hook.LiveRoomVerticalSwipeHook
 import io.github.bbzq.feats.hook.MediaSessionFixHook
+import io.github.bbzq.feats.hook.VideoDetailShareRedirectHook
 import io.github.bbzq.feats.hook.VideoEndRecommendHook
 import io.github.bbzq.feats.symbol.BiliHookSymbols
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
@@ -241,6 +242,7 @@ object RoamingRuntime {
                 ::LiveRoomVerticalSwipeHook,
                 ::MediaSessionFixHook,
                 ::VideoEndRecommendHook,
+                ::VideoDetailShareRedirectHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }

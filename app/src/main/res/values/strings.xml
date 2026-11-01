@@ -298,6 +298,8 @@
     <string name="playback_block_activity_meta_sticker_summary">移除播放器左上角的「云视听小电视」推广贴片。</string>
     <string name="playback_skip_reward_title">跳过视频激励广告</string>
     <string name="playback_skip_reward_summary">自动完成视频激励并领取奖励。</string>
+    <string name="playback_share_redirect_to_overflow_title">分享按钮重定向至更多菜单</string>
+    <string name="playback_share_redirect_to_overflow_summary">点击视频详情页的分享按钮时，直接打开右上角的「更多」菜单（便于调节倍速与播放设置）。</string>
     <string name="playback_auto_like_title">自动点赞视频</string>
     <string name="playback_auto_like_summary">进入详情页时，自动为未点赞的视频点赞。</string>
     <string name="playback_disable_half_end_page_title">去除半屏结束推荐</string>

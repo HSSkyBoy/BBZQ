@@ -268,6 +268,8 @@
     <string name="playback_block_activity_meta_sticker_summary">移除播放器左上角的「雲視聽小電視」推廣貼片。</string>
     <string name="playback_skip_reward_title">跳過影片獎勵廣告</string>
     <string name="playback_skip_reward_summary">自動完成影片獎勵並領取獎勵。</string>
+    <string name="playback_share_redirect_to_overflow_title">分享按鈕重定向至更多選單</string>
+    <string name="playback_share_redirect_to_overflow_summary">點擊影片詳情頁的分享按鈕時，直接打開右上角的「更多」選單（便於調節倍速與播放設定）。</string>
     <string name="playback_auto_like_title">自動按讚影片</string>
     <string name="playback_auto_like_summary">進入詳情頁時，自動為未按讚的影片按讚。</string>
     <string name="playback_disable_half_end_page_title">移除半螢幕結束推薦</string>

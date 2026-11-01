@@ -1,4 +1,4 @@
-﻿package io.github.bbzq
+package io.github.bbzq
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -1116,6 +1116,12 @@ class SettingsContentFactory(
             context.getString(R.string.playback_auto_like_title),
             context.getString(R.string.playback_auto_like_summary),
             ModuleSettings.KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED,
+            false,
+        ),
+        createSwitchRow(
+            context.getString(R.string.playback_share_redirect_to_overflow_title),
+            context.getString(R.string.playback_share_redirect_to_overflow_summary),
+            ModuleSettings.KEY_SHARE_REDIRECT_TO_OVERFLOW_ENABLED,
             false,
         ),
     )

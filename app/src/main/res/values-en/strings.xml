@@ -268,6 +268,8 @@
     <string name="playback_block_activity_meta_sticker_summary">Removes the \"Yunshiting Xiaodianshi\" promotion sticker at the top left of the player.</string>
     <string name="playback_skip_reward_title">Skip video reward ads</string>
     <string name="playback_skip_reward_summary">Completes video reward ads automatically and claims the reward.</string>
+    <string name="playback_share_redirect_to_overflow_title">Redirect share button to overflow menu</string>
+    <string name="playback_share_redirect_to_overflow_summary">Redirects clicks on the video detail share button to the overflow (more) menu for quicker access to playback settings.</string>
     <string name="playback_auto_like_title">Auto-like videos</string>
     <string name="playback_auto_like_summary">Likes videos you have not liked yet when you open their detail page.</string>
     <string name="playback_disable_half_end_page_title">Remove half-screen end recommendations</string>

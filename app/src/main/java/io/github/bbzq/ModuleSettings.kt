@@ -34,6 +34,7 @@ object ModuleSettings {
     const val KEY_FULL_SCREEN_QUALITY = "full_screen_quality"
     const val KEY_VIDEO_DOWNLOAD_ENABLED = "video_download_enabled"
     const val KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED = "auto_like_video_detail_enabled"
+    const val KEY_SHARE_REDIRECT_TO_OVERFLOW_ENABLED = "playback_share_redirect_to_overflow_enabled"
     const val KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED = "player_transparent_status_bar_enabled"
     const val KEY_HIDE_PLAYER_PORTRAIT_CONTROL_ENABLED = "hide_player_portrait_control_enabled"
     const val KEY_PLAYER_TRIPLE_SPEED_ENABLED = "player_triple_speed_enabled"
@@ -294,6 +295,7 @@ object ModuleSettings {
             it.getBoolean(KEY_UNLOCK_HIGHEST_BITRATE_ENABLED, false)
         },
         ExportableConfigSpec(KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED, false) },
+        ExportableConfigSpec(KEY_SHARE_REDIRECT_TO_OVERFLOW_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SHARE_REDIRECT_TO_OVERFLOW_ENABLED, false) },
         ExportableConfigSpec(KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_PLAYER_TRANSPARENT_STATUS_BAR_ENABLED, false)
         },
@@ -664,6 +666,13 @@ object ModuleSettings {
 
     fun isAutoLikeVideoDetailEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_AUTO_LIKE_VIDEO_DETAIL_ENABLED, false)
+
+    fun isShareRedirectToOverflowEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SHARE_REDIRECT_TO_OVERFLOW_ENABLED, false)
+
+    fun setShareRedirectToOverflowEnabled(prefs: SharedPreferences, enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SHARE_REDIRECT_TO_OVERFLOW_ENABLED, enabled).apply()
+    }
 
     fun isFixLiveQualityUrlEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_FIX_LIVE_QUALITY_URL_ENABLED, false)
