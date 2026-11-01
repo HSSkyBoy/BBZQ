@@ -1,4 +1,4 @@
-package io.github.bbzq
+﻿package io.github.bbzq
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -1399,7 +1399,7 @@ class SettingsContentFactory(
         }
         rows += createClickableInfoRow(
             context.getString(R.string.about_project_repository_title),
-            "HSSkyBoy/BBZQ",
+            "Nk-Be/BBZQ",
         ) {
             openUrl(PROJECT_REPOSITORY_URL)
         }
@@ -4074,7 +4074,7 @@ class SettingsContentFactory(
     private data class MineComponentItem(val name: String)
 
     private companion object {
-        private const val PROJECT_REPOSITORY_URL = "https://github.com/HSSkyBoy/BBZQ"
+        private const val PROJECT_REPOSITORY_URL = "https://github.com/Nk-Be/BBZQ"
         private const val TELEGRAM_CHANNEL_URL = "https://t.me/bbx_show"
         private const val VERSION_TAP_WINDOW_MS = 1500L
         private const val TITLE_KEYWORD_SUMMARY_MAX_ITEMS = 4
