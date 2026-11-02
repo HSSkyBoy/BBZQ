@@ -1,6 +1,9 @@
 package io.github.bbzq.feats.hook
 
 import android.app.Activity
+import android.os.Bundle
+import android.view.HapticFeedbackConstants
+import android.view.View
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.ModuleSettingsNavigator
 import io.github.bbzq.RuntimeEnvironmentInfo
@@ -10,6 +13,7 @@ import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookAfter
+import io.github.bbzq.feats.hookAfterMethod
 import io.github.bbzq.feats.methodsNamed
 import java.lang.reflect.Proxy
 
@@ -27,6 +31,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 log("SettingHook installed on ${fragmentClass.name}")
             }
         }
+        installHomeAvatarLongClickHook()
         if (installed == 0) {
             log("SettingHook skipped: No HelpFragment classes available")
         } else {
@@ -123,7 +128,98 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
+    private fun installHomeAvatarLongClickHook() {
+        // 1. Hook MainActivity.onResume
+        runCatching {
+            env.hookAfterMethod(Activity::class.java, "onResume") { param ->
+                val activity = param.thisObject as? Activity ?: return@hookAfterMethod
+                if (isHomeActivity(activity.javaClass.name)) {
+                    attachAvatarLongClick(activity)
+                }
+            }
+            log("SettingHook installed: Home Activity.onResume avatar long click watcher")
+        }.onFailure {
+            log("SettingHook: Failed to install Activity.onResume avatar long click watcher", it)
+        }
+
+        // 2. Hook BaseMainFrameFragment / MainFragment.onViewCreated
+        HOME_MAIN_FRAGMENTS.mapNotNull(classLoader::findClassOrNull).distinct().forEach { fragmentClass ->
+            val onViewCreated = fragmentClass.methodsNamed("onViewCreated")
+                .firstOrNull { it.parameterCount == 2 && it.parameterTypes[0] == View::class.java }
+            if (onViewCreated != null) {
+                env.hookAfter(onViewCreated) { param ->
+                    val fragment = param.thisObject ?: return@hookAfter
+                    val view = param.args[0] as? View ?: return@hookAfter
+                    val activity = fragment.callMethod("getActivity") as? Activity ?: return@hookAfter
+                    attachAvatarLongClick(activity, view)
+                }
+                log("SettingHook installed avatar watcher on ${fragmentClass.name}.onViewCreated")
+            }
+        }
+    }
+
+    private fun isHomeActivity(className: String): Boolean =
+        className in HOME_ACTIVITIES || className.contains("MainActivity", ignoreCase = true)
+
+    private fun attachAvatarLongClick(activity: Activity, root: View? = null) {
+        val targetRoot = root ?: runCatching { activity.window?.peekDecorView() ?: activity.window?.decorView }.getOrNull() ?: return
+        bindAvatarLongClickToViewTree(activity, targetRoot)
+        targetRoot.post {
+            if (!activity.isFinishing && !activity.isDestroyed) {
+                bindAvatarLongClickToViewTree(activity, targetRoot)
+            }
+        }
+    }
+
+    private fun bindAvatarLongClickToViewTree(activity: Activity, root: View) {
+        val avatarId = resolveResId(activity, "avatar", FALLBACK_AVATAR_ID)
+        val avatarLayoutId = resolveResId(activity, "avatar_layout", FALLBACK_AVATAR_LAYOUT_ID)
+
+        val onLongClick = View.OnLongClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            log("Home avatar long clicked, opening BBZQ settings")
+            ModuleSettingsNavigator.open(activity, runtimeSnapshot())
+            true
+        }
+
+        var bound = false
+        if (avatarId != 0) {
+            root.findViewById<View>(avatarId)?.let { avatarView ->
+                avatarView.setOnLongClickListener(onLongClick)
+                bound = true
+            }
+        }
+        if (avatarLayoutId != 0) {
+            root.findViewById<View>(avatarLayoutId)?.let { layoutView ->
+                layoutView.setOnLongClickListener(onLongClick)
+                bound = true
+            }
+        }
+        if (bound) {
+            log("Home avatar long click listener attached in ${activity.javaClass.simpleName}")
+        }
+    }
+
+    private fun resolveResId(activity: Activity, name: String, fallback: Int): Int {
+        val resId = runCatching {
+            activity.resources.getIdentifier(name, "id", activity.packageName)
+        }.getOrNull() ?: 0
+        return if (resId != 0) resId else fallback
+    }
+
     private companion object {
+        private const val FALLBACK_AVATAR_ID = 0x7f09021c
+        private const val FALLBACK_AVATAR_LAYOUT_ID = 0x7f090237
+        private val HOME_ACTIVITIES = setOf(
+            "tv.danmaku.bili.MainActivityV2",
+            "com.bilibili.app.MainActivity",
+        )
+        private val HOME_MAIN_FRAGMENTS = setOf(
+            "tv.danmaku.bili.ui.main2.basic.BaseMainFrameFragment",
+            "tv.danmaku.p9138bili.p9228ui.main2.basic.BaseMainFrameFragment",
+            "tv.danmaku.bili.ui.main2.MainFragment",
+            "tv.danmaku.p9138bili.p9228ui.main2.MainFragment",
+        )
         private val JOIN_US_KEYS = arrayOf("JoinUs", "pref_key_joinus")
         private const val ENTRY_TITLE = "高级设置"
         private const val ENTRY_SUMMARY = "BBZQ 设置"
