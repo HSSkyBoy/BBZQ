@@ -176,6 +176,11 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val avatarLayoutId = resolveResId(activity, "avatar_layout", FALLBACK_AVATAR_LAYOUT_ID)
 
         val onLongClick = View.OnLongClickListener { v ->
+            val account = HostAccountResolver.resolve(activity, classLoader)
+            if (!account.loggedIn) {
+                log("Home avatar long clicked, but user is not logged in, ignoring")
+                return@OnLongClickListener false
+            }
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             log("Home avatar long clicked, opening BBZQ settings")
             ModuleSettingsNavigator.open(activity, runtimeSnapshot())
