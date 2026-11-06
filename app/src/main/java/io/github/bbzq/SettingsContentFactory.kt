@@ -78,6 +78,10 @@ class SettingsContentFactory(
     private lateinit var bottomBarSwitch: Switch
     private lateinit var customThemeSwitch: Switch
     private lateinit var customSkinSwitch: Switch
+    private lateinit var customFontScaleSwitch: Switch
+    private lateinit var customFontScaleRow: View
+    private lateinit var customFontScaleSeekBar: SeekBar
+    private lateinit var customFontScaleSummary: TextView
     private lateinit var customThemeColorRow: View
     private lateinit var customThemeColorSummary: TextView
     private lateinit var customThemeColorSwatch: View
@@ -551,6 +555,16 @@ class SettingsContentFactory(
             customSkinSwitch = it
         }
         rows += createCustomSkinConfigRow()
+        rows += createSwitchRow(
+            context.getString(R.string.custom_font_scale_title),
+            context.getString(R.string.custom_font_scale_summary),
+            ModuleSettings.KEY_CUSTOM_FONT_SCALE_ENABLED,
+            false,
+            badges = restartBadges(),
+        ) {
+            customFontScaleSwitch = it
+        }
+        rows += createCustomFontScaleRow()
 
         val items = bottomBarItems()
         if (items.isEmpty()) {
@@ -2362,6 +2376,58 @@ class SettingsContentFactory(
         }
     }
 
+    private fun createCustomFontScaleRow(): View {
+        customFontScaleSummary = TextView(context).apply {
+            textSize = 12f
+            setTextColor(summaryTextColor)
+        }
+        customFontScaleSeekBar = SeekBar(context).apply {
+            max = (ModuleSettings.MAX_CUSTOM_FONT_SCALE_PERCENT - ModuleSettings.MIN_CUSTOM_FONT_SCALE_PERCENT) / 5
+            val currentPercent = ModuleSettings.getCustomFontScalePercent(prefs)
+            progress = ((currentPercent - ModuleSettings.MIN_CUSTOM_FONT_SCALE_PERCENT) / 5).coerceAtLeast(0)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val percent = ModuleSettings.MIN_CUSTOM_FONT_SCALE_PERCENT + progress * 5
+                    if (!refreshing) {
+                        customFontScaleSummary.text = customFontScaleSummary(percent)
+                    }
+                    if (fromUser) {
+                        prefs.edit()
+                            .putInt(ModuleSettings.KEY_CUSTOM_FONT_SCALE_PERCENT, percent)
+                            .apply()
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            addView(TextView(context).apply {
+                text = context.getString(R.string.custom_font_scale_value_title)
+                textSize = 15f
+                setTextColor(titleTextColor)
+            })
+            addView(customFontScaleSummary.apply {
+                setPadding(0, dp(4), 0, dp(8))
+            })
+            addView(customFontScaleSeekBar)
+            registerSearchTarget(
+                this,
+                context.getString(R.string.custom_font_scale_value_title),
+                context.getString(R.string.custom_font_scale_value_title),
+                ModuleSettings.KEY_CUSTOM_FONT_SCALE_PERCENT,
+            )
+        }.also {
+            customFontScaleRow = it
+        }
+    }
+
+    private fun customFontScaleSummary(percent: Int): String =
+        context.getString(R.string.custom_font_scale_value_summary, percent)
+
     private fun createHalfScreenQualityRow(): View {
         halfScreenQualitySummary = TextView(context).apply {
             textSize = 12f
@@ -3100,6 +3166,7 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_CUSTOM_BOTTOM_BAR_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_THEME_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_SKIN_ENABLED ||
+            key == ModuleSettings.KEY_CUSTOM_FONT_SCALE_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED ||
             key == ModuleSettings.KEY_COMMENT_KEYWORD_FILTER_ENABLED ||
@@ -3549,6 +3616,22 @@ class SettingsContentFactory(
                         skin.optString("name", skin.optLong("id").toString()),
                     )
                 }.getOrElse { context.getString(R.string.custom_skin_config_loaded, "JSON") }
+            }
+        }
+        val customFontScaleEnabled = ModuleSettings.isCustomFontScaleEnabled(prefs)
+        if (::customFontScaleSwitch.isInitialized) {
+            customFontScaleSwitch.isChecked = customFontScaleEnabled
+        }
+        if (::customFontScaleSeekBar.isInitialized) {
+            val percent = ModuleSettings.getCustomFontScalePercent(prefs)
+            customFontScaleSeekBar.progress = ((percent - ModuleSettings.MIN_CUSTOM_FONT_SCALE_PERCENT) / 5).coerceAtLeast(0)
+            customFontScaleSummary.text = customFontScaleSummary(percent)
+        }
+        if (::customFontScaleRow.isInitialized) {
+            customFontScaleRow.isEnabled = customFontScaleEnabled
+            customFontScaleRow.alpha = if (customFontScaleEnabled) 1f else 0.45f
+            if (::customFontScaleSeekBar.isInitialized) {
+                customFontScaleSeekBar.isEnabled = customFontScaleEnabled
             }
         }
         if (::customCdnWifiSummary.isInitialized) {

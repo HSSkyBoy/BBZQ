@@ -487,6 +487,10 @@
     <string name="custom_skin_config_copy">Copy</string>
     <string name="custom_skin_config_copied">Theme config copied</string>
     <string name="custom_skin_config_import_file">Import from file</string>
+    <string name="custom_font_scale_title">Custom font size</string>
+    <string name="custom_font_scale_summary">Adjust the page font scale in Bilibili; restart the app to take effect.</string>
+    <string name="custom_font_scale_value_title">Font scale</string>
+    <string name="custom_font_scale_value_summary">Current scale: %1$d%%</string>
     <string name="custom_skin_config_imported">Skin config imported. It will apply after Bilibili restarts.</string>
     <string name="video_detail_relate_custom_filter_title">Filter recommendations below the video</string>
     <string name="video_detail_relate_custom_filter_summary">Hides cards in the feed below the video by type and title keyword.</string>

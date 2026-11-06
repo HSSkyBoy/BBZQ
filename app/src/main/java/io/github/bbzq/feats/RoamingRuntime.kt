@@ -70,6 +70,7 @@ import io.github.bbzq.feats.hook.LiveRoomVerticalSwipeHook
 import io.github.bbzq.feats.hook.MediaSessionFixHook
 import io.github.bbzq.feats.hook.VideoDetailShareRedirectHook
 import io.github.bbzq.feats.hook.VideoEndRecommendHook
+import io.github.bbzq.feats.hook.PageFontScaleHook
 import io.github.bbzq.feats.symbol.BiliHookSymbols
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
 import io.github.libxposed.api.XposedInterface
@@ -243,6 +244,7 @@ object RoamingRuntime {
                 ::MediaSessionFixHook,
                 ::VideoEndRecommendHook,
                 ::VideoDetailShareRedirectHook,
+                ::PageFontScaleHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }

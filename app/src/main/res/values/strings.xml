@@ -527,6 +527,10 @@
     <string name="custom_skin_config_copy">复制</string>
     <string name="custom_skin_config_copied">主题配置已复制</string>
     <string name="custom_skin_config_import_file">从文件导入</string>
+    <string name="custom_font_scale_title">自定义字体大小</string>
+    <string name="custom_font_scale_summary">调整应用内页面文字缩放比例，适应不同屏幕与阅读习惯；重启应用生效。</string>
+    <string name="custom_font_scale_value_title">字体缩放比例</string>
+    <string name="custom_font_scale_value_summary">当前比例：%1$d%%</string>
     <string name="custom_skin_config_imported">自制主题配置已导入，重启 B 站后套用。</string>
 
     <!-- 播放页下方推荐信息流过滤 -->
