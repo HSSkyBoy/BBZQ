@@ -1,8 +1,6 @@
 package io.github.bbzq.feats.hook
 
 import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
@@ -19,6 +17,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         env.symbols?.mineProfile?.restore(classLoader)
     }
     private val seenMenuTitles: MutableSet<String> = Collections.synchronizedSet(HashSet())
+    private val masterMenuLists: MutableMap<Any, MutableList<Any?>> = Collections.synchronizedMap(WeakHashMap())
     private var composeVipInstalled = false
 
     override fun startHook() {
@@ -79,8 +78,8 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     /**
      * mine/v2 and v3 decode AccountMineV2 with kotlinx, so filter the menu groups at their getter.
-     * The host mutates the returned list in place (e.g. appends the local "设置" entry to the last group),
-     * so items are removed from the original list instead of returning a filtered copy.
+     * The host mutates the returned list in place (e.g. appends the local "设置" entry to the last group).
+     * We keep a non-destructive master copy so unhiding restores items correctly, and ensure "设置" is never hidden.
      */
     private fun hookMenuGroupItems() {
         val getItemList = classLoader.findClassOrNull(MENU_GROUP_CLASS)
@@ -91,30 +90,63 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
             ?.declaredMethods
             ?.firstOrNull { it.name == "getTitle" && it.parameterCount == 0 && it.returnType == String::class.java }
             ?: return log("MineProfileHook: MenuGroupV2.Item.getTitle not found, menu item hook skipped")
+        val getUri = classLoader.findClassOrNull(MENU_ITEM_CLASS)
+            ?.declaredMethods
+            ?.firstOrNull { it.name == "getUri" && it.parameterCount == 0 && it.returnType == String::class.java }
+        val setLocalShow = classLoader.findClassOrNull(MENU_ITEM_CLASS)
+            ?.declaredMethods
+            ?.firstOrNull { it.name == "setLocalShow" && it.parameterTypes.contentEquals(arrayOf(Boolean::class.javaPrimitiveType)) }
+
         env.hookAfter(getItemList) { param ->
-            val items = param.result as? List<*> ?: return@hookAfter
+            val group = param.thisObject ?: return@hookAfter
+            @Suppress("UNCHECKED_CAST")
+            val items = param.result as? MutableList<Any?> ?: return@hookAfter
+
+            val master = masterMenuLists.getOrPut(group) { ArrayList(items) }
+            for (item in items) {
+                if (item != null && !master.contains(item)) {
+                    master.add(item)
+                }
+            }
+
             val hidden = if (ModuleSettings.isCustomMineComponentHideEnabled(prefs)) {
                 ModuleSettings.getHiddenMineComponents(prefs)
             } else {
                 emptySet()
             }
             val titles = linkedSetOf<String>()
-            val kept = items.filter { item ->
-                val title = item?.let { runCatching { getTitle.invoke(it) as? String }.getOrNull() }?.trim()
-                if (title.isNullOrBlank()) return@filter true
-                titles += title
-                title !in hidden
-            }
-            if (titles.isNotEmpty() && seenMenuTitles.addAll(titles)) saveKnownComponents(titles)
-            if (kept.size == items.size) return@hookAfter
-            @Suppress("UNCHECKED_CAST")
-            val removedInPlace = runCatching {
-                (items as MutableList<Any?>).apply {
-                    clear()
-                    addAll(kept)
+            val kept = ArrayList<Any?>()
+
+            for (item in master) {
+                if (item == null) {
+                    kept.add(item)
+                    continue
                 }
-            }.isSuccess
-            if (!removedInPlace) param.result = kept
+                val title = runCatching { getTitle.invoke(item) as? String }.getOrNull()?.trim()
+                val uri = runCatching { getUri?.invoke(item) as? String }.getOrNull()?.trim()
+                val isSettings = isMineSettingsItem(title, uri)
+
+                if (!title.isNullOrBlank() && !isSettings) {
+                    titles.add(title)
+                }
+
+                val isHidden = !isSettings && !title.isNullOrBlank() && title in hidden
+                runCatching { setLocalShow?.invoke(item, !isHidden) }
+
+                if (!isHidden) {
+                    kept.add(item)
+                }
+            }
+
+            if (titles.isNotEmpty() && seenMenuTitles.addAll(titles)) {
+                saveKnownComponents(titles)
+            }
+
+            runCatching {
+                items.clear()
+                items.addAll(kept)
+            }
+            param.result = items
         }
     }
 
@@ -189,7 +221,8 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             }
                             val titleField = runCatching { item.javaClass.getDeclaredField("title").apply { isAccessible = true } }.getOrNull()
                             val title = titleField?.let { runCatching { it.get(item) as? String }.getOrNull() }?.trim()
-                            if (!title.isNullOrBlank()) {
+                            val isSettings = isMineSettingsItem(title, null)
+                            if (!title.isNullOrBlank() && !isSettings) {
                                 components.add(title)
                                 if (title in hidden) {
                                     modified = true
@@ -229,7 +262,8 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         }
                         val titleField = runCatching { item.javaClass.getDeclaredField("title").apply { isAccessible = true } }.getOrNull()
                         val title = titleField?.let { runCatching { it.get(item) as? String }.getOrNull() }?.trim()
-                        if (!title.isNullOrBlank()) {
+                        val isSettings = isMineSettingsItem(title, null)
+                        if (!title.isNullOrBlank() && !isSettings) {
                             components.add(title)
                             if (title in hidden) {
                                 modified = true
@@ -259,9 +293,16 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("purifyMineData error", throwable)
     }
 
+    private fun isMineSettingsItem(title: String?, uri: String?): Boolean {
+        if (ModuleSettings.isMineSettingsTitle(title)) return true
+        if (uri != null && (uri.contains("preference") || uri.contains("setting"))) return true
+        return false
+    }
+
     private fun saveKnownComponents(names: Set<String>) {
+        val filtered = names.filter { !isMineSettingsItem(it, null) }
         val known = ModuleSettings.getKnownMineComponents(prefs).toMutableSet()
-        if (!known.addAll(names)) return
+        if (!known.addAll(filtered)) return
         ModuleSettings.cacheKnownMineComponents(known)
         prefs.edit().putStringSet(ModuleSettings.KEY_KNOWN_MINE_COMPONENTS, known).apply()
     }

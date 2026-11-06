@@ -4064,7 +4064,7 @@ class SettingsContentFactory(
 
     private fun mineComponentItems(): List<MineComponentItem> =
         ModuleSettings.getKnownMineComponents(prefs)
-            .filter { it.isNotBlank() }
+            .filter { it.isNotBlank() && !ModuleSettings.isMineSettingsTitle(it) }
             .map(::MineComponentItem)
             .distinctBy(MineComponentItem::name)
             .sortedBy(MineComponentItem::name)

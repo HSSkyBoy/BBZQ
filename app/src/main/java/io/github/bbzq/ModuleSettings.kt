@@ -904,13 +904,20 @@ object ModuleSettings {
     fun isCustomMineComponentHideEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED, false)
 
+    fun isMineSettingsTitle(title: String?): Boolean =
+        title != null && (title == "设置" || title == "設定" || title.equals("Settings", ignoreCase = true))
+
     fun getHiddenMineComponents(prefs: SharedPreferences): Set<String> =
-        prefs.getStringSet(KEY_HIDDEN_MINE_COMPONENTS, emptySet()) ?: emptySet()
+        (prefs.getStringSet(KEY_HIDDEN_MINE_COMPONENTS, emptySet()) ?: emptySet())
+            .filterNot(::isMineSettingsTitle)
+            .toSet()
 
     fun getKnownMineComponents(prefs: SharedPreferences): Set<String> =
-        knownMineComponentsCache
+        (knownMineComponentsCache
             ?: prefs.getStringSet(KEY_KNOWN_MINE_COMPONENTS, emptySet())
-            ?: emptySet()
+            ?: emptySet())
+            .filterNot(::isMineSettingsTitle)
+            .toSet()
 
     fun cacheKnownMineComponents(items: Set<String>) {
         knownMineComponentsCache = items.toSet()
