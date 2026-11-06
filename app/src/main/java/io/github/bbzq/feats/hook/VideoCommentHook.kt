@@ -3,6 +3,7 @@ package io.github.bbzq.feats.hook
 import android.net.Uri
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.getObjectField
 import io.github.bbzq.feats.hookAfter
@@ -60,11 +61,21 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 runCatching {
                     if (!ModuleSettings.isCommentDisableEnabled(prefs)) return@runCatching
                     val listIndex = param.args.indexOfFirst { it is List<*> }
-                    if (listIndex < 0) return@runCatching
-                    val items = param.args[listIndex] as? List<*> ?: return@runCatching
-                    param.args[listIndex] = items.filterNot { item ->
-                        val name = item?.javaClass?.name.orEmpty()
-                        name.contains("CommentTabPageProvider") || name.contains("CommentTab")
+                    if (listIndex >= 0) {
+                        val items = param.args[listIndex] as? List<*> ?: return@runCatching
+                        val filtered = filterCommentTabItems(items)
+                        if (filtered.size != items.size) {
+                            param.args[listIndex] = filtered
+                            log("VideoComment disabled comment tab via direct list")
+                        }
+                        return@runCatching
+                    }
+                    for (arg in param.args) {
+                        if (arg == null) continue
+                        if (filterCommentTabsFromWrapper(arg)) {
+                            log("VideoComment disabled comment tab via wrapper in ${arg.javaClass.simpleName}")
+                            break
+                        }
                     }
                 }.onFailure {
                     log("VideoComment disable comment hook failed", it)
@@ -73,6 +84,41 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         return symbols.disableCommentConstructors.size
     }
+
+    private fun filterCommentTabsFromWrapper(wrapper: Any): Boolean {
+        for (field in wrapper.javaClass.declaredFields) {
+            if (!List::class.java.isAssignableFrom(field.type)) continue
+            field.isAccessible = true
+            val list = runCatching { field.get(wrapper) as? List<*> }.getOrNull() ?: continue
+            val filtered = filterCommentTabItems(list)
+            if (filtered.size != list.size) {
+                if (list is MutableList<*>) {
+                    val mutated = runCatching {
+                        @Suppress("UNCHECKED_CAST")
+                        (list as MutableList<Any?>).retainAll(filtered.toSet())
+                        true
+                    }.getOrDefault(false)
+                    if (mutated) return true
+                }
+                val setField = runCatching {
+                    field.set(wrapper, filtered)
+                    true
+                }.getOrDefault(false)
+                if (setField) return true
+            }
+        }
+        return false
+    }
+
+    private fun filterCommentTabItems(items: List<*>): List<*> =
+        items.filterNot { item ->
+            if (item == null) return@filterNot false
+            val name = item.javaClass.name
+            if (name.contains("CommentTabPageProvider") || name.contains("CommentTab")) return@filterNot true
+            val tag = runCatching { item.callMethod("c")?.toString() }.getOrNull()
+            if (tag == "Comment" || tag?.contains("comment", ignoreCase = true) == true) return@filterNot true
+            false
+        }
 
     private fun hookQuickReply(symbols: RestoredVideoCommentSymbols): Int {
         val viewModelCount = hookQuickReplyByViewModel(symbols.quickReplyViewModelMethods)

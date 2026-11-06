@@ -23,7 +23,7 @@ internal fun RoamingEnv.hookKotlinDynamicTabs(): Int = hookKotlinMoss(
         val name: (Any?) -> String? = { it?.callMethod("getName") as? String }
         var updated = DynamicTabPolicy.filter(original, hideCity, hideSchool, title, name,
             preserveNonEmpty = field != "DynTab" || !hasPrimaryTabs)
-        if (field == "ScreenTab" && ModuleSettings.isDynamicPreferredVideoTabEnabled(prefs)) {
+        if (ModuleSettings.isDynamicPreferredVideoTabEnabled(prefs)) {
             updated = DynamicTabPolicy.preferVideo(updated, title, name, {
                 it?.callMethod("getDefaultTab") == true
             }, { tab, selected ->

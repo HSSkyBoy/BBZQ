@@ -142,7 +142,8 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
      */
     private fun isDynamicCandidate(activity: Activity, root: View, ownerName: String): Boolean {
         if (isDynamicFragmentOwner(ownerName)) return true
-        return findLooseTextView(root, CITY_TAB_LABELS) != null ||
+        return findLooseTextView(root, VIDEO_TAB_LABELS) != null ||
+            findLooseTextView(root, CITY_TAB_LABELS) != null ||
             findLooseTextView(root, SCHOOL_TAB_LABELS) != null
     }
 
@@ -353,6 +354,8 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "followinglist.home.mediator",
             "mediatorfragment",
             "followinglist",
+            "following",
+            "dynamic",
         )
         private val DETAIL_ACTIVITY_KEYWORDS = listOf(
             "detail",
