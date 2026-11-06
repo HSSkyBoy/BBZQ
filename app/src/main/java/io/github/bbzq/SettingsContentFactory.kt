@@ -3666,7 +3666,14 @@ class SettingsContentFactory(
         }
         bottomBarItemCheckBoxes.forEach { (id, checkBox) ->
             checkBox.isEnabled = bottomBarEnabled
-            checkBox.isChecked = id !in hiddenBottomBarItems
+            val item = bottomBarItems().firstOrNull { it.id == id }
+            val allKnown = ModuleSettings.getKnownBottomBarItems(prefs).mapNotNull(::parseBottomBarItem)
+            val isHidden = if (item != null) {
+                isBottomBarItemHidden(item, hiddenBottomBarItems, allKnown)
+            } else {
+                id in hiddenBottomBarItems
+            }
+            checkBox.isChecked = !isHidden
         }
         if (::homeRecommendItemSwitch.isInitialized) {
             homeRecommendItemSwitch.isChecked = homeRecommendFilterEnabled
@@ -3881,7 +3888,7 @@ class SettingsContentFactory(
 
     private fun saveHiddenBottomBarItems() {
         prefs.edit()
-            .putStringSet(ModuleSettings.KEY_HIDDEN_BOTTOM_BAR_ITEMS, hiddenBottomBarItemIds().toMutableSet())
+            .putStringSet(ModuleSettings.KEY_HIDDEN_BOTTOM_BAR_ITEMS, collectHiddenBottomBarKeys())
             .apply()
     }
 
@@ -3921,6 +3928,64 @@ class SettingsContentFactory(
 
     private fun hiddenBottomBarItemIds(): Set<String> =
         bottomBarItemCheckBoxes.filterValues { !it.isChecked }.keys.toSet()
+
+    private fun collectHiddenBottomBarKeys(): Set<String> {
+        val allKnown = ModuleSettings.getKnownBottomBarItems(prefs).mapNotNull(::parseBottomBarItem)
+        val hiddenSet = mutableSetOf<String>()
+        val oldHidden = ModuleSettings.getHiddenBottomBarItems(prefs)
+        val uiItems = bottomBarItems()
+        val handledOldKeys = mutableSetOf<String>()
+        uiItems.forEach { item ->
+            val isChecked = bottomBarItemCheckBoxes[item.id]?.isChecked ?: true
+            val matchingKnown = allKnown.filter { k ->
+                (item.id.isNotBlank() && item.id.equals(k.id, ignoreCase = true)) ||
+                    (item.name.isNotBlank() && item.name.equals(k.name, ignoreCase = true)) ||
+                    (item.uri.isNotBlank() && item.uri.equals(k.uri, ignoreCase = true))
+            }
+            val itemKeys = buildSet {
+                if (item.id.isNotBlank()) add(item.id)
+                if (item.name.isNotBlank()) add(item.name)
+                if (item.uri.isNotBlank()) add(item.uri)
+                matchingKnown.forEach { k ->
+                    if (k.id.isNotBlank()) add(k.id)
+                    if (k.name.isNotBlank()) add(k.name)
+                    if (k.uri.isNotBlank()) add(k.uri)
+                }
+            }
+            handledOldKeys.addAll(itemKeys)
+            if (!isChecked) {
+                hiddenSet.addAll(itemKeys)
+            }
+        }
+        oldHidden.forEach { oldKey ->
+            if (oldKey !in handledOldKeys) {
+                hiddenSet.add(oldKey)
+            }
+        }
+        return hiddenSet
+    }
+
+    private fun isBottomBarItemHidden(
+        item: BottomBarItem,
+        hiddenKeys: Set<String>,
+        knownItems: Collection<BottomBarItem>,
+    ): Boolean {
+        if (hiddenKeys.isEmpty()) return false
+        if (item.id in hiddenKeys || item.name in hiddenKeys || (item.uri.isNotBlank() && item.uri in hiddenKeys)) {
+            return true
+        }
+        for (known in knownItems) {
+            val matches = (item.id.isNotBlank() && item.id.equals(known.id, ignoreCase = true)) ||
+                (item.name.isNotBlank() && item.name.equals(known.name, ignoreCase = true)) ||
+                (item.uri.isNotBlank() && item.uri.equals(known.uri, ignoreCase = true))
+            if (matches) {
+                if (known.id in hiddenKeys || known.name in hiddenKeys || (known.uri.isNotBlank() && known.uri in hiddenKeys)) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
 
     private fun hiddenHomeRecommendItemKeys(): Set<String> =
         homeRecommendItemCheckBoxes.filterValues { it.isChecked }.keys.toSet()
@@ -4000,7 +4065,7 @@ class SettingsContentFactory(
     private fun bottomBarItems(): List<BottomBarItem> =
         ModuleSettings.refreshKnownBottomBarItemsCache(prefs)
             .mapNotNull(::parseBottomBarItem)
-            .distinctBy(BottomBarItem::id)
+            .distinctBy { it.name.ifBlank { it.uri.ifBlank { it.id } } }
             .sortedBy(BottomBarItem::order)
 
     private fun homeRecommendTabs(): List<HomeRecommendTabItem> =

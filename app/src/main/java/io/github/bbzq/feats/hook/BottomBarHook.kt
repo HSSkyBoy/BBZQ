@@ -65,6 +65,7 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
         val tabHostClass = tabHostSetTabsMethods.firstOrNull()?.declaringClass
+            ?: tabHostGetTabsMethods.firstOrNull()?.declaringClass
         if (tabHostClass != null) {
             tabHostClass.allMethods()
                 .filter { method ->
@@ -153,6 +154,14 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 val targetVisibility = if (hidden) View.GONE else View.VISIBLE
                 if (child.visibility != targetVisibility) {
                     child.visibility = targetVisibility
+                }
+                (child.layoutParams as? android.widget.LinearLayout.LayoutParams)?.let { lp ->
+                    val targetWeight = if (hidden) 0f else 1f
+                    if (lp.weight != targetWeight) {
+                        lp.weight = targetWeight
+                        if (hidden) lp.width = 0
+                        child.layoutParams = lp
+                    }
                 }
                 child.isClickable = !hidden
                 child.isEnabled = !hidden
@@ -301,11 +310,16 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun Any.findTabContainer(tabCount: Int): ViewGroup? {
-        if (this is ViewGroup && childCount >= tabCount) {
-            return this
+        if (this is ViewGroup) {
+            val containerId = context.resources.getIdentifier("container", "id", context.packageName)
+            if (containerId != 0) {
+                findViewById<ViewGroup>(containerId)?.takeIf { it.childCount >= tabCount }?.let { return it }
+            }
+            if (childCount >= tabCount) {
+                return this
+            }
+            findMatchingViewGroup(this, tabCount)?.let { return it }
         }
-        val directChild = (this as? ViewGroup)?.let { findDirectChildContainer(it, tabCount) }
-        if (directChild != null) return directChild
         return javaClass.allFields()
             .mapNotNull { field ->
                 runCatching { field.get(this) as? ViewGroup }.getOrNull()
@@ -313,11 +327,12 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
             .firstOrNull { container -> container.childCount >= tabCount }
     }
 
-    private fun findDirectChildContainer(parent: ViewGroup, tabCount: Int): ViewGroup? {
+    private fun findMatchingViewGroup(parent: ViewGroup, tabCount: Int): ViewGroup? {
         for (i in 0 until parent.childCount) {
             val child = parent.getChildAt(i)
-            if (child is ViewGroup && child.childCount >= tabCount) {
-                return child
+            if (child is ViewGroup) {
+                if (child.childCount >= tabCount) return child
+                findMatchingViewGroup(child, tabCount)?.let { return it }
             }
         }
         return null
@@ -411,12 +426,32 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun Any.findTabHost(tabHostClass: Class<*>?): Any? {
         if (tabHostClass == null) return null
         if (tabHostClass.isInstance(this)) return this
-        return javaClass.allFields()
+        val fieldHost = javaClass.allFields()
             .firstNotNullOfOrNull { field ->
                 runCatching { field.get(this) }
                     .getOrNull()
                     ?.takeIf(tabHostClass::isInstance)
             }
+        if (fieldHost != null) return fieldHost
+        val view = runCatching {
+            javaClass.getMethod("getView").invoke(this) as? ViewGroup
+        }.getOrNull()
+        if (view != null) {
+            if (tabHostClass.isInstance(view)) return view
+            return findTabHostInViewTree(view, tabHostClass)
+        }
+        return null
+    }
+
+    private fun findTabHostInViewTree(viewGroup: ViewGroup, tabHostClass: Class<*>): View? {
+        for (i in 0 until viewGroup.childCount) {
+            val child = viewGroup.getChildAt(i)
+            if (tabHostClass.isInstance(child)) return child
+            if (child is ViewGroup) {
+                findTabHostInViewTree(child, tabHostClass)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun looksLikeUri(value: String): Boolean =
@@ -476,12 +511,14 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun mergeKnownItems(oldItems: Set<String>, observedItems: Set<String>): Set<String> {
         val merged = linkedMapOf<String, KnownBottomBarItem>()
+        fun itemKey(item: KnownBottomBarItem) = item.name.ifBlank { item.uri.ifBlank { item.id } }
         oldItems.mapNotNull(::decodeBottomItem).forEach { item ->
-            merged.putIfAbsent(item.id, item)
+            merged.putIfAbsent(itemKey(item), item)
         }
         observedItems.mapNotNull(::decodeBottomItem).forEach { item ->
-            val oldItem = merged[item.id]
-            merged[item.id] = item.copy(order = oldItem?.order ?: item.order)
+            val key = itemKey(item)
+            val oldItem = merged[key]
+            merged[key] = item.copy(order = oldItem?.order ?: item.order)
         }
         return encodeKnownItems(merged.values)
     }
@@ -492,7 +529,7 @@ class BottomBarHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun encodeKnownItems(items: Collection<KnownBottomBarItem>): Set<String> =
         items.asSequence()
             .filter { it.id.isNotBlank() && it.name.isNotBlank() }
-            .distinctBy(KnownBottomBarItem::id)
+            .distinctBy { it.name.ifBlank { it.uri.ifBlank { it.id } } }
             .sortedWith(compareBy<KnownBottomBarItem> { it.order }.thenBy { it.name }.thenBy { it.id })
             .mapIndexed { index, item ->
                 encodeBottomItem(
