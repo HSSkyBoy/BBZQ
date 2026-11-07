@@ -28,14 +28,14 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     param.thisObject?.let(::replaceJoinUsEntry)
                 }
                 installed++
-                log("SettingHook installed on ${fragmentClass.name}")
+                log("SettingHook：已安裝至 ${fragmentClass.name}")
             }
         }
         installHomeAvatarLongClickHook()
         if (installed == 0) {
-            log("SettingHook skipped: No HelpFragment classes available")
+            log("SettingHook：跳過，未找到可用的 HelpFragment 類別")
         } else {
-            log("startHook: Setting replaces About Bilibili join-us entry in $installed fragment class(es)")
+            log("SettingHook：已在 $installed 個 Fragment 類別中替換關於頁加入我們入口")
         }
     }
 
@@ -69,7 +69,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
         setter.invoke(entry, listener)
-        log("Replaced About Bilibili join-us entry in ${fragment.javaClass.name}")
+        log("SettingHook：已替換 ${fragment.javaClass.name} 中的加入我們入口為 BBZQ 設置")
     }
 
     private fun findJoinUsPreference(fragment: Any, activity: Activity): Any? {
@@ -120,7 +120,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
             observedPrefs = prefs,
         ).apply {
             val account = HostAccountResolver.resolve(env.hostContext, classLoader)
-            log("Setting: host account loggedIn=${account.loggedIn} uidLength=${account.uid.length} nameBlank=${account.userName.isBlank()}")
+            log("SettingHook：讀取宿主帳號 登入狀態=${account.loggedIn} UID長度=${account.uid.length} 用戶名空白=${account.userName.isBlank()}")
             putString(ModuleSettings.KEY_HOST_ACCOUNT_UID, if (account.loggedIn) account.uid else "")
             putString(ModuleSettings.KEY_HOST_ACCOUNT_NAME, if (account.loggedIn) account.userName else "")
             if (account.loggedIn && account.accessKey.isNotBlank()) {
@@ -137,9 +137,9 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     attachAvatarLongClick(activity)
                 }
             }
-            log("SettingHook installed: Home Activity.onResume avatar long click watcher")
+            log("SettingHook：已安裝首頁 Activity.onResume 長按頭像監聽")
         }.onFailure {
-            log("SettingHook: Failed to install Activity.onResume avatar long click watcher", it)
+            log("SettingHook：安裝 Activity.onResume 長按頭像監聽失敗", it)
         }
 
         // 2. Hook BaseMainFrameFragment / MainFragment.onViewCreated
@@ -153,7 +153,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     val activity = fragment.callMethod("getActivity") as? Activity ?: return@hookAfter
                     attachAvatarLongClick(activity, view)
                 }
-                log("SettingHook installed avatar watcher on ${fragmentClass.name}.onViewCreated")
+                log("SettingHook：已在 ${fragmentClass.name}.onViewCreated 安裝長按頭像監聽")
             }
         }
     }
@@ -178,11 +178,11 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val onLongClick = View.OnLongClickListener { v ->
             val account = HostAccountResolver.resolve(activity, classLoader)
             if (!account.loggedIn) {
-                log("Home avatar long clicked, but user is not logged in, ignoring")
+                log("SettingHook：首頁頭像被長按，但用戶未登入，忽略操作")
                 return@OnLongClickListener false
             }
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            log("Home avatar long clicked, opening BBZQ settings")
+            log("SettingHook：首頁頭像被長按，正在開啟 BBZQ 設置")
             ModuleSettingsNavigator.open(activity, runtimeSnapshot())
             true
         }
@@ -201,7 +201,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
         if (bound) {
-            log("Home avatar long click listener attached in ${activity.javaClass.simpleName}")
+            log("SettingHook：已在 ${activity.javaClass.simpleName} 綁定長按頭像監聽器")
         }
     }
 

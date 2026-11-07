@@ -15,7 +15,9 @@ import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.findClassOrNull
+import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
+import java.lang.reflect.Modifier
 
 class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var currentVideoDetailActivity: java.lang.ref.WeakReference<Activity>? = null
@@ -62,7 +64,8 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             override fun onTrimMemory(level: Int) = Unit
         })
 
-        installPlayerWidgetHook()
+        installLegacyStoryWidgetHook()
+        installComposeStoryHook()
 
         log("startHook: PlayerUi installed (portrait story button control & gesture safe)")
         isInstalled = true
@@ -100,28 +103,159 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    private fun installPlayerWidgetHook() {
+    /**
+     * 针对 9.0.0 ~ 9.15.0 以及双轨运行时保留的传统 Widget（GeminiPlayerFullStoryWidget / GeminiPlayerFullscreenWidget）
+     */
+    private fun installLegacyStoryWidgetHook() {
+        // 1. GeminiPlayerFullStoryWidget: 橫屏短視頻/看一看入口
         runCatching {
             val storyWidgetClass = classLoader.findClassOrNull("com.bilibili.app.gemini.player.widget.story.GeminiPlayerFullStoryWidget")
             if (storyWidgetClass != null) {
+                // Hook 構造函數，實例化時即刻隱藏並物理收縮
+                storyWidgetClass.declaredConstructors.forEach { constructor ->
+                    env.hookAfter(constructor) { param ->
+                        if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                            (param.thisObject as? View)?.let { view ->
+                                view.visibility = View.GONE
+                                hideViewPhysically(view)
+                            }
+                        }
+                    }
+                }
+
+                // Hook 所有返回 Boolean 的無參方法（如判斷是否允許顯示 story 的開關 m91790H 等）
                 storyWidgetClass.declaredMethods
-                    .filter { it.name == "setVisibility" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
+                    .filter {
+                        !Modifier.isStatic(it.modifiers) &&
+                            it.parameterTypes.isEmpty() &&
+                            (it.returnType == java.lang.Boolean.TYPE || it.returnType == java.lang.Boolean::class.java)
+                    }
                     .forEach { method ->
                         env.hookBefore(method) { param ->
                             if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
-                                param.args[0] = View.GONE
+                                param.result = false
                             }
                         }
                     }
             }
         }.onFailure {
-            log("PlayerUi: installPlayerWidgetHook failed", it)
+            log("PlayerUi: installLegacyStoryWidgetHook (FullStory) failed", it)
+        }
+
+        // 2. GeminiPlayerFullscreenWidget: 豎屏模式下全屏轉 Story 入口
+        runCatching {
+            val fullscreenWidgetClass = classLoader.findClassOrNull("com.bilibili.app.gemini.player.widget.story.GeminiPlayerFullscreenWidget")
+            if (fullscreenWidgetClass != null) {
+                fullscreenWidgetClass.declaredMethods
+                    .filter {
+                        !Modifier.isStatic(it.modifiers) &&
+                            it.parameterTypes.isEmpty() &&
+                            (it.returnType == java.lang.Boolean.TYPE || it.returnType == java.lang.Boolean::class.java)
+                    }
+                    .forEach { method ->
+                        env.hookBefore(method) { param ->
+                            if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                                param.result = false
+                            }
+                        }
+                    }
+            }
+        }.onFailure {
+            log("PlayerUi: installLegacyStoryWidgetHook (FullscreenWidget) failed", it)
+        }
+    }
+
+    /**
+     * 針對 9.17.0+ / 9.18.0 等 Theseus2 Compose 架構的看一看與豎屏控制項
+     */
+    private fun installComposeStoryHook() {
+        // 1. Hook TheseusStoryEntranceInitial 構造函數 (Long?, boolean)
+        // 將 playerStoryControlsEnabled (args[1]) 強制置為 false
+        runCatching {
+            val initialClass = classLoader.findClassOrNull("com.bilibili.ship.theseus2.united.page.story.S")
+            if (initialClass != null) {
+                initialClass.declaredConstructors.forEach { constructor ->
+                    val paramTypes = constructor.parameterTypes
+                    if (paramTypes.size >= 2 && (paramTypes[1] == java.lang.Boolean.TYPE || paramTypes[1] == java.lang.Boolean::class.java)) {
+                        env.hookBefore(constructor) { param ->
+                            if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                                param.args[1] = false
+                            }
+                        }
+                    }
+                }
+            }
+        }.onFailure {
+            log("PlayerUi: installComposeStoryHook (Initial) failed", it)
+        }
+
+        // 2. Hook StoryEntranceService:
+        // 在其構造完成後，將內部可見性狀態 MutableState 與 boolean 開關全數壓制為 false
+        runCatching {
+            val serviceClass = classLoader.findClassOrNull("com.bilibili.ship.theseus2.united.page.story.StoryEntranceService")
+            if (serviceClass != null) {
+                serviceClass.declaredConstructors.forEach { constructor ->
+                    env.hookAfter(constructor) { param ->
+                        if (!ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) return@hookAfter
+                        val instance = param.thisObject ?: return@hookAfter
+                        suppressStoryEntranceServiceStates(instance)
+                    }
+                }
+            }
+        }.onFailure {
+            log("PlayerUi: installComposeStoryHook (StoryEntranceService) failed", it)
+        }
+
+        // 3. Hook 所有依賴 StoryEntranceService 的 Function0 / Composable Lambda 提供者
+        // 當 Compose 控制容器查詢 storyControlUi / fullscreenControlUi 時直接返回 null
+        runCatching {
+            val lambdaClasses = listOf(
+                "com.bilibili.ship.theseus2.united.page.story.e",
+                "com.bilibili.ship.theseus2.united.page.story.f",
+                "com.bilibili.ship.theseus2.united.page.story.i",
+                "com.bilibili.ship.theseus2.united.page.story.j",
+            )
+            lambdaClasses.forEach { className ->
+                val clazz = classLoader.findClassOrNull(className) ?: return@forEach
+                clazz.declaredMethods
+                    .filter { it.name == "invoke" }
+                    .forEach { method ->
+                        env.hookBefore(method) { param ->
+                            if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                                param.result = null
+                            }
+                        }
+                    }
+            }
+        }.onFailure {
+            log("PlayerUi: installComposeStoryHook (Lambdas) failed", it)
+        }
+    }
+
+    private fun suppressStoryEntranceServiceStates(instance: Any) {
+        runCatching {
+            instance.javaClass.declaredFields.forEach { field ->
+                field.isAccessible = true
+                val fieldType = field.type
+                if (fieldType == java.lang.Boolean.TYPE) {
+                    field.setBoolean(instance, false)
+                } else if (fieldType.name.contains("MutableState")) {
+                    val stateObj = field.get(instance) ?: return@forEach
+                    runCatching {
+                        val setValueMethod = stateObj.javaClass.methods.firstOrNull {
+                            it.name == "setValue" && it.parameterTypes.size == 1
+                        }
+                        setValueMethod?.invoke(stateObj, false)
+                    }
+                }
+            }
         }
     }
 
     private fun schedulePlayerUiTuning(activity: Activity) {
         val decor = activity.window?.decorView ?: return
         applyTuningInternal(activity, decor)
+        installViewHierarchyListener(decor)
         CONTROL_RECHECK_DELAYS_MS.forEach { delay ->
             decor.postDelayed({
                 if (!activity.isFinishing && !activity.isDestroyed && decor.isAttachedToWindow) {
@@ -131,6 +265,22 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
+    private fun installViewHierarchyListener(root: View) {
+        if (root !is ViewGroup) return
+        root.setOnHierarchyChangeListener(object : ViewGroup.OnHierarchyChangeListener {
+            override fun onChildViewAdded(parent: View?, child: View?) {
+                if (child != null && ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                    revealPortraitControls(child)
+                    if (child is ViewGroup) {
+                        installViewHierarchyListener(child)
+                    }
+                }
+            }
+
+            override fun onChildViewRemoved(parent: View?, child: View?) = Unit
+        })
+    }
+
     private fun applyTuningInternal(activity: Activity, decor: View) {
         val isStory = isStoryActivity(activity)
 
@@ -138,9 +288,6 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (!isStory && ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
             revealPortraitControls(decor)
         }
-
-        // 伴随广告跳过指示条
-        // SkipVideoAdProgress
     }
 
     private fun revealPortraitControls(view: View) {
@@ -148,15 +295,7 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             if (view.visibility != View.GONE) {
                 view.visibility = View.GONE
             }
-            view.layoutParams?.let { lp ->
-                if (lp.width != 0 || lp.height != 0) {
-                    lp.width = 0
-                    lp.height = 0
-                    view.layoutParams = lp
-                }
-            }
-            view.isClickable = false
-            view.setOnClickListener(null)
+            hideViewPhysically(view)
             return
         }
         if (view is ViewGroup) {
@@ -167,11 +306,21 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
+    private fun hideViewPhysically(view: View) {
+        view.layoutParams?.let { lp ->
+            if (lp.width != 0 || lp.height != 0) {
+                lp.width = 0
+                lp.height = 0
+                view.layoutParams = lp
+            }
+        }
+        view.isClickable = false
+        view.setOnClickListener(null)
+    }
+
     private fun isPortraitControl(view: View): Boolean {
         val className = view.javaClass.name
-        if (className.contains("FullStoryWidget", ignoreCase = true) ||
-            className.contains("GeminiPlayerFullStoryWidget", ignoreCase = true)
-        ) {
+        if (PORTRAIT_CLASS_MARKERS.any { className.contains(it, ignoreCase = true) }) {
             return true
         }
 
@@ -224,7 +373,12 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private companion object {
-        private val CONTROL_RECHECK_DELAYS_MS = longArrayOf(50L, 200L, 500L, 1_000L, 2_000L)
+        private val CONTROL_RECHECK_DELAYS_MS = longArrayOf(50L, 200L, 500L, 1_000L, 2_000L, 3_500L)
+        private val PORTRAIT_CLASS_MARKERS = listOf(
+            "FullStoryWidget",
+            "GeminiPlayerFullStoryWidget",
+            "PlayerFullStory",
+        )
         private val PORTRAIT_DESCRIPTION_MARKERS = listOf(
             "进入看一看",
             "看一看",
@@ -232,6 +386,8 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "展开竖屏",
             "切换竖屏",
             "切为竖屏",
+            "竖屏全屏",
+            "展开全屏",
         )
         private val EXACT_PORTRAIT_IDS = setOf(
             "bbplayer_halfscreen_story",
@@ -240,7 +396,8 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "story_ctrl_screen",
             "story_fullscreen",
             "outside_portrait",
+            "portrait_fullscreen",
+            "ver_fullscreen",
         )
     }
 }
-
