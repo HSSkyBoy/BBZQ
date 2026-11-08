@@ -133,12 +133,136 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success() && matrix.label == 'uni'
         with:
-          name: bzzq-${{ env.VERSION }}-${{ matrix.label }}-debug
+          name: bbzq-${{ env.VERSION }}-${{ matrix.label }}-debug
           path: 'app/build/outputs/apk/debug/*.apk'
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: bzzq-${{ env.VERSION }}-${{ matrix.label }}-release
+          name: bbzq-${{ env.VERSION }}-${{ matrix.label }}-release
           path: 'app/release/*.apk'
+
+  publish:
+    name: Publish to Telegram
+    needs: [version, build]
+    if: success() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Send APKs to Telegram
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+          TITLE: BBZQ
+          VERSION: ${{ needs.version.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+            echo "::warning::Telegram secrets not configured, skipping upload"
+            exit 0
+          fi
+
+          # Collect release APKs
+          APK_FILES=()
+          while IFS= read -r -d '' file; do
+            APK_FILES+=("$file")
+          done < <(find artifacts -type f -name '*.apk' ! -name '*debug*' -print0 | sort -z)
+
+          if [ ${#APK_FILES[@]} -eq 0 ]; then
+            echo "::warning::No release APK found, checking all APKs..."
+            while IFS= read -r -d '' file; do
+              APK_FILES+=("$file")
+            done < <(find artifacts -type f -name '*.apk' -print0 | sort -z)
+          fi
+
+          if [ ${#APK_FILES[@]} -eq 0 ]; then
+            echo "::error::No APK files found to publish"
+            exit 1
+          fi
+
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B 2>/dev/null || echo "No commit message")
+          PRIMARY_AUTHOR=$(git log -1 --pretty=%an 2>/dev/null || echo "Unknown")
+
+          escape_html() {
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+
+          trim_caption_message() {
+            local text="$1"
+            local limit="$2"
+
+            if [ "$limit" -le 0 ]; then
+              printf ''
+              return
+            fi
+
+            if [ "${#text}" -le "$limit" ]; then
+              printf '%s' "$text"
+              return
+            fi
+
+            if [ "$limit" -le 3 ]; then
+              printf '%.*s' "$limit" '...'
+              return
+            fi
+
+            printf '%s...' "${text:0:$((limit - 3))}"
+          }
+
+          SAFE_TITLE=$(printf '%s' "$TITLE" | escape_html)
+          SAFE_BRANCH=$(printf '%s' "$BRANCH" | escape_html)
+          SAFE_PRIMARY_AUTHOR=$(printf '%s' "$PRIMARY_AUTHOR" | escape_html)
+          SAFE_MESSAGE=$(printf '%s' "$COMMIT_MESSAGE" | sed -e 's/\r//g' | escape_html)
+
+          NL=$'\n'
+          CAPTION_PREFIX="<b>${SAFE_TITLE}</b> ${VERSION}${NL}"
+          CAPTION_PREFIX+="Author: ${SAFE_PRIMARY_AUTHOR}${NL}"
+          CAPTION_PREFIX+="Branch: ${SAFE_BRANCH}${NL}"
+          CAPTION_PREFIX+="Run: #ci_${GITHUB_RUN_NUMBER}${NL}${NL}"
+          CAPTION_SUFFIX="${NL}${NL}<a href=\"${COMMIT_URL}\">Commit</a> | <a href=\"${RUN_URL}\">Workflow run</a>"
+
+          MAX_CAPTION_LENGTH=1024
+          MESSAGE_WRAPPER_LENGTH=24
+          AVAILABLE_MESSAGE_LENGTH=$((MAX_CAPTION_LENGTH - ${#CAPTION_PREFIX} - ${#CAPTION_SUFFIX} - MESSAGE_WRAPPER_LENGTH))
+          SAFE_MESSAGE=$(trim_caption_message "$SAFE_MESSAGE" "$AVAILABLE_MESSAGE_LENGTH")
+          CAPTION="${CAPTION_PREFIX}<blockquote>${SAFE_MESSAGE}</blockquote>${CAPTION_SUFFIX}"
+
+          # Send documents to Telegram
+          FIRST=true
+          for apk in "${APK_FILES[@]}"; do
+            echo "Uploading $(basename "$apk") to Telegram..."
+            CURL_ARGS=(
+              --silent --show-error --fail
+              --request POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument"
+              --form "chat_id=${TG_CHAT_ID}"
+              --form "document=@${apk}"
+            )
+            if [ "$FIRST" = true ]; then
+              CURL_ARGS+=(
+                --form "parse_mode=HTML"
+                --form-string "caption=${CAPTION}"
+              )
+              FIRST=false
+            fi
+            if [ -n "${TG_THREAD_ID:-}" ]; then
+              CURL_ARGS+=(--form "message_thread_id=${TG_THREAD_ID}")
+            fi
+            curl "${CURL_ARGS[@]}" >/dev/null
+          done
+
+          echo "All artifacts uploaded to Telegram successfully."
