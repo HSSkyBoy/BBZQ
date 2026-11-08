@@ -27,14 +27,14 @@ class SeaBangumiSubtitleHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var replyClass: Class<*>? = null
 
     override fun startHook() {
-        if (env.processName != env.packageName) return
         if (!ModuleSettings.isSeaBangumiSubtitleEnabled(prefs)) return
         val mossClass = classLoader.findClassOrNull(MOSS_CLASS)
+            ?: classLoader.findClassOrNull(MOSS_CLASS_SHORT)
         val requestClass = classLoader.findClassOrNull(REQUEST_CLASS)
         replyClass = classLoader.findClassOrNull(REPLY_CLASS)
         val handlerClass = classLoader.findClassOrNull(MOSS_HANDLER)?.takeIf { it.isInterface }
         if (mossClass == null || requestClass == null || replyClass == null) {
-            log("SeaBangumiSubtitle: DmMoss not found on this host")
+            log("SeaBangumiSubtitle: DMMoss/DmMoss not found on this host")
             return
         }
         var installed = 0
@@ -139,7 +139,8 @@ class SeaBangumiSubtitleHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private companion object {
         const val V1 = "com.bapis.bilibili.community.service.dm.v1."
-        const val MOSS_CLASS = V1 + "DmMoss"
+        const val MOSS_CLASS = V1 + "DMMoss"
+        const val MOSS_CLASS_SHORT = V1 + "DmMoss"
         const val REQUEST_CLASS = V1 + "DmViewReq"
         const val REPLY_CLASS = V1 + "DmViewReply"
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"

@@ -1,6 +1,8 @@
 package io.github.bbzq.feats.hook
 
 import io.github.bbzq.feats.AppSignature
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -81,5 +83,30 @@ class SeaBangumiDetailPolicyTest {
             "http://r.example:8080/pgc/view/web/season",
             SeaBangumiDetailPolicy.replayUrl("http://r.example:8080", "/pgc/view/web/season", null),
         )
+    }
+
+    @Test
+    fun decodePrefixBytesHandlesTruncatedGzipWithoutEOFException() {
+        // Generate a large payload (> 10KB) that compresses to > 1KB
+        val largeJson = buildString {
+            append("""{"code":0,"message":"success","result":{"episodes":[""")
+            repeat(300) {
+                append("""{"id":$it,"title":"Episode $it","desc":"A long description for episode $it to make it big"},""")
+            }
+            append("""{"id":999,"title":"final"}]}}""")
+        }
+
+        val gzipBytes = ByteArrayOutputStream().apply {
+            GZIPOutputStream(this).use { it.write(largeJson.toByteArray(Charsets.UTF_8)) }
+        }.toByteArray()
+
+        assertTrue(gzipBytes.size > 2000)
+
+        // Truncate the gzip stream to 500 bytes (simulating peekBody(4096) on a large response)
+        val truncatedGzip = gzipBytes.copyOfRange(0, 500)
+
+        val prefix = SeaBangumiDetailPolicy.decodePrefixBytes(truncatedGzip, 4096)
+        assertTrue("Decoded prefix should not be empty even when gzip was truncated", prefix.isNotEmpty())
+        assertTrue("Decoded prefix should contain start of JSON", prefix.startsWith("""{"code":0,"message":"success""""))
     }
 }

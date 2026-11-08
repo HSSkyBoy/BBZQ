@@ -1,7 +1,9 @@
 package io.github.bbzq.feats.hook
 
+import io.github.bbzq.feats.ResolverRegion
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
+import java.util.concurrent.ConcurrentHashMap
 
 /** Holds back host callbacks that arrive while a resolver lookup is still in flight. */
 internal class Gate {
@@ -65,20 +67,105 @@ internal object MossCallbacks {
     }
 }
 
-/** What the last resolver-served PGC playback was, so the follow-up danmaku/subtitle request knows. */
+/**
+ * Shared session state for resolver-served PGC bangumi seasons and episodes across
+ * View, SeasonSectionsForCache, PlayViewUnite, PlayView, and DmView (subtitles).
+ */
 internal object SeaBangumiSession {
-    class Served(val epId: Long, val cid: Long, val region: io.github.bbzq.feats.ResolverRegion, val at: Long)
+    class Served(val epId: Long, val cid: Long, val region: ResolverRegion, val at: Long)
+
+    class EpisodeMeta(
+        val epId: Long,
+        val seasonId: Long,
+        val aid: Long,
+        val cid: Long,
+        val region: ResolverRegion?,
+    )
+
+    class CachedSeason(
+        val seasonId: Long,
+        val jsonBody: String,
+        val region: ResolverRegion,
+        val at: Long,
+    )
 
     @Volatile
     private var latest: Served? = null
 
-    fun record(epId: Long, cid: Long, region: io.github.bbzq.feats.ResolverRegion) {
+    private val byEpId = ConcurrentHashMap<Long, EpisodeMeta>()
+    private val byCid = ConcurrentHashMap<Long, EpisodeMeta>()
+    private val firstEpBySeason = ConcurrentHashMap<Long, EpisodeMeta>()
+    private val seasonCache = ConcurrentHashMap<Long, CachedSeason>()
+
+    fun record(epId: Long, cid: Long, region: ResolverRegion, seasonId: Long = 0L, aid: Long = 0L) {
         latest = Served(epId, cid, region, System.currentTimeMillis())
+        if (epId > 0L) {
+            val prev = byEpId[epId]
+            val merged = EpisodeMeta(
+                epId = epId,
+                seasonId = if (seasonId > 0L) seasonId else (prev?.seasonId ?: 0L),
+                aid = if (aid > 0L) aid else (prev?.aid ?: 0L),
+                cid = if (cid > 0L) cid else (prev?.cid ?: 0L),
+                region = region,
+            )
+            byEpId[epId] = merged
+            if (merged.cid > 0L) byCid[merged.cid] = merged
+        }
     }
 
+    fun recordEpisode(
+        epId: Long,
+        seasonId: Long,
+        aid: Long,
+        cid: Long,
+        region: ResolverRegion?,
+        isFirstInSeason: Boolean = false,
+    ) {
+        if (epId <= 0L) return
+        val prev = byEpId[epId]
+        val meta = EpisodeMeta(
+            epId = epId,
+            seasonId = if (seasonId > 0L) seasonId else (prev?.seasonId ?: 0L),
+            aid = if (aid > 0L) aid else (prev?.aid ?: 0L),
+            cid = if (cid > 0L) cid else (prev?.cid ?: 0L),
+            region = region ?: prev?.region,
+        )
+        byEpId[epId] = meta
+        if (meta.cid > 0L) byCid[meta.cid] = meta
+        if (seasonId > 0L && (isFirstInSeason || !firstEpBySeason.containsKey(seasonId))) {
+            firstEpBySeason[seasonId] = meta
+        }
+    }
+
+    fun recordSeasonJson(seasonId: Long, jsonBody: String, region: ResolverRegion) {
+        if (seasonId <= 0L || jsonBody.isBlank()) return
+        seasonCache[seasonId] = CachedSeason(seasonId, jsonBody, region, System.currentTimeMillis())
+    }
+
+    fun cachedSeason(seasonId: Long, now: Long = System.currentTimeMillis()): CachedSeason? =
+        seasonCache[seasonId]?.takeIf { now - it.at <= SEASON_FRESH_MILLIS }
+
+    fun episodeForEpId(epId: Long): EpisodeMeta? = if (epId > 0L) byEpId[epId] else null
+
+    fun episodeForCid(cid: Long): EpisodeMeta? = if (cid > 0L) byCid[cid] else null
+
+    fun firstEpisodeForSeason(seasonId: Long): EpisodeMeta? = if (seasonId > 0L) firstEpBySeason[seasonId] else null
+
     /** The recent served playback that belongs to [cid]; an unknown cid on either side still matches. */
-    fun recentFor(cid: Long, now: Long = System.currentTimeMillis()): Served? =
-        latest?.takeIf { now - it.at <= FRESH_MILLIS && (it.cid == 0L || cid == 0L || it.cid == cid) }
+    fun recentFor(cid: Long, now: Long = System.currentTimeMillis()): Served? {
+        latest?.takeIf { now - it.at <= FRESH_MILLIS && (it.cid == 0L || cid == 0L || it.cid == cid) }?.let {
+            return it
+        }
+        if (cid > 0L) {
+            val meta = byCid[cid]
+            val region = meta?.region ?: latest?.region
+            if (meta != null && region != null) {
+                return Served(meta.epId, meta.cid, region, now)
+            }
+        }
+        return null
+    }
 
     private const val FRESH_MILLIS = 5 * 60 * 1000L
+    private const val SEASON_FRESH_MILLIS = 15 * 60 * 1000L
 }

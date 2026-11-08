@@ -3,6 +3,8 @@ package io.github.bbzq.feats.hook
 import io.github.bbzq.feats.AppSignature
 import io.github.bbzq.feats.callMethod
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.EOFException
 import java.net.URLDecoder
 import java.util.zip.GZIPInputStream
 
@@ -28,12 +30,37 @@ internal object SeaBangumiDetailPolicy {
     fun peekPrefix(response: Any): String {
         val body = response.callMethod("peekBody", PEEK_BYTES) ?: return ""
         val bytes = (body.callMethod("bytes") as? ByteArray) ?: return ""
+        return decodePrefixBytes(bytes, PEEK_BYTES.toInt())
+    }
+
+    /**
+     * Decodes a (possibly truncated) response byte prefix into UTF-8 text.
+     * `peekBody(4096)` truncates large gzipped season responses mid-stream, which causes
+     * `GZIPInputStream` to throw [EOFException] after decompressing the available prefix.
+     */
+    fun decodePrefixBytes(bytes: ByteArray, maxBytes: Int = PEEK_BYTES.toInt()): String {
+        if (bytes.isEmpty()) return ""
         if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
-            return runCatching {
-                GZIPInputStream(ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).readText()
-            }.getOrDefault("")
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(1024)
+            runCatching {
+                GZIPInputStream(ByteArrayInputStream(bytes)).use { gis ->
+                    while (out.size() < maxBytes) {
+                        val toRead = minOf(buf.size, maxBytes - out.size())
+                        val read = try {
+                            gis.read(buf, 0, toRead)
+                        } catch (_: EOFException) {
+                            -1
+                        }
+                        if (read <= 0) break
+                        out.write(buf, 0, read)
+                    }
+                }
+            }
+            return String(out.toByteArray(), Charsets.UTF_8)
         }
-        return String(bytes, Charsets.UTF_8)
+        val slice = if (bytes.size > maxBytes) bytes.copyOfRange(0, maxBytes) else bytes
+        return String(slice, Charsets.UTF_8)
     }
 
     /** The `code` at the start of a JSON response, or null when there is none. */
@@ -79,5 +106,5 @@ internal object SeaBangumiDetailPolicy {
     }
 
     private fun unescape(raw: String): String =
-        Regex("\\\\u([0-9a-fA-F]{4})").replace(raw) { it.groupValues[1].toInt(16).toChar().toString() }
+        Regex("\\\\u([00-9a-fA-F]{4})").replace(raw) { it.groupValues[1].toInt(16).toChar().toString() }
 }

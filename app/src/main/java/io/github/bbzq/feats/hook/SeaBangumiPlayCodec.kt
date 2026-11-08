@@ -5,7 +5,8 @@ import org.json.JSONObject
 
 /**
  * Turns the resolver's ordinary `pgc/player/web/playurl` result into the `video_info` of a
- * `pgc.gateway.player.v2.PlayViewReply`, so the host player can consume it unchanged.
+ * `pgc.gateway.player.v2.PlayViewReply` or `bilibili.app.playerunite.v1.PlayViewUniteReply`,
+ * so the host player can consume it unchanged.
  */
 internal object SeaBangumiPlayCodec {
     private const val REPLY_VIDEO_INFO = 1
@@ -18,6 +19,85 @@ internal object SeaBangumiPlayCodec {
 
     /** The dialog type the host itself uses for a copyright-region refusal. */
     const val AREA_LIMIT_DIALOG = "area_limit"
+
+    class DecodedUniteReq(
+        val aid: Long,
+        val cid: Long,
+        val qn: Long,
+        val fnval: Long,
+        val fnver: Long,
+        val fourk: Boolean,
+        val seasonId: Long,
+        val epId: Long,
+    )
+
+    fun decodePlayViewUniteReq(bytes: ByteArray): DecodedUniteReq? {
+        val fields = ProtoWire.readFields(bytes) ?: return null
+        var aid = 0L
+        var cid = 0L
+        var qn = 0L
+        var fnval = 0L
+        var fnver = 0L
+        var fourk = false
+
+        fields.firstOrNull { it.number == 1 && it.wireType == 2 }?.let { vodField ->
+            val vodFields = ProtoWire.readFields(vodField.bytes)
+            if (vodFields != null) {
+                aid = vodFields.firstOrNull { it.number == 1 && it.wireType == 0 }?.varint ?: 0L
+                cid = vodFields.firstOrNull { it.number == 2 && it.wireType == 0 }?.varint ?: 0L
+                qn = vodFields.firstOrNull { it.number == 3 && it.wireType == 0 }?.varint ?: 0L
+                fnver = vodFields.firstOrNull { it.number == 4 && it.wireType == 0 }?.varint ?: 0L
+                fnval = vodFields.firstOrNull { it.number == 5 && it.wireType == 0 }?.varint ?: 0L
+                fourk = (vodFields.firstOrNull { it.number == 8 && it.wireType == 0 }?.varint ?: 0L) != 0L
+            }
+        }
+
+        var seasonId = 0L
+        var epId = 0L
+        for (f in fields) {
+            if (f.number == 4 && f.wireType == 2) {
+                val entry = ProtoWire.readStringMapEntry(f.bytes) ?: continue
+                if (entry.first == "season_id") {
+                    seasonId = entry.second.toLongOrNull() ?: seasonId
+                } else if (entry.first == "ep_id") {
+                    epId = entry.second.toLongOrNull() ?: epId
+                }
+            }
+        }
+
+        return DecodedUniteReq(
+            aid = aid,
+            cid = cid,
+            qn = qn,
+            fnval = fnval,
+            fnver = fnver,
+            fourk = fourk,
+            seasonId = seasonId,
+            epId = epId,
+        )
+    }
+
+    fun isUniteReplyBlocked(bytes: ByteArray): Boolean {
+        if (bytes.isEmpty()) return true
+        val fields = ProtoWire.readFields(bytes) ?: return true
+        val vodInfo = fields.firstOrNull { it.number == 1 && it.wireType == 2 } ?: return true
+        val vodFields = ProtoWire.readFields(vodInfo.bytes) ?: return true
+        val streamCount = vodFields.count { it.number == 5 && it.wireType == 2 }
+        if (streamCount <= 0) return true
+
+        // ViewInfo (field 9)
+        fields.firstOrNull { it.number == 9 && it.wireType == 2 }?.let { viewInfoField ->
+            val viewFields = ProtoWire.readFields(viewInfoField.bytes)
+            viewFields?.forEach { vf ->
+                if (vf.number == 1 && vf.wireType == 2) {
+                    // dialog_map map entry
+                    val entry = ProtoWire.readStringMapEntry(vf.bytes)
+                    if (entry?.first == AREA_LIMIT_DIALOG) return true
+                }
+            }
+        }
+        return false
+    }
 
     /**
      * Whether an official PGC play reply cannot be played in this region: it carries no streams at
@@ -70,20 +150,87 @@ internal object SeaBangumiPlayCodec {
 
     /**
      * Builds a unified player reply (PlayViewUniteReply) swapping in the resolver streams.
-     * Field 1: vod_info (VodInfo), Field 2: play_arc_conf, Field 9: view_info.
+     * Field 1: vod_info (VodInfo), Field 2: play_arc_conf, Field 5: supplement, Field 6: play_arc, Field 9: view_info.
+     *
+     * In Bilibili 9.18.0, MediaScopeDriverImpl validates play_arc.video_type == 2 (BIZ_TYPE_PGC)
+     * and reads play_arc.aid & play_arc.cid. If play_arc is missing or unknown, it aborts media playback.
      */
     fun buildUniteReply(
         original: ByteArray,
         result: JSONObject,
         relaxPlayLimits: Boolean = false,
         cdnHost: String? = null,
+        aid: Long = 0L,
+        cid: Long = 0L,
+        epId: Long = 0L,
+        seasonId: Long = 0L,
     ): ByteArray? {
         val vodInfo = encodeVideoInfo(result, cdnHost) ?: return null
-        val dropped = if (relaxPlayLimits) setOf(1, 2, 9) else setOf(1, 9)
+
+        val shouldInjectArc = aid > 0L || cid > 0L || epId > 0L || seasonId > 0L
+
+        val dropped = when {
+            relaxPlayLimits && shouldInjectArc -> setOf(1, 2, 5, 6, 9)
+            relaxPlayLimits -> setOf(1, 2, 9)
+            shouldInjectArc -> setOf(1, 5, 6, 9)
+            else -> setOf(1, 9)
+        }
         val rest = if (original.isNotEmpty()) ProtoWire.dropFields(original, dropped) ?: ByteArray(0) else ByteArray(0)
+
+        val timelength = result.optLong("timelength", 0L)
+
+        // Field 6: play_arc (PlayArc)
+        val playArc = if (shouldInjectArc) {
+            ProtoWriter().apply {
+                int(1, 2L) // video_type: BIZ_TYPE_PGC = 2
+                int(2, aid)
+                int(3, cid)
+                int(8, timelength / 1000L)
+                int(11, timelength)
+            }.toByteArray()
+        } else null
+
+        // Field 5: supplement (google.protobuf.Any with PGCAnyModel)
+        val supplement = if (epId > 0L || seasonId > 0L) {
+            encodePlaySupplement(aid, cid, epId, seasonId)
+        } else null
+
         return ProtoWriter().apply {
             message(1, vodInfo)
+            if (supplement != null) {
+                message(5, supplement)
+            }
+            if (playArc != null) {
+                message(6, playArc)
+            }
             if (rest.isNotEmpty()) raw(rest)
+        }.toByteArray()
+    }
+
+    private fun encodePlaySupplement(aid: Long, cid: Long, epId: Long, seasonId: Long): ByteArray {
+        val seasonInfo = ProtoWriter().apply {
+            int(1, seasonId)
+            int(2, 1L) // season_type = 1
+        }.toByteArray()
+
+        val episodeInfo = ProtoWriter().apply {
+            int(1, epId)
+            int(2, cid)
+            int(3, aid)
+            message(5, seasonInfo)
+        }.toByteArray()
+
+        val business = ProtoWriter().apply {
+            message(18, episodeInfo)
+        }.toByteArray()
+
+        val pgcAnyModel = ProtoWriter().apply {
+            message(3, business)
+        }.toByteArray()
+
+        return ProtoWriter().apply {
+            string(1, "type.googleapis.com/bilibili.app.playerunite.pgcanymodel.PGCAnyModel")
+            message(2, pgcAnyModel)
         }.toByteArray()
     }
 

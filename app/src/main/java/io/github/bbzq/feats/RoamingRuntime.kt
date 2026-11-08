@@ -182,6 +182,8 @@ object RoamingRuntime {
                 ::ComponentPoolBlockHook,
                 ::DownloadThreadHook,
                 ::CustomCdnHook,
+                ::SeaBangumiPlayHook,
+                ::SeaBangumiDetailHook,
             )
 
             ProcessScope.MAIN -> listOf(
