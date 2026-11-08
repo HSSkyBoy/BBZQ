@@ -236,13 +236,18 @@ jobs:
           CAPTION_SUFFIX="${NL}${NL}<a href=\"${COMMIT_URL}\">Commit</a> | <a href=\"${RUN_URL}\">Workflow run</a>"
 
           MAX_CAPTION_LENGTH=1024
-          MESSAGE_WRAPPER_LENGTH=24
+          MESSAGE_WRAPPER_LENGTH=36
           AVAILABLE_MESSAGE_LENGTH=$((MAX_CAPTION_LENGTH - ${#CAPTION_PREFIX} - ${#CAPTION_SUFFIX} - MESSAGE_WRAPPER_LENGTH))
           SAFE_MESSAGE=$(trim_caption_message "$SAFE_MESSAGE" "$AVAILABLE_MESSAGE_LENGTH")
-          CAPTION="${CAPTION_PREFIX}<blockquote>${SAFE_MESSAGE}</blockquote>${CAPTION_SUFFIX}"
+          CAPTION="${CAPTION_PREFIX}<blockquote expandable>${SAFE_MESSAGE}</blockquote>${CAPTION_SUFFIX}"
 
           # Construct media group JSON and curl form parameters
-          # Telegram sendMediaGroup allows 2-10 items of the same type (document)
+          # Telegram sendMediaGroup allows 2-10 items of the same type (document).
+          # Caption must be attached to the LAST document (index 2 for 3 files / [-1] in Python)
+          # so all file bubbles are stacked together cleanly on top and caption sits at the bottom.
+          LAST_INDEX=$((${#APK_FILES[@]} - 1))
+          ESCAPED_CAPTION=$(python3 -c "import json, sys; print(json.dumps(sys.argv[1]))" "$CAPTION")
+
           MEDIA_JSON="["
           CURL_FORM_ARGS=()
 
@@ -255,10 +260,7 @@ jobs:
               MEDIA_JSON+=","
             fi
 
-            # Escape caption for json
-            ESCAPED_CAPTION=$(python3 -c "import json, sys; print(json.dumps(sys.argv[1]))" "$CAPTION")
-
-            if [ "$i" -eq 0 ]; then
+            if [ "$i" -eq "$LAST_INDEX" ]; then
               MEDIA_JSON+="{\"type\":\"document\",\"media\":\"attach://${file_key}\",\"caption\":${ESCAPED_CAPTION},\"parse_mode\":\"HTML\"}"
             else
               MEDIA_JSON+="{\"type\":\"document\",\"media\":\"attach://${file_key}\"}"
