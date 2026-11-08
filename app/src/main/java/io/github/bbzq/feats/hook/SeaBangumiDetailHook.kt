@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
 /**
  * Lets the host's season detail page load for region-limited bangumi:
  * 1. OkHttp: when a PGC HTTP request is refused for the viewer's region, replayed on the resolver.
+ *    Supports HK / TW / SEA with `area` query param and fallback to `/pgc/view/web/season`.
  * 2. Java Moss: `com.bapis.bilibili.app.viewunite.v1.ViewMoss` (executeView / view)
  * 3. Java Moss: `com.bapis.bilibili.pgc.gateway.view.v1.ViewMoss` (executeSeasonSectionsForCache / seasonSectionsForCache)
  * 4. KMP Moss: `kntr.base.moss.api.a.c(...)` for:
@@ -165,17 +166,24 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         val shareAccount = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
         val query = url.callMethod("encodedQuery") as? String
-        val replayQuery = if (shareAccount) query else SeaBangumiDetailPolicy.anonymousQuery(query)
-        if (replayQuery == null && !shareAccount) {
-            log("SeaBangumiDetail: $path was signed with another app key, cannot replay without the account")
-            return null
-        }
+
         for (server in ResolverServers.preferring(servers, servedBy[path] ?: ModuleSettings.getResolverDefaultRegion(prefs))) {
-            val replay = replayOn(chain, request, server, path, replayQuery, anonymous = !shareAccount) ?: continue
-            servedBy[path] = server.region
-            original.callMethod("close")
-            log("SeaBangumiDetail: ${server.region} served $path")
-            return replay
+            val replayQuery = SeaBangumiDetailPolicy.buildReplayQuery(query, server.region, anonymous = !shareAccount)
+            if (replayQuery == null && !shareAccount) continue
+
+            // Try standard path first, then fallback to web path if applicable
+            val candidatePaths = when (path) {
+                SEASON_APP_PATH -> listOf(SEASON_APP_PATH, SEASON_WEB_PATH)
+                else -> listOf(path)
+            }
+
+            for (candPath in candidatePaths) {
+                val replay = replayOn(chain, request, server, candPath, replayQuery, anonymous = !shareAccount) ?: continue
+                servedBy[path] = server.region
+                original.callMethod("close")
+                log("SeaBangumiDetail: ${server.region} served $candPath (origin $path)")
+                return replay
+            }
         }
         log("SeaBangumiDetail: no resolver could serve $path")
         return null
@@ -479,16 +487,24 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val servers = ResolverServers.preferring(ResolverServers.configured(prefs), ModuleSettings.getResolverDefaultRegion(prefs))
         if (servers.isEmpty()) return null
 
-        val params = mutableListOf<Pair<String, String>>()
-        if (seasonId > 0L) params += "season_id" to seasonId.toString()
-        if (epId > 0L) params += "ep_id" to epId.toString()
+        val baseParams = mutableListOf<Pair<String, String>>()
+        if (seasonId > 0L) baseParams += "season_id" to seasonId.toString()
+        if (epId > 0L) baseParams += "ep_id" to epId.toString()
 
         for (server in servers) {
-            val body = SeaResolverClient(server.baseUrl, ::log).get(SEASON_PATH, params) ?: continue
-            val parsed = SeaBangumiViewCodec.parseSeasonJson(body, server.region)
-            if (parsed != null) {
-                log("SeaBangumiDetail: ${server.region} supplied season JSON for season $seasonId / ep $epId")
-                return parsed
+            val client = SeaResolverClient(server.baseUrl, ::log)
+            val serverParams = baseParams + ("area" to server.region.areaCode)
+            val candidatePaths = when (server.region) {
+                ResolverRegion.SEA -> listOf(SEASON_APP_PATH, SEASON_WEB_PATH, SEASON_INTL_PATH)
+                else -> listOf(SEASON_APP_PATH, SEASON_WEB_PATH)
+            }
+            for (path in candidatePaths) {
+                val body = client.get(path, serverParams) ?: continue
+                val parsed = SeaBangumiViewCodec.parseSeasonJson(body, server.region)
+                if (parsed != null) {
+                    log("SeaBangumiDetail: ${server.region} supplied season JSON via $path for season $seasonId / ep $epId")
+                    return parsed
+                }
             }
         }
         return null
@@ -516,6 +532,9 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val KMP_MOSS_CLIENT = "kntr.base.moss.api.a"
         const val KMP_MOSS_CALLBACK = "Kh1.h"
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"
-        const val SEASON_PATH = "pgc/view/v2/app/season"
+
+        const val SEASON_APP_PATH = "pgc/view/v2/app/season"
+        const val SEASON_WEB_PATH = "pgc/view/web/season"
+        const val SEASON_INTL_PATH = "intl/gateway/v2/ogv/view/app/season"
     }
 }

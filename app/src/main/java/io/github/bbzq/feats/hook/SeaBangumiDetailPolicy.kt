@@ -1,6 +1,7 @@
 package io.github.bbzq.feats.hook
 
 import io.github.bbzq.feats.AppSignature
+import io.github.bbzq.feats.ResolverRegion
 import io.github.bbzq.feats.callMethod
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -87,24 +88,48 @@ internal object SeaBangumiDetailPolicy {
         }
 
     /**
-     * The same request without the account: `access_key` is dropped and the query signed again with
-     * the standard app key, so the resolver can forward it.
+     * Builds replay query string.
+     * When [region] is provided, adds the corresponding `area` query parameter (e.g. `area=hk` or `area=tw`).
+     * If [anonymous] is true, drops `access_key` and resigns with the standard app key.
      */
-    fun anonymousQuery(encodedQuery: String?): String? {
-        if (encodedQuery.isNullOrEmpty()) return null
+    fun buildReplayQuery(encodedQuery: String?, region: ResolverRegion? = null, anonymous: Boolean = true): String? {
+        if (encodedQuery.isNullOrEmpty()) {
+            if (region == null) return null
+            val params = linkedMapOf("area" to region.areaCode)
+            return if (anonymous) AppSignature.signedQuery(params) else "area=${region.areaCode}"
+        }
         val params = LinkedHashMap<String, String>()
         for (part in encodedQuery.split('&')) {
             if (part.isEmpty()) continue
             val name = URLDecoder.decode(part.substringBefore('='), "UTF-8")
             val value = URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
-            when (name) {
-                "appkey", "access_key", "sign" -> Unit
-                else -> params[name] = value
+            if (anonymous) {
+                when (name) {
+                    "appkey", "access_key", "sign" -> Unit
+                    else -> params[name] = value
+                }
+            } else {
+                if (name != "sign") params[name] = value
             }
         }
-        return AppSignature.signedQuery(params)
+        if (region != null && !params.containsKey("area")) {
+            params["area"] = region.areaCode
+        }
+        return if (anonymous) {
+            AppSignature.signedQuery(params)
+        } else {
+            params.entries.joinToString("&") { (k, v) ->
+                "${java.net.URLEncoder.encode(k, "UTF-8")}=${java.net.URLEncoder.encode(v, "UTF-8")}"
+            }
+        }
     }
 
+    /**
+     * The same request without the account: `access_key` is dropped and the query signed again with
+     * the standard app key, so the resolver can forward it.
+     */
+    fun anonymousQuery(encodedQuery: String?): String? = buildReplayQuery(encodedQuery, null, anonymous = true)
+
     private fun unescape(raw: String): String =
-        Regex("\\\\u([00-9a-fA-F]{4})").replace(raw) { it.groupValues[1].toInt(16).toChar().toString() }
+        Regex("\\\\u([0-9a-fA-F]{4})").replace(raw) { it.groupValues[1].toInt(16).toChar().toString() }
 }

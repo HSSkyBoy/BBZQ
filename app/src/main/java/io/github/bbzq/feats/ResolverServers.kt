@@ -7,11 +7,11 @@ import io.github.bbzq.ModuleSettings
  * The regions a resolver server can unlock. Declaration order is the order in which servers are
  * tried when the answer is not known yet: Hong Kong/Macau, Taiwan, Southeast Asia, mainland China.
  */
-enum class ResolverRegion(val prefKey: String, val cdnKey: String) {
-    HK(ModuleSettings.KEY_RESOLVER_SERVER_HK, ModuleSettings.KEY_RESOLVER_CDN_HK),
-    TW(ModuleSettings.KEY_RESOLVER_SERVER_TW, ModuleSettings.KEY_RESOLVER_CDN_TW),
-    SEA(ModuleSettings.KEY_SEA_RESOLVER_SERVER, ModuleSettings.KEY_RESOLVER_CDN_SEA),
-    CN(ModuleSettings.KEY_RESOLVER_SERVER_CN, ModuleSettings.KEY_RESOLVER_CDN_CN);
+enum class ResolverRegion(val prefKey: String, val cdnKey: String, val areaCode: String) {
+    HK(ModuleSettings.KEY_RESOLVER_SERVER_HK, ModuleSettings.KEY_RESOLVER_CDN_HK, "hk"),
+    TW(ModuleSettings.KEY_RESOLVER_SERVER_TW, ModuleSettings.KEY_RESOLVER_CDN_TW, "tw"),
+    SEA(ModuleSettings.KEY_SEA_RESOLVER_SERVER, ModuleSettings.KEY_RESOLVER_CDN_SEA, "th"),
+    CN(ModuleSettings.KEY_RESOLVER_SERVER_CN, ModuleSettings.KEY_RESOLVER_CDN_CN, "cn");
 
     companion object {
         /** The region named by [value] (case-insensitive), or null for blank or unknown text. */
@@ -40,7 +40,19 @@ object ResolverServers {
     fun configured(prefs: SharedPreferences): List<ResolverServer> =
         configured { prefs.getString(it.prefKey, null) }
 
-    /** [servers] with [preferred] moved to the front, so a region that worked before is asked first. */
+    /**
+     * [servers] with [preferred] moved to the front.
+     * When [preferred] is not specified, maintains strict priority HK > TW > SEA > CN.
+     */
     fun preferring(servers: List<ResolverServer>, preferred: ResolverRegion?): List<ResolverServer> =
-        if (preferred == null) servers else servers.sortedBy { if (it.region == preferred) 0 else 1 }
+        if (preferred == null) {
+            servers.sortedBy { it.region.ordinal }
+        } else {
+            servers.sortedWith(
+                compareBy(
+                    { if (it.region == preferred) 0 else 1 },
+                    { it.region.ordinal },
+                ),
+            )
+        }
 }

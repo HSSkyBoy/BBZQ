@@ -29,9 +29,9 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 
 /**
- * Adds Southeast Asia bangumi hits from a resolver server to the first page of the
- * comprehensive search and the bangumi tab. The resolver query starts together with the
- * official request, so the wait only covers whatever the resolver takes beyond it.
+ * Adds region-limited bangumi hits (HK, TW, SEA) from resolver servers to the first page of the
+ * comprehensive search and the bangumi tab.
+ * Regional search prioritizes HK / TW, passing standard `area=hk` or `area=tw` parameters.
  */
 class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val executor by lazy { Executors.newCachedThreadPool() }
@@ -107,14 +107,13 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun query(keyword: String, type: Int?): Pending? {
-        val servers = ResolverServers.configured(prefs)
+        val servers = ResolverServers.preferring(ResolverServers.configured(prefs), ModuleSettings.getResolverDefaultRegion(prefs))
         if (servers.isEmpty()) return null
         val host = readHostIdentity()
         val deadline = SystemClock.uptimeMillis() + WAIT_MILLIS
         val types = if (type != null) listOf(type) else listOf(BANGUMI_SEARCH_TYPE, MOVIE_SEARCH_TYPE)
         val tasks = servers.flatMap { server ->
             types.mapNotNull { searchType ->
-                // The SEA resolver proxy only handles media_bangumi on its gRPC bridge; skip media_ft on SEA
                 if (server.region == ResolverRegion.SEA && searchType != BANGUMI_SEARCH_TYPE) return@mapNotNull null
                 executor.submit<List<JSONObject>> { fetch(server, keyword, searchType, host) }
             }
@@ -133,7 +132,6 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return Pending(combined, deadline)
     }
 
-    /** One region's hits through the app's signed search API; the SEA server also gets its region hint. */
     private fun fetch(server: ResolverServer, keyword: String, type: Int, host: HostIdentity?): List<JSONObject> {
         val searchType = if (type == MOVIE_SEARCH_TYPE) "media_ft" else "media_bangumi"
         val params = mutableMapOf(
@@ -147,6 +145,7 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "page" to "1",
             "page_size" to "20",
             "pagesize" to "20",
+            "area" to server.region.areaCode,
         )
         host?.identity?.buvid?.takeIf { it.isNotEmpty() }?.let { params["buvid"] = it }
         val mode = if (server.region == ResolverRegion.SEA) ModuleSettings.getSeaResolverMode(prefs) else server.region.name
@@ -155,7 +154,7 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
             add("Referer", "https://www.bilibili.com/")
         }.build()
         val queryStr = if (server.region == ResolverRegion.SEA) {
-            "keyword=${java.net.URLEncoder.encode(keyword, "UTF-8")}&search_type=$searchType&page=1&page_size=20"
+            "keyword=${java.net.URLEncoder.encode(keyword, "UTF-8")}&search_type=$searchType&page=1&page_size=20&area=${server.region.areaCode}"
         } else {
             AppSignature.signedQuery(params)
         }
@@ -199,7 +198,6 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
     }.onFailure { log("SeaBangumiSearch: could not read host identity", it) }.getOrNull()
 
-    /** Mirrors the identity headers the host's own Moss requests carry, minus the access key. */
     private fun identityHeaders(host: HostIdentity?): Headers {
         val builder = Headers.Builder()
         if (host != null) {
@@ -231,7 +229,6 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (fresh.isEmpty()) return null
         return runCatching {
             val original = response.callMethod("toByteArray") as ByteArray
-            // Repeated fields keep wire order, so leading occurrences become the first items.
             val merged = SeaBangumiSearchCodec.encodeItems(itemField, fresh) + original
             response.javaClass.getMethod("parseFrom", ByteArray::class.java).invoke(null, merged)
         }.onSuccess {

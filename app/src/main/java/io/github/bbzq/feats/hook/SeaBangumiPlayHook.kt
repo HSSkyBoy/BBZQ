@@ -30,10 +30,11 @@ import java.util.concurrent.TimeUnit
  * resolver server for the same episode and substitutes its streams into the reply, so the
  * host player never sees the refusal. Other failures are passed through untouched.
  *
- * Hooks:
- * 1. Java Moss: `PlayURLMoss` (sync: `executePlayView`, async: `playView`)
- * 2. Java Moss: `PlayerMoss` (sync: `executePlayViewUnite`, async: `playViewUnite`)
- * 3. KMP Moss: `kntr.base.moss.api.a.c(...)` for `bilibili.app.playerunite.v1.Player/PlayViewUnite`
+ * Regional priority: HK / TW (Hong Kong / Taiwan) > SEA (Southeast Asia) > CN.
+ * Endpoints tried:
+ * 1. `/pgc/player/api/playurl` (App endpoint with area parameter)
+ * 2. `/pgc/player/web/playurl` (Web fallback endpoint)
+ * 3. `/intl/gateway/v2/ogv/playurl` (for SEA region)
  */
 class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val executor by lazy { Executors.newCachedThreadPool() }
@@ -59,7 +60,6 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("SeaBangumiPlay: hooked $installed play method(s)")
     }
 
-    /** Hooks one Moss service (PGC or unified player); returns how many methods were hooked. */
     private fun hookMoss(
         mossName: String,
         requestName: String,
@@ -98,10 +98,6 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return installed
     }
 
-    /**
-     * Hooks KMP Moss client dispatch method `kntr.base.moss.api.a.c(...)`
-     * Signature: c(f, kreqt, serializationStrategy, deserializationStrategy, h, g, protoBuf)
-     */
     private fun hookKmpMoss(): Int {
         val mossClientClass = classLoader.findClassOrNull(KMP_MOSS_CLIENT) ?: return 0
         val method = mossClientClass.declaredMethods.firstOrNull {
@@ -285,7 +281,6 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return reply
     }
 
-    /** Defers the host callbacks that follow a region refusal until the resolver has answered. */
     private fun wrapHandler(handlerClass: Class<*>, delegate: Any, request: Any, isUnite: Boolean): Any {
         val gate = Gate()
         val callbackLooper = Looper.myLooper()
@@ -388,30 +383,50 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val servers = ResolverServers.preferring(ResolverServers.configured(prefs), preferred)
         if (servers.isEmpty()) return null
 
-        val params = mutableListOf(
+        val baseParams = mutableListOf(
             "ep_id" to epId.toString(),
             "qn" to (qn.takeIf { it > 0 } ?: DEFAULT_QN).toString(),
             "fnval" to (fnval.takeIf { it > 0 } ?: DEFAULT_FNVAL).toString(),
             "fnver" to fnver.toString(),
             "fourk" to (if (fourk) "1" else "0"),
             "platform" to "android",
+            "mobi_app" to "android",
         )
-        if (cid > 0) params += "cid" to cid.toString()
-        if (seasonId > 0) params += "season_id" to seasonId.toString()
+        if (cid > 0) baseParams += "cid" to cid.toString()
+        if (seasonId > 0) baseParams += "season_id" to seasonId.toString()
         if (ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)) {
             prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)?.takeIf { it.isNotBlank() }
-                ?.let { params += "access_key" to it }
+                ?.let { baseParams += "access_key" to it }
         }
         val relax = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs)
         val headers = HostAccountCookies.headers(env.hostContext, ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs))
         val completion = ExecutorCompletionService<Pair<ResolverServer, ByteArray?>>(executor)
+
         val tasks = servers.mapIndexed { index, server ->
             val delay = if (preferred != null && index > 0) STAGGER_MILLIS else 0L
             completion.submit {
                 if (delay > 0) Thread.sleep(delay)
-                val body = SeaResolverClient(server.baseUrl, ::log)
-                    .get(PLAYURL_PATH, params, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS)
-                val result = body?.let { SeaBangumiPlayCodec.playableResult(it) }
+                val serverParams = baseParams.toMutableList()
+                if (!serverParams.any { it.first == "area" }) {
+                    serverParams += "area" to server.region.areaCode
+                }
+                val client = SeaResolverClient(server.baseUrl, ::log)
+
+                // Try play paths: App playurl -> Web playurl -> SEA international playurl
+                val candidatePaths = when (server.region) {
+                    ResolverRegion.SEA -> listOf(PLAYURL_PATH, PLAYURL_INTL_PATH, PLAYURL_APP_PATH)
+                    else -> listOf(PLAYURL_APP_PATH, PLAYURL_PATH)
+                }
+
+                var result: org.json.JSONObject? = null
+                for (path in candidatePaths) {
+                    val body = client.get(path, serverParams, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS)
+                    if (body != null) {
+                        result = SeaBangumiPlayCodec.playableResult(body)
+                        if (result != null) break
+                    }
+                }
+
                 if (result == null) {
                     server to null
                 } else {
@@ -463,30 +478,49 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val servers = ResolverServers.preferring(ResolverServers.configured(prefs), preferred)
         if (servers.isEmpty()) return null
 
-        val params = mutableListOf(
+        val baseParams = mutableListOf(
             "ep_id" to epId.toString(),
             "qn" to (qn.takeIf { it > 0 } ?: DEFAULT_QN).toString(),
             "fnval" to (fnval.takeIf { it > 0 } ?: DEFAULT_FNVAL).toString(),
             "fnver" to fnver.toString(),
             "fourk" to (if (fourk) "1" else "0"),
             "platform" to "android",
+            "mobi_app" to "android",
         )
-        if (cid > 0) params += "cid" to cid.toString()
-        if (seasonId > 0) params += "season_id" to seasonId.toString()
+        if (cid > 0) baseParams += "cid" to cid.toString()
+        if (seasonId > 0) baseParams += "season_id" to seasonId.toString()
         if (ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)) {
             prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)?.takeIf { it.isNotBlank() }
-                ?.let { params += "access_key" to it }
+                ?.let { baseParams += "access_key" to it }
         }
         val relax = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs)
         val headers = HostAccountCookies.headers(env.hostContext, ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs))
         val completion = ExecutorCompletionService<Pair<ResolverServer, ByteArray?>>(executor)
+
         val tasks = servers.mapIndexed { index, server ->
             val delay = if (preferred != null && index > 0) STAGGER_MILLIS else 0L
             completion.submit {
                 if (delay > 0) Thread.sleep(delay)
-                val body = SeaResolverClient(server.baseUrl, ::log)
-                    .get(PLAYURL_PATH, params, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS)
-                val result = body?.let { SeaBangumiPlayCodec.playableResult(it) }
+                val serverParams = baseParams.toMutableList()
+                if (!serverParams.any { it.first == "area" }) {
+                    serverParams += "area" to server.region.areaCode
+                }
+                val client = SeaResolverClient(server.baseUrl, ::log)
+
+                val candidatePaths = when (server.region) {
+                    ResolverRegion.SEA -> listOf(PLAYURL_PATH, PLAYURL_INTL_PATH, PLAYURL_APP_PATH)
+                    else -> listOf(PLAYURL_APP_PATH, PLAYURL_PATH)
+                }
+
+                var result: org.json.JSONObject? = null
+                for (path in candidatePaths) {
+                    val body = client.get(path, serverParams, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS)
+                    if (body != null) {
+                        result = SeaBangumiPlayCodec.playableResult(body)
+                        if (result != null) break
+                    }
+                }
+
                 if (result == null) {
                     server to null
                 } else {
@@ -578,9 +612,17 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (servers.isEmpty()) return null
         val params = listOf("season_id" to seasonId.toString())
         for (server in servers) {
-            val body = SeaResolverClient(server.baseUrl, ::log).get(SEASON_PATH, params) ?: continue
-            val parsed = SeaBangumiViewCodec.parseSeasonJson(body, server.region)
-            if (parsed != null) return body
+            val client = SeaResolverClient(server.baseUrl, ::log)
+            val serverParams = params + ("area" to server.region.areaCode)
+            val candidatePaths = when (server.region) {
+                ResolverRegion.SEA -> listOf(SEASON_APP_PATH, SEASON_WEB_PATH, SEASON_INTL_PATH)
+                else -> listOf(SEASON_APP_PATH, SEASON_WEB_PATH)
+            }
+            for (path in candidatePaths) {
+                val body = client.get(path, serverParams) ?: continue
+                val parsed = SeaBangumiViewCodec.parseSeasonJson(body, server.region)
+                if (parsed != null) return body
+            }
         }
         return null
     }
@@ -664,8 +706,15 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"
         const val BUSINESS_EXCEPTION = "com.bilibili.lib.moss.api.BusinessException"
+
+        const val PLAYURL_APP_PATH = "pgc/player/api/playurl"
         const val PLAYURL_PATH = "pgc/player/web/playurl"
-        const val SEASON_PATH = "pgc/view/v2/app/season"
+        const val PLAYURL_INTL_PATH = "intl/gateway/v2/ogv/playurl"
+
+        const val SEASON_APP_PATH = "pgc/view/v2/app/season"
+        const val SEASON_WEB_PATH = "pgc/view/web/season"
+        const val SEASON_INTL_PATH = "intl/gateway/v2/ogv/view/app/season"
+
         const val DEFAULT_QN = 80L
         const val DEFAULT_FNVAL = 4048L
         const val PLAY_TIMEOUT_MILLIS = 6_000L
