@@ -384,7 +384,7 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 (decoded?.seasonId ?: 0L) to (decoded?.epId ?: 0L)
             }
 
-            val callbackInterface = callbackH.javaClass.interfaces.firstOrNull { it.name == KMP_MOSS_CALLBACK }
+            val callbackInterface = callbackH.javaClass.interfaces.firstOrNull(MossCallbacks::isKmpMossCallback)
                 ?: return@hookBefore
 
             param.args[4] = wrapKmpViewHandler(
@@ -530,7 +530,7 @@ class SeaBangumiDetailHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val SEASON_SECTIONS_ASYNC_METHOD = "seasonSectionsForCache"
 
         const val KMP_MOSS_CLIENT = "kntr.base.moss.api.a"
-        const val KMP_MOSS_CALLBACK = "Kh1.h"
+        val KMP_MOSS_CALLBACK_CANDIDATES = listOf("cbx0", "Kh1.h")
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"
 
         const val SEASON_APP_PATH = "pgc/view/v2/app/season"

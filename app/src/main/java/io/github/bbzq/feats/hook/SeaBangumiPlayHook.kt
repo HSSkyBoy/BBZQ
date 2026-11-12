@@ -123,7 +123,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val decodedReq = SeaBangumiPlayCodec.decodePlayViewUniteReq(reqBytes) ?: return@hookBefore
             val (epId, seasonId, aid, cid) = resolveKmpTarget(decodedReq)
 
-            val callbackInterface = callbackH.javaClass.interfaces.firstOrNull { it.name == KMP_MOSS_CALLBACK }
+            val callbackInterface = callbackH.javaClass.interfaces.firstOrNull(MossCallbacks::isKmpMossCallback)
                 ?: return@hookBefore
 
             param.args[4] = wrapKmpHandler(
@@ -702,7 +702,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val UNITE_ASYNC_METHOD = "playViewUnite"
 
         const val KMP_MOSS_CLIENT = "kntr.base.moss.api.a"
-        const val KMP_MOSS_CALLBACK = "Kh1.h"
+        val KMP_MOSS_CALLBACK_CANDIDATES = listOf("cbx0", "Kh1.h")
 
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"
         const val BUSINESS_EXCEPTION = "com.bilibili.lib.moss.api.BusinessException"

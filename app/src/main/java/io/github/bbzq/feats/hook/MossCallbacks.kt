@@ -65,6 +65,14 @@ internal object MossCallbacks {
         java.lang.Boolean.TYPE -> false
         else -> null
     }
+
+    private val KNOWN_KMP_MOSS_CALLBACKS = setOf("cbx0", "Kh1.h")
+
+    fun isKmpMossCallback(iface: Class<*>): Boolean =
+        iface.name in KNOWN_KMP_MOSS_CALLBACKS ||
+            (iface.isInterface &&
+                iface.declaredMethods.any { it.name == "onNext" && it.parameterCount == 1 } &&
+                iface.declaredMethods.any { it.name == "onError" })
 }
 
 /**
