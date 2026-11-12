@@ -1,5 +1,7 @@
 package io.github.bbzq.feats.hook
 
+import java.lang.reflect.Method
+
 internal object PlayerPortraitControlPolicy {
     private val UNSAFE_BOOLEAN_FIELD_TOKENS = listOf(
         "init",
@@ -69,13 +71,25 @@ internal object PlayerPortraitControlPolicy {
         "ui",
     )
 
-    fun isSafeBooleanFieldToSuppress(fieldName: String): Boolean {
-        val lower = fieldName.lowercase()
-        return UNSAFE_BOOLEAN_FIELD_TOKENS.none { lower.contains(it) }
-    }
-
     fun isSafeLegacyWidgetBooleanMethod(methodName: String): Boolean =
         methodName !in EXCLUDED_VIEW_BOOLEAN_METHODS
+
+    fun overridesInheritedMethod(method: Method): Boolean {
+        val pending = ArrayDeque<Class<*>>()
+        val seen = HashSet<Class<*>>()
+        method.declaringClass.superclass?.let(pending::add)
+        pending.addAll(method.declaringClass.interfaces)
+        while (pending.isNotEmpty()) {
+            val type = pending.removeFirst()
+            if (!seen.add(type)) continue
+            if (type.declaredMethods.any { it.name == method.name && it.parameterTypes.contentEquals(method.parameterTypes) }) {
+                return true
+            }
+            type.superclass?.let(pending::add)
+            pending.addAll(type.interfaces)
+        }
+        return false
+    }
 
     fun isStoryServiceBooleanMethod(methodName: String): Boolean {
         if (methodName in EXCLUDED_VIEW_BOOLEAN_METHODS) return false
@@ -98,18 +112,28 @@ internal object PlayerPortraitControlPolicy {
     }
 
     fun isStoryInitialConfigConstructor(parameterTypeNames: List<String>): Boolean {
-        if (parameterTypeNames.size < 2) return false
-        if (parameterTypeNames[0] != "java.lang.Long") return false
-        if (parameterTypeNames[1] != "boolean" && parameterTypeNames[1] != "java.lang.Boolean") return false
-        return parameterTypeNames.drop(2).all {
+        val flagIndex = when {
+            parameterTypeNames.getOrNull(0) == LONG_CLASS -> 1
+            parameterTypeNames.getOrNull(0) == STRING_CLASS && parameterTypeNames.getOrNull(1) == LONG_CLASS -> 2
+            else -> return false
+        }
+        val flag = parameterTypeNames.getOrNull(flagIndex) ?: return false
+        if (flag != "boolean" && flag != "java.lang.Boolean") return false
+        return parameterTypeNames.drop(flagIndex + 1).all {
             it == "int" || it == DEFAULT_CONSTRUCTOR_MARKER
         }
     }
+
+    fun isHostClassName(className: String): Boolean =
+        FRAMEWORK_PACKAGES.none { className.startsWith(it) }
 
     fun isProtectedContainerClassName(className: String): Boolean =
         className.startsWith("android.view.") ||
             className.contains("ComposeView", ignoreCase = true)
 
+    private val FRAMEWORK_PACKAGES = listOf("java.", "javax.", "kotlin.", "kotlinx.", "android.", "androidx.")
+    private const val LONG_CLASS = "java.lang.Long"
+    private const val STRING_CLASS = "java.lang.String"
     private const val COMPOSER_CLASS = "androidx.compose.runtime.Composer"
     private const val FUNCTION2_CLASS = "kotlin.jvm.functions.Function2"
     private const val DEFAULT_CONSTRUCTOR_MARKER = "kotlin.jvm.internal.DefaultConstructorMarker"

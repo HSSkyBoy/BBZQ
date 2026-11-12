@@ -7,19 +7,6 @@ import org.junit.Test
 class PlayerPortraitControlPolicyTest {
 
     @Test
-    fun booleanFieldFilterRejectsLifecycleFlagsAndAllowsStoryFlags() {
-        assertTrue(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("showStoryControl"))
-        assertTrue(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("playerStoryControlsEnabled"))
-        assertTrue(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("a"))
-
-        assertFalse(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("isInitialized"))
-        assertFalse(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("destroyed"))
-        assertFalse(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("isDisposed"))
-        assertFalse(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("attached"))
-        assertFalse(PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress("isActive"))
-    }
-
-    @Test
     fun legacyWidgetBooleanFilterProtectsViewMethods() {
         assertTrue(PlayerPortraitControlPolicy.isSafeLegacyWidgetBooleanMethod("m91790H"))
         assertTrue(PlayerPortraitControlPolicy.isSafeLegacyWidgetBooleanMethod("isStorySupported"))
