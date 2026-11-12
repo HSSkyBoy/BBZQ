@@ -2568,13 +2568,12 @@ object BiliSymbolResolver {
         }?.apply { isAccessible = true }
 
         val mainFragmentClass = classLoader.loadClassOrNull(HOME_MAIN_FRAGMENT)
-        val defaultWordClass = classLoader.loadClassOrNull(HOME_DEFAULT_SEARCH_WORD_CLASS)
-        val defaultWordMethods = if (mainFragmentClass != null && defaultWordClass != null) {
+        val defaultWordMethods = if (mainFragmentClass != null) {
             mainFragmentClass.allMethods()
                 .filter { method ->
                     method.returnType == Void.TYPE &&
                         method.parameterCount == 1 &&
-                        method.parameterTypes[0] == defaultWordClass &&
+                        isHomeDefaultSearchWordType(method.parameterTypes[0]) &&
                         !Modifier.isStatic(method.modifiers) &&
                         !Modifier.isAbstract(method.modifiers)
                 }
@@ -2607,6 +2606,11 @@ object BiliSymbolResolver {
         )
         return SymbolScanResult.Found(symbols, "HomeTopBarPurify", symbols.evidence, hookPoints)
     }
+
+    internal fun isHomeDefaultSearchWordType(type: Class<*>): Boolean =
+        type.name == HOME_DEFAULT_SEARCH_WORD_CLASS || (type.isInterface && HOME_DEFAULT_SEARCH_WORD_ACCESSORS.all { accessor ->
+            type.allMethods().any { it.name == accessor && it.parameterCount == 0 }
+        })
 
     private fun scanBottomBar(
         classLoader: ClassLoader,
@@ -4605,6 +4609,8 @@ object BiliSymbolResolver {
     )
     private const val HOME_MAIN_FRAGMENT = "tv.danmaku.bili.ui.main2.MainFragment"
     private const val HOME_DEFAULT_SEARCH_WORD_CLASS = "com.bilibili.app.comm.list.common.api.b"
+    private val HOME_DEFAULT_SEARCH_WORD_ACCESSORS =
+        listOf("getDefaultWordGoto", "getDefaultWordType", "getShowFront", "getFlashScreenQueryId")
     private val BOTTOM_TAB_HOST_CLASSES = setOf(
         "com.bilibili.lib.homepage.widget.TabHost",
         "com.bilibili.p5690lib.p5708homepage.widget.TabHost",

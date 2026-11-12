@@ -17,11 +17,13 @@ class HomeRecommendPreloadHook(env: RoamingEnv) : BaseRoamingHook(env) {
     override fun startHook() {
         if (env.processName != env.packageName || !ModuleSettings.isHomeRecommendPreloadEnabled(prefs)) return
 
-        val listenerClass = runCatching { classLoader.loadClass(HOME_LOAD_MORE_LISTENER) }
-            .getOrElse {
-                log("HomeRecommendPreload skipped: listener class unavailable", it)
-                return
-            }
+        val listenerClass = HOME_LOAD_MORE_LISTENERS.firstNotNullOfOrNull { name ->
+            runCatching { classLoader.loadClass(name) }.getOrNull()
+                ?.takeIf { name == LEGACY_LOAD_MORE_LISTENER || isLoadMoreListener(it) }
+        } ?: run {
+            log("HomeRecommendPreload skipped: listener class unavailable")
+            return
+        }
         val constructor = listenerClass.declaredConstructors.singleOrNull { candidate ->
             candidate.parameterCount == 1 &&
                 Function0::class.java.isAssignableFrom(candidate.parameterTypes.single())
@@ -51,8 +53,21 @@ class HomeRecommendPreloadHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("HomeRecommendPreload set native prefetch distance to $TARGET_PREFETCH_DISTANCE")
     }
 
+    private fun isLoadMoreListener(type: Class<*>): Boolean =
+        type.superclass?.name == RECYCLER_SCROLL_LISTENER &&
+            type.interfaces.any { it.name == RECYCLER_CHILD_ATTACH_LISTENER }
+
     private companion object {
-        private const val HOME_LOAD_MORE_LISTENER = "com.bilibili.pegasus.widget.h"
+        // widget.g/h/i drift across builds; 9.19.0 moved the listener to the root package as d571.
+        private const val LEGACY_LOAD_MORE_LISTENER = "com.bilibili.pegasus.widget.h"
+        private val HOME_LOAD_MORE_LISTENERS = listOf(
+            LEGACY_LOAD_MORE_LISTENER,
+            "com.bilibili.pegasus.widget.g",
+            "com.bilibili.pegasus.widget.i",
+            "d571",
+        )
+        private const val RECYCLER_SCROLL_LISTENER = "androidx.recyclerview.widget.RecyclerView\$OnScrollListener"
+        private const val RECYCLER_CHILD_ATTACH_LISTENER = "androidx.recyclerview.widget.RecyclerView\$OnChildAttachStateChangeListener"
         private const val TARGET_PREFETCH_DISTANCE = 4
     }
 }
