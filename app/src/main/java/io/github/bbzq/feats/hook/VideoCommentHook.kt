@@ -390,12 +390,24 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         } else {
             0
         }
+        val ai = if (ModuleSettings.isCommentAiFilterEnabled(prefs)) {
+            CommentAiAccountPolicy.plan(
+                sensitivityId = ModuleSettings.getCommentAiSensitivity(prefs),
+                rawNicknameWords = ModuleSettings.getCommentAiNicknameWordsText(prefs),
+                rawTextWords = ModuleSettings.getCommentAiTextWordsText(prefs),
+                rawWhitelist = ModuleSettings.getCommentAiWhitelistText(prefs),
+                protectHighLevel = ModuleSettings.isCommentAiProtectHighLevelEnabled(prefs),
+            )
+        } else {
+            null
+        }
         return ReplyCleanupOptions(
             removeQoe = ModuleSettings.isCommentNoQoeEnabled(prefs),
             removeOperation = ModuleSettings.isCommentNoOperationEnabled(prefs),
             removeHotspot = ModuleSettings.isCommentNoHotspotEnabled(prefs),
             keywords = keywords,
             minLevel = minLevel,
+            ai = ai,
         )
     }
 
@@ -427,6 +439,8 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 removeHotspotCards(current, methods)
             }
 
+            val aiRoot = if (options.ai != null) aiRootOf(current) else null
+
             methods.singleReplies.forEach { getter ->
                 val fieldName = getter.name.removePrefix("get")
                 if (noArgMethod(current.javaClass, "has$fieldName")?.invoke(current) != true) return@forEach
@@ -434,7 +448,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 val clear = noArgMethod(current.javaClass, "clear$fieldName")
                 val removable = fieldName in setOf("UpTop", "AdminTop", "VoteTop") ||
                     (removeSingleReply && current === reply && fieldName == "Reply")
-                if (removable && options.filtersActive && clear != null && shouldRemoveReply(child, options)) {
+                if (removable && options.filtersActive && clear != null && shouldRemoveReply(child, options, aiRoot)) {
                     clear.invoke(current)
                 } else {
                     pending += child
@@ -445,7 +459,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 val children = getter.invoke(current) as? List<*> ?: return@forEach
                 for (index in children.indices.reversed()) {
                     val child = children[index] ?: continue
-                    if (options.filtersActive && remove != null && shouldRemoveReply(child, options)) {
+                    if (options.filtersActive && remove != null && shouldRemoveReply(child, options, aiRoot)) {
                         remove.invoke(current, index)
                     } else {
                         pending += child
@@ -469,7 +483,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    private fun shouldRemoveReply(node: Any, options: ReplyCleanupOptions): Boolean {
+    private fun shouldRemoveReply(node: Any, options: ReplyCleanupOptions, aiRoot: CommentAiAccountEcho.Root? = null): Boolean {
         if (options.keywords.isNotEmpty()) {
             val message = readReplyMessage(node)
             if (message != null && options.keywords.any { message.contains(it, ignoreCase = true) }) {
@@ -482,7 +496,63 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 return true
             }
         }
-        return false
+        return options.ai?.let { shouldRemoveAiAccount(node, it, aiRoot) } == true
+    }
+
+    private fun shouldRemoveAiAccount(
+        node: Any, plan: CommentAiAccountPolicy.Plan, root: CommentAiAccountEcho.Root?,
+    ): Boolean {
+        val members = replyMembers(node)
+        val name = members.firstNotNullOfOrNull { stringFromNoArg(it, "getName")?.takeIf(String::isNotBlank) }
+        val mid = if (plan.whitelistMids.isEmpty()) {
+            null
+        } else {
+            members.firstNotNullOfOrNull { midFromNoArg(it) }
+        }
+        val level = members.flatMap(::memberLevels).maxOrNull()
+        return CommentAiAccountPolicy.shouldRemove(plan, name, mid, level, readReplyMessage(node), root)
+    }
+
+    private fun memberLevels(member: Any): List<Int> = listOfNotNull(
+        intFromNoArg(member, "getLevel"),
+        noArgMethod(member.javaClass, "getLevelInfo")
+            ?.let { runCatching { it.invoke(member) }.getOrNull() }
+            ?.let { intFromNoArg(it, "getCurrentLevel") },
+    )
+
+    private fun aiRootOf(owner: Any): CommentAiAccountEcho.Root? {
+        val root = owner.takeIf { it.javaClass.name.endsWith(REPLY_INFO_SUFFIX) }
+            ?: noArgMethod(owner.javaClass, "getRoot")
+                ?.let { runCatching { it.invoke(owner) }.getOrNull() }
+                ?.takeIf { it.javaClass.name.endsWith(REPLY_INFO_SUFFIX) }
+            ?: return null
+        return CommentAiAccountEcho.Root(
+            readText = { readReplyMessage(root) },
+            readName = { replyMembers(root).firstNotNullOfOrNull { stringFromNoArg(it, "getName") } },
+        )
+    }
+
+    private fun replyMembers(node: Any): List<Any> {
+        val member = if (noArgMethod(node.javaClass, "hasMember")?.invoke(node) == false) {
+            null
+        } else {
+            noArgMethod(node.javaClass, "getMember")?.let { runCatching { it.invoke(node) }.getOrNull() }
+        }
+        val basic = noArgMethod(node.javaClass, "getMemberV2")
+            ?.let { runCatching { it.invoke(node) }.getOrNull() }
+            ?.let { memberV2 -> noArgMethod(memberV2.javaClass, "getBasic")?.let { runCatching { it.invoke(memberV2) }.getOrNull() } }
+        return listOfNotNull(member, basic)
+    }
+
+    private fun stringFromNoArg(target: Any, name: String): String? {
+        val method = noArgMethod(target.javaClass, name) ?: return null
+        return runCatching { method.invoke(target) as? String }.getOrNull()
+    }
+
+    private fun midFromNoArg(target: Any): Long? {
+        val method = noArgMethod(target.javaClass, "getMid") ?: return null
+        val value = runCatching { method.invoke(target) }.getOrNull()
+        return ((value as? Number)?.toLong() ?: (value as? String)?.toLongOrNull())?.takeIf { it > 0L }
     }
 
     private fun readReplyMessage(node: Any): String? {
@@ -649,6 +719,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private companion object {
         private const val HOTSPOT_ITEM_CASE = "HOTSPOT"
+        private const val REPLY_INFO_SUFFIX = ".ReplyInfo"
         private val CLEAR_OPERATION_METHOD_NAMES = setOf("clearOperation", "clearOperationV2")
         private val replyCleanupMethods = ConcurrentHashMap<Class<*>, ReplyCleanupMethods>()
         private val noArgMethodCache = ConcurrentHashMap<String, MethodLookup>()
@@ -672,8 +743,9 @@ private data class ReplyCleanupOptions(
     val removeHotspot: Boolean,
     val keywords: List<String>,
     val minLevel: Int,
+    val ai: CommentAiAccountPolicy.Plan? = null,
 ) {
-    val filtersActive: Boolean get() = keywords.isNotEmpty() || minLevel > 0
+    val filtersActive: Boolean get() = keywords.isNotEmpty() || minLevel > 0 || ai != null
     val active: Boolean get() = removeQoe || removeOperation || removeHotspot || filtersActive
 }
 

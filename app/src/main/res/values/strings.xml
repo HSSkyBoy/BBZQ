@@ -424,6 +424,24 @@
     <string name="comment_min_level_row_title">最低显示等级</string>
     <string name="comment_min_level_row_summary">仅显示等级 ≥ %1$d 的用户评论。</string>
     <string name="comment_min_level_dialog_title">最低显示等级</string>
+    <string name="comment_ai_filter_title">屏蔽 AI 账号评论</string>
+    <string name="comment_ai_filter_summary">按昵称、等级和正文特征离线打分，隐藏疑似 AI 小号的评论及其楼中楼，不联网。</string>
+    <string name="comment_ai_sensitivity_row_title">识别灵敏度</string>
+    <string name="comment_ai_sensitivity_dialog_title">识别灵敏度</string>
+    <string name="comment_ai_sensitivity_loose">宽松，只隐藏特征明显的账号</string>
+    <string name="comment_ai_sensitivity_standard">标准</string>
+    <string name="comment_ai_sensitivity_strict">严格，可能误伤真人</string>
+    <string name="comment_ai_sensitivity_row_summary">当前：%1$s</string>
+    <string name="comment_ai_nickname_row_title">额外昵称特征词</string>
+    <string name="comment_ai_nickname_hint">每行一个词（至少 2 个字），或用逗号、分号分隔</string>
+    <string name="comment_ai_text_row_title">额外正文特征词</string>
+    <string name="comment_ai_text_hint">每行一个词（至少 2 个字），或用逗号、分号分隔</string>
+    <string name="comment_ai_whitelist_row_title">放行名单</string>
+    <string name="comment_ai_whitelist_hint">每行一个 UID 或完整用户名，或用逗号、分号分隔</string>
+    <string name="comment_ai_words_empty_summary">未设置</string>
+    <string name="comment_ai_words_summary">已设置 %1$d 项：%2$s</string>
+    <string name="comment_ai_protect_high_level_title">保护高等级用户</string>
+    <string name="comment_ai_protect_high_level_summary">等级 ≥ 5 的用户不参与判定。</string>
 
     <!-- 我的页 -->
     <string name="mine_remove_vip_title">隐藏大会员入口</string>
