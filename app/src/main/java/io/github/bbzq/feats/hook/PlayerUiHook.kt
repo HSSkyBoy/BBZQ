@@ -29,8 +29,6 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var currentVideoDetailActivity: WeakReference<Activity>? = null
     private val gestureExclusionAttached = Collections.synchronizedMap(WeakHashMap<View, Boolean>())
     private val globalLayoutAttached = Collections.synchronizedMap(WeakHashMap<View, Boolean>())
-    private val trackedBooleanStates = Collections.synchronizedMap(WeakHashMap<Any, Boolean>())
-    private val hookedStateClasses = Collections.synchronizedSet(HashSet<String>())
     private val hookedInitialClasses = Collections.synchronizedSet(HashSet<String>())
     @Volatile
     private var serviceSchemaLogged = false
@@ -137,32 +135,38 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun hookLegacyWidgetClass(widgetClass: Class<*>) {
-        widgetClass.declaredConstructors.forEach { constructor ->
-            env.hookAfter(constructor) { param ->
-                if (!ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) return@hookAfter
-                (param.thisObject as? View)?.let { view ->
-                    view.visibility = View.GONE
-                    hideViewPhysically(view)
+        val visibilityMethods = widgetClass.declaredMethods
+            .filter { it.name == "setVisibility" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
+
+        // 覆写的 setVisibility 依赖注入后的服务，构造期不能直接写 visibility。
+        if (visibilityMethods.isEmpty()) {
+            widgetClass.declaredConstructors.forEach { constructor ->
+                env.hookAfter(constructor) { param ->
+                    if (!ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) return@hookAfter
+                    (param.thisObject as? View)?.let { view ->
+                        view.visibility = View.GONE
+                        hideViewPhysically(view)
+                    }
                 }
             }
         }
 
-        widgetClass.declaredMethods
-            .filter { it.name == "setVisibility" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
-            .forEach { method ->
-                env.hookBefore(method) { param ->
-                    if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
-                        param.args[0] = View.GONE
-                    }
+        visibilityMethods.forEach { method ->
+            env.hookBefore(method) { param ->
+                if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                    param.args[0] = View.GONE
                 }
             }
+        }
 
+        // getMembersInjector 等继承而来的契约方法不能强制，否则宿主会跳过依赖注入。
         widgetClass.declaredMethods
             .filter {
                 !Modifier.isStatic(it.modifiers) &&
                     it.parameterTypes.isEmpty() &&
                     (it.returnType == java.lang.Boolean.TYPE || it.returnType == java.lang.Boolean::class.java) &&
-                    PlayerPortraitControlPolicy.isSafeLegacyWidgetBooleanMethod(it.name)
+                    PlayerPortraitControlPolicy.isSafeLegacyWidgetBooleanMethod(it.name) &&
+                    !PlayerPortraitControlPolicy.overridesInheritedMethod(it)
             }
             .forEach { method ->
                 env.hookBefore(method) { param ->
@@ -188,9 +192,6 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 env.hookAfter(constructor) { param ->
                     val instance = param.thisObject ?: return@hookAfter
                     logStoryServiceSchemaOnce(instance.javaClass)
-                    if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
-                        suppressStoryEntranceServiceStates(instance)
-                    }
                 }
             }
         }.onFailure {
@@ -201,27 +202,23 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun discoverAndHookInitialConfigFromService(serviceClass: Class<*>) {
-        val servicePkg = serviceClass.packageName
+        val fieldTypes = serviceClass.declaredFields.mapTo(HashSet()) { it.type }
         val candidateTypes = LinkedHashSet<Class<*>>()
         serviceClass.declaredConstructors.forEach { ctor ->
-            ctor.parameterTypes.filterTo(candidateTypes) { it.packageName == servicePkg }
-        }
-        serviceClass.declaredFields.forEach { field ->
-            if (field.type.packageName == servicePkg) {
-                candidateTypes.add(field.type)
-            }
+            ctor.parameterTypes.filterTo(candidateTypes) { it in fieldTypes }
         }
         candidateTypes.forEach { candidate ->
-            if (candidate == serviceClass || !hookedInitialClasses.add(candidate.name)) return@forEach
+            if (candidate == serviceClass || candidate.isPrimitive || candidate.isInterface ||
+                !PlayerPortraitControlPolicy.isHostClassName(candidate.name) ||
+                !hookedInitialClasses.add(candidate.name)
+            ) return@forEach
             candidate.declaredConstructors.forEach { ctor ->
                 val paramNames = ctor.parameterTypes.map { it.name }
                 if (PlayerPortraitControlPolicy.isStoryInitialConfigConstructor(paramNames)) {
+                    val flagIndex = paramNames.indexOfFirst { it == "boolean" || it == "java.lang.Boolean" }
                     env.hookBefore(ctor) { param ->
-                        if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs) &&
-                            param.args.size >= 2 &&
-                            param.args[1] is Boolean
-                        ) {
-                            param.args[1] = false
+                        if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs) && param.args.getOrNull(flagIndex) is Boolean) {
+                            param.args[flagIndex] = false
                         }
                     }
                     log("PlayerUi: hooked StoryEntrance initial config ${candidate.name}(${paramNames.joinToString(",")})")
@@ -311,69 +308,6 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
     }
 
-    private fun suppressStoryEntranceServiceStates(instance: Any) {
-        runCatching {
-            instance.javaClass.declaredFields.forEach { field ->
-                field.isAccessible = true
-                val fieldType = field.type
-                if (fieldType == java.lang.Boolean.TYPE) {
-                    if (PlayerPortraitControlPolicy.isSafeBooleanFieldToSuppress(field.name)) {
-                        field.setBoolean(instance, false)
-                    }
-                } else if (isMutableStateContainerType(fieldType)) {
-                    val stateObj = field.get(instance) ?: return@forEach
-                    suppressBooleanStateContainer(stateObj)
-                }
-            }
-        }.onFailure {
-            log("PlayerUi: suppressStoryEntranceServiceStates failed", it)
-        }
-    }
-
-    private fun isMutableStateContainerType(type: Class<*>): Boolean =
-        type.name.contains("MutableState")
-
-    private fun suppressBooleanStateContainer(stateObj: Any) {
-        runCatching {
-            val getValueMethod = stateObj.javaClass.methods.firstOrNull {
-                it.name == "getValue" && it.parameterTypes.isEmpty()
-            } ?: return
-            val currentValue = getValueMethod.invoke(stateObj)
-            if (currentValue !is Boolean) return
-
-            val setValueMethod = stateObj.javaClass.methods.firstOrNull {
-                it.name == "setValue" && it.parameterTypes.size == 1
-            }
-            if (currentValue) {
-                setValueMethod?.invoke(stateObj, false)
-            }
-
-            trackedBooleanStates[stateObj] = true
-            ensureStateContainerMutationHooked(stateObj.javaClass)
-        }
-    }
-
-    private fun ensureStateContainerMutationHooked(stateClass: Class<*>) {
-        if (!hookedStateClasses.add(stateClass.name)) return
-        stateClass.methods
-            .filter {
-                (it.name == "setValue" && it.parameterTypes.size == 1) ||
-                    (it.name == "tryEmit" && it.parameterTypes.size == 1) ||
-                    (it.name == "emit" && it.parameterTypes.size == 2)
-            }
-            .forEach { method ->
-                env.hookBefore(method) { param ->
-                    val target = param.thisObject ?: return@hookBefore
-                    if (trackedBooleanStates.containsKey(target) &&
-                        ModuleSettings.isHidePlayerPortraitControlEnabled(prefs) &&
-                        param.args.firstOrNull() is Boolean
-                    ) {
-                        param.args[0] = false
-                    }
-                }
-            }
-    }
-
     private fun schedulePlayerUiTuning(activity: Activity) {
         val decor = activity.window?.decorView ?: return
         applyTuningInternal(activity, decor)
@@ -422,10 +356,13 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private fun revealPortraitControls(view: View) {
         if (isPortraitControl(view)) {
-            if (view.visibility != View.GONE) {
-                view.visibility = View.GONE
+            // 控件尚未完成依赖注入时 setVisibility 会抛异常，本轮跳过，下一轮布局再处理。
+            runCatching {
+                if (view.visibility != View.GONE) {
+                    view.visibility = View.GONE
+                }
+                hideViewPhysically(view)
             }
-            hideViewPhysically(view)
             return
         }
         if (view is ViewGroup) {
