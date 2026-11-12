@@ -150,7 +150,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 66
+    const val CURRENT = 67
 }
 
 data class HookPointStatus(
