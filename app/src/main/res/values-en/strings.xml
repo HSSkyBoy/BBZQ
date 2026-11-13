@@ -545,7 +545,7 @@
     <string name="framework_gate_blocked_message">BBZQ only works with LSPosed, NPatch or Vector. The current environment is not supported.</string>
     <string name="framework_gate_root_title">Root permission required</string>
     <string name="framework_gate_root_message">In LSPosed, BBZQ needs Root permission. Please allow it in your root manager (Magisk / KernelSU / APatch).</string>
-    <string name="framework_gate_root_guide_message">In LSPosed, BBZQ needs Root permission. After tapping Continue, allow the request in your root manager (Magisk / KernelSU / APatch). If no request appears, make sure BBZQ is not on the Magisk DenyList.</string>
+    <string name="framework_gate_root_guide_message">In LSPosed, BBZQ needs Root permission. After tapping Continue, allow the request in your root manager (Magisk / KernelSU / APatch). If no request appears, make sure BBZQ is not on the exclusion list.</string>
     <string name="framework_gate_continue">Continue</string>
     <string name="framework_gate_retry">Retry</string>
     <string name="framework_gate_exit">Exit</string>
