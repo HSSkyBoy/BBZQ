@@ -91,7 +91,16 @@ class SettingsActivity : Activity() {
 
         when (RuntimeEnvironmentInfo.frameworkGate(prefs)) {
             RuntimeEnvironmentInfo.FrameworkGate.ALLOWED -> setupContent()
-            RuntimeEnvironmentInfo.FrameworkGate.NEEDS_ROOT -> verifyRootThenSetup()
+            // 尚未验证过 Root 时先说明用途，用户确认后才发起 su 请求。
+            RuntimeEnvironmentInfo.FrameworkGate.NEEDS_ROOT -> if (ModuleSettings.isRootGateVerified(prefs)) {
+                verifyRootThenSetup()
+            } else {
+                showFrameworkGateDialog(
+                    R.string.framework_gate_root_title,
+                    R.string.framework_gate_root_guide_message,
+                    R.string.framework_gate_continue,
+                )
+            }
             RuntimeEnvironmentInfo.FrameworkGate.BLOCKED -> finish()
         }
     }
@@ -101,25 +110,28 @@ class SettingsActivity : Activity() {
             val granted = RootUtils.executeSuCommand("id").isSuccess
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                prefs.edit().putBoolean(ModuleSettings.KEY_ROOT_GATE_VERIFIED, granted).apply()
                 if (granted) {
                     setupContent()
                 } else {
-                    finish()
+                    showFrameworkGateDialog(
+                        R.string.framework_gate_root_title,
+                        R.string.framework_gate_root_message,
+                        R.string.framework_gate_retry,
+                    )
                 }
             }
         }.start()
     }
 
-    private fun showFrameworkGateDialog(titleRes: Int, messageRes: Int, retry: Boolean) {
-        val builder = AlertDialog.Builder(this)
+    private fun showFrameworkGateDialog(titleRes: Int, messageRes: Int, positiveRes: Int) {
+        AlertDialog.Builder(this)
             .setTitle(titleRes)
             .setMessage(messageRes)
             .setCancelable(false)
+            .setPositiveButton(positiveRes) { _, _ -> verifyRootThenSetup() }
             .setNegativeButton(R.string.framework_gate_exit) { _, _ -> finish() }
-        if (retry) {
-            builder.setPositiveButton(R.string.framework_gate_retry) { _, _ -> verifyRootThenSetup() }
-        }
-        builder.show()
+            .show()
     }
 
     private fun setupContent() {

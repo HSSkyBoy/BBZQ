@@ -207,6 +207,7 @@ object ModuleSettings {
     const val KEY_RUNTIME_PATCH_MODE = "runtime_patch_mode"
     const val KEY_RUNTIME_PROCESS_NAME = "runtime_process_name"
     const val KEY_RUNTIME_LAST_UPDATE_TIME = "runtime_last_update_time"
+    const val KEY_ROOT_GATE_VERIFIED = "root_gate_verified"
     const val KEY_SYMBOL_SCAN_STATUS_SUMMARY = "symbol_scan_status_summary"
     const val KEY_SYMBOL_SCAN_STATUS_REPORT = "symbol_scan_status_report"
     const val KEY_SYMBOL_SCAN_STATUS_UPDATED_AT = "symbol_scan_status_updated_at"
@@ -1006,6 +1007,9 @@ object ModuleSettings {
 
     fun isCustomThemeEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_THEME_ENABLED, false)
+
+    fun isRootGateVerified(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_ROOT_GATE_VERIFIED, false)
 
     fun getAppLanguage(prefs: SharedPreferences): String =
         prefs.getString(KEY_APP_LANGUAGE, LANGUAGE_AUTO).orEmpty().ifBlank { LANGUAGE_AUTO }

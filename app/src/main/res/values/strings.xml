@@ -587,6 +587,8 @@
     <string name="framework_gate_blocked_message">哔哩增强仅支持在 LSPosed、NPatch、Vector 环境下使用，当前环境不在支持范围内。</string>
     <string name="framework_gate_root_title">需要 Root 权限</string>
     <string name="framework_gate_root_message">LSPosed 环境需授予哔哩增强 Root 权限后才能使用，请在授权管理（Magisk / KernelSU / APatch）中允许。</string>
+    <string name="framework_gate_root_guide_message">LSPosed 环境下，BBZQ 需要 Root 权限。点击「继续」后，请在授权管理（Magisk / KernelSU / APatch）弹出的请求中选择允许；若没有弹出请求，请确认 BBZQ 未被加入 Magisk 排除列表。</string>
+    <string name="framework_gate_continue">继续</string>
     <string name="framework_gate_retry">重试</string>
     <string name="framework_gate_exit">离开</string>
     <string name="component_pool_item_format">%1$s（%2$d 个模块）</string>
