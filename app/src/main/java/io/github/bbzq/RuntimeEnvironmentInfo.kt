@@ -425,7 +425,21 @@ object RuntimeEnvironmentInfo {
                 }
             }
             "npatch", "vector", UNKNOWN -> FrameworkGate.ALLOWED
-            else -> FrameworkGate.BLOCKED
+            else -> {
+                val apiVersion = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_API_VERSION) {
+                    serviceInfo?.apiVersion
+                }.toIntOrNull()
+                val properties = readRuntimeString(prefs, ModuleSettings.KEY_RUNTIME_XPOSED_FRAMEWORK_PROPERTIES) {
+                    serviceInfo?.frameworkProperties
+                }.toLongOrNull()
+                if (apiVersion != null && apiVersion >= XposedInterface.API_102 &&
+                    properties != null && (properties and XposedInterface.PROP_CAP_REMOTE) != 0L
+                ) {
+                    FrameworkGate.ALLOWED
+                } else {
+                    FrameworkGate.BLOCKED
+                }
+            }
         }
     }
 
