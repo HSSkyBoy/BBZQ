@@ -135,29 +135,16 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun hookLegacyWidgetClass(widgetClass: Class<*>) {
-        val visibilityMethods = widgetClass.declaredMethods
+        // 只隐藏覆写 setVisibility 的看一看控件；GeminiPlayerFullscreenWidget 是普通全屏按钮，只压制它的看一看跳转。
+        widgetClass.declaredMethods
             .filter { it.name == "setVisibility" && it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType)) }
-
-        // 覆写的 setVisibility 依赖注入后的服务，构造期不能直接写 visibility。
-        if (visibilityMethods.isEmpty()) {
-            widgetClass.declaredConstructors.forEach { constructor ->
-                env.hookAfter(constructor) { param ->
-                    if (!ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) return@hookAfter
-                    (param.thisObject as? View)?.let { view ->
-                        view.visibility = View.GONE
-                        hideViewPhysically(view)
+            .forEach { method ->
+                env.hookBefore(method) { param ->
+                    if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
+                        param.args[0] = View.GONE
                     }
                 }
             }
-        }
-
-        visibilityMethods.forEach { method ->
-            env.hookBefore(method) { param ->
-                if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {
-                    param.args[0] = View.GONE
-                }
-            }
-        }
 
         // getMembersInjector 等继承而来的契约方法不能强制，否则宿主会跳过依赖注入。
         widgetClass.declaredMethods
@@ -462,7 +449,6 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "切换竖屏",
             "切为竖屏",
             "竖屏全屏",
-            "展开全屏",
         )
         private val EXACT_PORTRAIT_IDS = setOf(
             "bbplayer_halfscreen_story",
