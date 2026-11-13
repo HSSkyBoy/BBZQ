@@ -33,6 +33,7 @@ import io.github.bbzq.DesktopIconHelper
 import io.github.bbzq.R
 import io.github.bbzq.feats.ResolverRegion
 import io.github.bbzq.feats.ResolverServers
+import io.github.bbzq.feats.hook.CommentAiAccountPolicy
 import okhttp3.Call
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -93,6 +94,9 @@ class SettingsContentFactory(
     private lateinit var commentMinLevelSwitch: Switch
     private lateinit var commentMinLevelRow: View
     private lateinit var commentMinLevelSummary: TextView
+    private lateinit var commentAiFilterSwitch: Switch
+    private lateinit var commentAiProtectSwitch: Switch
+    private val commentAiRows = mutableListOf<Triple<View, TextView, () -> String>>()
     private lateinit var homeRecommendItemSwitch: Switch
     private lateinit var homeRecommendTitleKeywordRow: View
     private lateinit var homeRecommendTabSwitch: Switch
@@ -1180,6 +1184,7 @@ class SettingsContentFactory(
     )
 
     private fun commentRows(): List<View> {
+        commentAiRows.clear()
         return listOf(
             createSwitchRow(
                 context.getString(R.string.comment_keyword_filter_title),
@@ -1199,6 +1204,60 @@ class SettingsContentFactory(
                 commentMinLevelSwitch = it
             },
             createCommentMinLevelRow(),
+            createSwitchRow(
+                context.getString(R.string.comment_ai_filter_title),
+                context.getString(R.string.comment_ai_filter_summary),
+                ModuleSettings.KEY_COMMENT_AI_FILTER_ENABLED,
+                false,
+            ) {
+                commentAiFilterSwitch = it
+            },
+            createCommentAiRow(
+                context.getString(R.string.comment_ai_sensitivity_row_title),
+                ::commentAiSensitivitySummaryText,
+                ::showCommentAiSensitivityDialog,
+            ),
+            createCommentAiRow(
+                context.getString(R.string.comment_ai_nickname_row_title),
+                { commentAiWordsSummaryText(ModuleSettings.getCommentAiNicknameWordsText(prefs)) },
+            ) {
+                showCommentAiTextDialog(
+                    R.string.comment_ai_nickname_row_title,
+                    R.string.comment_ai_nickname_hint,
+                    ModuleSettings.KEY_COMMENT_AI_NICKNAME_WORDS,
+                    ModuleSettings.getCommentAiNicknameWordsText(prefs),
+                )
+            },
+            createCommentAiRow(
+                context.getString(R.string.comment_ai_text_row_title),
+                { commentAiWordsSummaryText(ModuleSettings.getCommentAiTextWordsText(prefs)) },
+            ) {
+                showCommentAiTextDialog(
+                    R.string.comment_ai_text_row_title,
+                    R.string.comment_ai_text_hint,
+                    ModuleSettings.KEY_COMMENT_AI_TEXT_WORDS,
+                    ModuleSettings.getCommentAiTextWordsText(prefs),
+                )
+            },
+            createCommentAiRow(
+                context.getString(R.string.comment_ai_whitelist_row_title),
+                { commentAiWordsSummaryText(ModuleSettings.getCommentAiWhitelistText(prefs)) },
+            ) {
+                showCommentAiTextDialog(
+                    R.string.comment_ai_whitelist_row_title,
+                    R.string.comment_ai_whitelist_hint,
+                    ModuleSettings.KEY_COMMENT_AI_WHITELIST,
+                    ModuleSettings.getCommentAiWhitelistText(prefs),
+                )
+            },
+            createSwitchRow(
+                context.getString(R.string.comment_ai_protect_high_level_title),
+                context.getString(R.string.comment_ai_protect_high_level_summary),
+                ModuleSettings.KEY_COMMENT_AI_PROTECT_HIGH_LEVEL,
+                true,
+            ) {
+                commentAiProtectSwitch = it
+            },
             createSwitchRow(
                 context.getString(R.string.comment_disable_title),
                 context.getString(R.string.comment_disable_summary),
@@ -2262,6 +2321,77 @@ class SettingsContentFactory(
             .show()
     }
 
+    private fun createCommentAiRow(title: String, summary: () -> String, onClick: () -> Unit): View =
+        createClickableInfoRow(title, summary(), onClick).also {
+            commentAiRows += Triple(it, (it as ViewGroup).getChildAt(1) as TextView, summary)
+        }
+
+    private fun showCommentAiSensitivityDialog() {
+        val options = CommentAiAccountPolicy.Sensitivity.entries
+        val labels = options.map { context.getString(commentAiSensitivityLabel(it)) }.toTypedArray()
+        val selected = options.indexOfFirst { it.id == ModuleSettings.getCommentAiSensitivity(prefs) }.coerceAtLeast(0)
+        AlertDialog.Builder(context)
+            .setTitle(R.string.comment_ai_sensitivity_dialog_title)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                dialog.dismiss()
+                prefs.edit().putString(ModuleSettings.KEY_COMMENT_AI_SENSITIVITY, options[which].id).apply()
+                refresh()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    private fun showCommentAiTextDialog(titleRes: Int, hintRes: Int, key: String, current: String) {
+        val input = EditText(context).apply {
+            setText(current)
+            minLines = 4
+            maxLines = 8
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setSingleLine(false)
+            setSelectAllOnFocus(false)
+            setHint(hintRes)
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(titleRes)
+            .setView(content)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_save) { _, _ ->
+                prefs.edit().putString(key, input.text?.toString()?.trim().orEmpty()).apply()
+                refresh()
+            }
+            .show()
+    }
+
+    private fun commentAiSensitivityLabel(sensitivity: CommentAiAccountPolicy.Sensitivity): Int = when (sensitivity) {
+        CommentAiAccountPolicy.Sensitivity.LOOSE -> R.string.comment_ai_sensitivity_loose
+        CommentAiAccountPolicy.Sensitivity.STANDARD -> R.string.comment_ai_sensitivity_standard
+        CommentAiAccountPolicy.Sensitivity.STRICT -> R.string.comment_ai_sensitivity_strict
+    }
+
+    private fun commentAiSensitivitySummaryText(): String = context.getString(
+        R.string.comment_ai_sensitivity_row_summary,
+        context.getString(
+            commentAiSensitivityLabel(CommentAiAccountPolicy.Sensitivity.fromId(ModuleSettings.getCommentAiSensitivity(prefs))),
+        ),
+    )
+
+    private fun commentAiWordsSummaryText(raw: String): String {
+        val words = ModuleSettings.parseCommentKeywords(raw)
+        if (words.isEmpty()) return context.getString(R.string.comment_ai_words_empty_summary)
+        return context.getString(
+            R.string.comment_ai_words_summary,
+            words.size,
+            words.take(TITLE_KEYWORD_SUMMARY_MAX_ITEMS).joinToString(context.getString(R.string.list_separator)),
+        )
+    }
+
     private fun commentKeywordSummaryText(): String {
         val keywords = ModuleSettings.parseCommentKeywords(ModuleSettings.getCommentKeywordsText(prefs))
         if (keywords.isEmpty()) {
@@ -3171,6 +3301,7 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED ||
             key == ModuleSettings.KEY_COMMENT_KEYWORD_FILTER_ENABLED ||
             key == ModuleSettings.KEY_COMMENT_MIN_LEVEL_ENABLED ||
+            key == ModuleSettings.KEY_COMMENT_AI_FILTER_ENABLED ||
             key == ModuleSettings.KEY_SKIP_VIDEO_AD_ENABLED ||
             key == ModuleSettings.KEY_HIDE_ALL_HOME_COMPONENTS_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_COMPONENT_HIDE_ENABLED ||
@@ -3749,6 +3880,18 @@ class SettingsContentFactory(
         if (::commentMinLevelRow.isInitialized) {
             commentMinLevelRow.isEnabled = commentMinLevelEnabled
             commentMinLevelRow.alpha = if (commentMinLevelEnabled) 1f else 0.45f
+        }
+        val commentAiEnabled = ModuleSettings.isCommentAiFilterEnabled(prefs)
+        if (::commentAiFilterSwitch.isInitialized) {
+            commentAiFilterSwitch.isChecked = commentAiEnabled
+        }
+        if (::commentAiProtectSwitch.isInitialized) {
+            gate(commentAiProtectSwitch, commentAiEnabled)
+        }
+        commentAiRows.forEach { (row, summaryView, summary) ->
+            summaryView.text = summary()
+            row.isEnabled = commentAiEnabled
+            row.alpha = if (commentAiEnabled) 1f else 0.45f
         }
         homeRecommendItemCheckBoxes.forEach { (key, checkBox) ->
             checkBox.isEnabled = homeRecommendFilterEnabled

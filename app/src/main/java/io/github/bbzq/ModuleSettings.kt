@@ -163,6 +163,15 @@ object ModuleSettings {
     const val KEY_COMMENT_KEYWORDS = "vid_comment_keywords"
     const val KEY_COMMENT_MIN_LEVEL_ENABLED = "vid_comment_min_level_enabled"
     const val KEY_COMMENT_MIN_LEVEL = "vid_comment_min_level"
+    const val COMMENT_AI_SENSITIVITY_LOOSE = "loose"
+    const val COMMENT_AI_SENSITIVITY_STANDARD = "standard"
+    const val COMMENT_AI_SENSITIVITY_STRICT = "strict"
+    const val KEY_COMMENT_AI_FILTER_ENABLED = "vid_comment_ai_filter_enabled"
+    const val KEY_COMMENT_AI_SENSITIVITY = "vid_comment_ai_sensitivity"
+    const val KEY_COMMENT_AI_NICKNAME_WORDS = "vid_comment_ai_nickname_words"
+    const val KEY_COMMENT_AI_TEXT_WORDS = "vid_comment_ai_text_words"
+    const val KEY_COMMENT_AI_WHITELIST = "vid_comment_ai_whitelist"
+    const val KEY_COMMENT_AI_PROTECT_HIGH_LEVEL = "vid_comment_ai_protect_high_level"
     const val MAX_COMMENT_KEYWORDS = 64
     const val DEFAULT_COMMENT_MIN_LEVEL = 3
     const val KEY_MINE_REMOVE_VIP = "mine_remove_vip"
@@ -414,6 +423,8 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_COMMENT_NO_HOTSPOT, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_NO_HOTSPOT, false) },
         ExportableConfigSpec(KEY_COMMENT_KEYWORD_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_KEYWORD_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_MIN_LEVEL_ENABLED, false) },
+        ExportableConfigSpec(KEY_COMMENT_AI_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_AI_FILTER_ENABLED, false) },
+        ExportableConfigSpec(KEY_COMMENT_AI_PROTECT_HIGH_LEVEL, ExportableValueType.BOOLEAN) { isCommentAiProtectHighLevelEnabled(it) },
         ExportableConfigSpec(KEY_MINE_REMOVE_VIP, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_REMOVE_VIP, false) },
         ExportableConfigSpec(KEY_MINE_KEEP_VIP_SPACE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_KEEP_VIP_SPACE, false) },
         ExportableConfigSpec(KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED, ExportableValueType.BOOLEAN) {
@@ -425,6 +436,10 @@ object ModuleSettings {
         add(ExportableConfigSpec(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, "").orEmpty() })
         add(ExportableConfigSpec(KEY_COMMENT_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_COMMENT_KEYWORDS, "").orEmpty() })
         add(ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL, ExportableValueType.INT) { getCommentMinLevel(it) })
+        add(ExportableConfigSpec(KEY_COMMENT_AI_SENSITIVITY, ExportableValueType.STRING) { getCommentAiSensitivity(it) })
+        add(ExportableConfigSpec(KEY_COMMENT_AI_NICKNAME_WORDS, ExportableValueType.STRING) { getCommentAiNicknameWordsText(it) })
+        add(ExportableConfigSpec(KEY_COMMENT_AI_TEXT_WORDS, ExportableValueType.STRING) { getCommentAiTextWordsText(it) })
+        add(ExportableConfigSpec(KEY_COMMENT_AI_WHITELIST, ExportableValueType.STRING) { getCommentAiWhitelistText(it) })
         add(ExportableConfigSpec(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, ExportableValueType.INT) { prefs ->
             prefs.getInt(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, 1).coerceIn(1, 12)
         })
@@ -1225,6 +1240,26 @@ object ModuleSettings {
 
     fun getCommentMinLevel(prefs: SharedPreferences): Int =
         prefs.getInt(KEY_COMMENT_MIN_LEVEL, DEFAULT_COMMENT_MIN_LEVEL).coerceIn(0, 6)
+
+    fun isCommentAiFilterEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_COMMENT_AI_FILTER_ENABLED, false)
+
+    fun getCommentAiSensitivity(prefs: SharedPreferences): String =
+        prefs.getString(KEY_COMMENT_AI_SENSITIVITY, null)?.trim()
+            ?.takeIf { it == COMMENT_AI_SENSITIVITY_LOOSE || it == COMMENT_AI_SENSITIVITY_STRICT }
+            ?: COMMENT_AI_SENSITIVITY_STANDARD
+
+    fun getCommentAiNicknameWordsText(prefs: SharedPreferences): String =
+        prefs.getString(KEY_COMMENT_AI_NICKNAME_WORDS, "").orEmpty()
+
+    fun getCommentAiTextWordsText(prefs: SharedPreferences): String =
+        prefs.getString(KEY_COMMENT_AI_TEXT_WORDS, "").orEmpty()
+
+    fun getCommentAiWhitelistText(prefs: SharedPreferences): String =
+        prefs.getString(KEY_COMMENT_AI_WHITELIST, "").orEmpty()
+
+    fun isCommentAiProtectHighLevelEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_COMMENT_AI_PROTECT_HIGH_LEVEL, true)
 
     fun isMineRemoveVipEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_MINE_REMOVE_VIP, false)
