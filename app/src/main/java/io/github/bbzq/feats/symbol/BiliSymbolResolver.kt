@@ -28,7 +28,9 @@ import org.luckypray.dexkit.query.FindClass
 import org.luckypray.dexkit.query.FindMethod
 import org.luckypray.dexkit.query.enums.StringMatchType
 import org.luckypray.dexkit.query.matchers.ClassMatcher
+import org.luckypray.dexkit.query.matchers.FieldMatcher
 import org.luckypray.dexkit.query.matchers.MethodMatcher
+import org.luckypray.dexkit.query.matchers.UsingFieldMatcher
 import org.json.JSONObject
 import java.io.File
 import java.lang.reflect.Field
@@ -1244,10 +1246,11 @@ object BiliSymbolResolver {
         }?.apply { isAccessible = true }
             ?: return SymbolScanResult.Missing("theme skin list method not found")
 
-        // 主题处理器已移到混淆包(与颜色表 helper 同包),一并搜索
-        val themeProcessorPackages = listOf("tv.danmaku.bili.ui.theme", "${themeHelperClass.name.substringBeforeLast('.')}.")
-        val themeProcessorClass = findClassNamesByNameContains(bridge, themeProcessorPackages)
-            .mapNotNull(classLoader::loadClassOrNull)
+        // 按預設主題檔名定位，不依賴包名（9.19 起位於根包）
+        val themeProcessorClass = findDeclaredMethods(bridge, classLoader) {
+            matcher(MethodMatcher.create().usingStrings(THEME_DEFAULT_LIST_FILE))
+        }.map { it.declaringClass }
+            .distinctBy { it.name }
             .firstOrNull { type -> type.declaredFields.count { it.type == skinListClass } > 1 }
             ?: return SymbolScanResult.Missing("theme processor class not found")
         val themeResetMethods = findDeclaredMethods(bridge, classLoader) {
@@ -1267,9 +1270,20 @@ object BiliSymbolResolver {
             return SymbolScanResult.Missing("theme reset methods not found")
         }
 
-        val themeListClickClass = themeStoreActivity.declaredClasses.firstOrNull {
+        // 9.19 有多個點擊監聽，只有主題列表項的 onClick 會讀 BiliSkin.mId
+        val clickListeners = themeStoreActivity.declaredClasses.filter {
             it.interfaces.contains(View.OnClickListener::class.java)
-        } ?: return SymbolScanResult.Missing("theme list click listener not found")
+        }
+        val skinIdReaders = findDeclaredMethods(bridge, classLoader) {
+            matcher(
+                MethodMatcher.create().name("onClick").addUsingField(
+                    UsingFieldMatcher().field(FieldMatcher.create().declaredClass(skinClass).name("mId")),
+                ),
+            )
+        }.map { it.declaringClass }.toSet()
+        val themeListClickClass = clickListeners.firstOrNull { it in skinIdReaders }
+            ?: clickListeners.firstOrNull()
+            ?: return SymbolScanResult.Missing("theme list click listener not found")
 
         val themeNameClass = findThemeNameClass(classLoader, currentBridge)
             ?: return SymbolScanResult.Missing("theme name map class not found")
