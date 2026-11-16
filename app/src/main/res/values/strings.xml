@@ -39,7 +39,7 @@
     <string name="avoid_hdr_dolby_title">避免 HDR / 杜比视界</string>
     <string name="avoid_hdr_dolby_summary">需先开启“解锁最高码率”。跳过 HDR 与杜比视界档位，改选同级最高的 SDR 画质（适合非 HDR 屏幕），8K 不受影响。</string>
     <string name="fake_wifi_title">伪装 Wi-Fi</string>
-    <string name="fake_wifi_summary">强制解除移动数据/蜂窝流量限制，防止在非 Wi-Fi 环境下高码率与 4K 画质自动回退到 1080P。</string>
+    <string name="fake_wifi_summary">强制解除移动数据/蜂窝流量限制，防止在非 Wi-Fi 环境下高码率与 4K 画质自动回退到 1080P。注意：运营商可能不再把这类流量识别为定向免流，导致消耗通用流量。</string>
     <string name="half_screen_quality_title">视频半屏清晰度</string>
     <string name="half_screen_quality_summary">设置视频半屏播放时的清晰度（当前：%1$s）。若选择非默认档位将拦截半屏低画质预加载并强制锁定清晰度。</string>
     <string name="half_screen_quality_dialog_title">选择视频半屏清晰度</string>
