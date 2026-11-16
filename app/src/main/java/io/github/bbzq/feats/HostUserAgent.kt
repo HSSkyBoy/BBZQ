@@ -4,8 +4,7 @@ package io.github.bbzq.feats
 internal object HostUserAgent {
     private const val RUNTIME_HELPER = "com.bilibili.lib.moss.utils.RuntimeHelper"
     private const val FALLBACK =
-        "
-"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36 Edge/158.0.4370.21"
 
     fun of(classLoader: ClassLoader): String {
         val reported = runCatching {

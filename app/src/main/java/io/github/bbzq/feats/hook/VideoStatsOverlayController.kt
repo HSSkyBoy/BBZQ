@@ -2,8 +2,13 @@ package io.github.bbzq.feats.hook
 
 import android.app.Activity
 import io.github.bbzq.feats.HostAccountResolver
+import io.github.bbzq.feats.HostUserAgent
 import android.app.AlertDialog
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -16,10 +21,13 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.Locale
@@ -101,6 +109,7 @@ internal class VideoStatsOverlayController(
                         isFillViewport = true
                         val root = LinearLayout(activity).apply {
                             orientation = LinearLayout.VERTICAL
+                            addView(coverSection(activity))
                             if (statsContent != null) addView(statsContent)
                             else addView(statLine(activity, "状态", "暂无流信息，请先播放视频"))
                         }
@@ -314,6 +323,82 @@ internal class VideoStatsOverlayController(
         }
     }
 
+    private fun coverSection(activity: Activity): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(sectionTitle(activity, "视频封面", 22f))
+        val status = statLine(activity, "状态", "获取中…")
+        addView(status)
+
+        val bvid = extractBvid(activity)
+        if (bvid == null) {
+            status.text = "状态：未获取到 BVID"
+            return@apply
+        }
+        val cookie = getBiliCookies(activity)
+        val userAgent = HostUserAgent.of(activity.classLoader)
+        Thread {
+            val info = VideoCover.fetchInfo(bvid, cookie, userAgent)
+            val bytes = info?.let { VideoCover.download(it.url, userAgent) }
+            mainHandler.post {
+                if (activity.isFinishing || activity.isDestroyed) return@post
+                if (info == null || bytes == null) {
+                    status.text = "状态：获取封面失败，请确认已登录后重试"
+                    return@post
+                }
+                val extension = VideoCover.extensionOf(info.url)
+                status.text = "状态：就绪（${extension.uppercase()}，${bytes.size / 1024} KB）"
+                decodePreview(bytes)?.let { bitmap ->
+                    addView(
+                        ImageView(activity).apply {
+                            adjustViewBounds = true
+                            scaleType = ImageView.ScaleType.FIT_CENTER
+                            setImageBitmap(bitmap)
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                    )
+                }
+                addView(
+                    LinearLayout(activity).apply {
+                        addView(coverButton(activity, "保存到相册") { saveCover(activity, bytes, bvid, extension) })
+                        addView(coverButton(activity, "复制链接") { copyCoverUrl(activity, info.url) })
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                        .apply { topMargin = dp(8) },
+                )
+            }
+        }.start()
+    }
+
+    private fun coverButton(activity: Activity, label: String, onClick: () -> Unit) = Button(activity).apply {
+        text = label
+        setBackgroundColor(Color.rgb(251, 114, 153))
+        setTextColor(Color.WHITE)
+        setOnClickListener { onClick() }
+        layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) }
+    }
+
+    private fun saveCover(activity: Activity, bytes: ByteArray, bvid: String, extension: String) {
+        Thread {
+            val path = VideoCover.saveToGallery(activity, bytes, bvid, extension)
+            mainHandler.post {
+                Toast.makeText(activity, path?.let { "已保存到 $it" } ?: "保存封面失败，可能未授予存储权限", Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
+    private fun copyCoverUrl(activity: Activity, url: String) {
+        activity.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("cover", url))
+        Toast.makeText(activity, "已复制封面链接", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun decodePreview(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= PREVIEW_MAX_WIDTH) sample *= 2
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+    }
+
     private fun createStatsContent(activity: Activity, stats: VideoStreamStats): LinearLayout =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -406,6 +491,7 @@ internal class VideoStatsOverlayController(
     }
 
     companion object {
+        private const val PREVIEW_MAX_WIDTH = 1080
         @Volatile var instance: VideoStatsOverlayController? = null
         @Volatile var currentBvid: String? = null
         @Volatile var currentCid: Long? = null
