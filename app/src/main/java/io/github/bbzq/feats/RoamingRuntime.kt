@@ -15,6 +15,7 @@ import io.github.bbzq.feats.hook.AiDeclaredVideoHook
 import io.github.bbzq.feats.hook.PgcActivityPopupHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
+import io.github.bbzq.feats.hook.CourseIntroCrashGuardHook
 import io.github.bbzq.feats.hook.CustomThemeHook
 import io.github.bbzq.feats.hook.CustomCdnHook
 import io.github.bbzq.feats.hook.DownloadThreadHook
@@ -189,6 +190,7 @@ object RoamingRuntime {
 
             ProcessScope.MAIN -> listOf(
                 ::DaggerCircularDependencyFixHook,
+                ::CourseIntroCrashGuardHook,
                 ::SettingHook,
                 ::SplashAdHook,
                 ::SplashAutoNightHook,
