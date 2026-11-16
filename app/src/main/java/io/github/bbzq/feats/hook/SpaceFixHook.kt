@@ -2,6 +2,7 @@ package io.github.bbzq.feats.hook
 
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
+import io.github.bbzq.feats.HostUserAgent
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.callStaticMethod
@@ -26,6 +27,7 @@ class SpaceFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private var responseBodyClass: Class<*>? = null
     private var mediaTypeClass: Class<*>? = null
     private val recent = ConcurrentHashMap<Long, Rebuilt>()
+    private val userAgent by lazy { HostUserAgent.of(classLoader) }
 
     override fun startHook() {
         if (!ModuleSettings.isSpaceFixEnabled(prefs)) return
@@ -154,7 +156,7 @@ class SpaceFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         try {
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
-            conn.setRequestProperty("User-Agent", WEB_USER_AGENT)
+            conn.setRequestProperty("User-Agent", userAgent)
             conn.setRequestProperty("Referer", "https://www.bilibili.com/")
             conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
@@ -172,7 +174,5 @@ class SpaceFixHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val TIMEOUT_MS = 10_000
         const val CACHE_MILLIS = 60_000L
         const val CACHE_ENTRIES = 16
-        const val WEB_USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 }
