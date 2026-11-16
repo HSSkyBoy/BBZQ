@@ -1177,6 +1177,12 @@ class SettingsContentFactory(
             false,
         ),
         createCustomCdnSpeedTestRow(),
+        createSwitchRow(
+            context.getString(R.string.block_p2p_title),
+            context.getString(R.string.block_p2p_summary),
+            ModuleSettings.KEY_BLOCK_P2P_ENABLED,
+            false,
+        ),
     )
 
     private fun commentRows(): List<View> {

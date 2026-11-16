@@ -144,6 +144,8 @@
     <string name="startup_block_teenagers_summary">偵測並自動關閉青少年模式提醒彈窗。</string>
     <string name="block_update_title">禁止 App 檢查更新</string>
     <string name="block_update_summary">攔截應用程式內的更新檢查，避免彈出版本更新提示。</string>
+    <string name="block_p2p_title">阻止 P2P / PCDN</string>
+    <string name="block_p2p_summary">禁止用戶端把本機作為 P2P / PCDN 節點參與點播與直播的資料分發，避免佔用上行頻寬。重啟嗶哩嗶哩後生效。</string>
     <string name="home_recommend_title_keyword_title">標題關鍵字屏蔽</string>
     <string name="home_recommend_title_keyword_empty_summary">尚未設定關鍵字。開啟首頁卡片過濾後，標題包含關鍵字的推薦會被過濾。</string>
     <string name="home_recommend_title_keyword_enabled_summary">已設定 %1$d 個關鍵字：%2$s</string>

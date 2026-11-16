@@ -168,6 +168,8 @@
     <string name="startup_block_teenagers_summary">检测并自动关闭青少年模式提醒弹窗。</string>
     <string name="block_update_title">禁止 App 检查更新</string>
     <string name="block_update_summary">拦截应用内更新检查，避免弹出版本更新提示。</string>
+    <string name="block_p2p_title">阻止 P2P / PCDN</string>
+    <string name="block_p2p_summary">禁止客户端把本机作为 P2P / PCDN 节点参与点播与直播的数据分发，避免占用上行带宽。重启哔哩哔哩后生效。</string>
 
     <!-- 主页 -->
     <string name="home_recommend_title_keyword_title">标题关键词屏蔽</string>

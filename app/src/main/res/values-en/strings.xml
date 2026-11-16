@@ -144,6 +144,8 @@
     <string name="startup_block_teenagers_summary">Detects and closes the Teenage Mode reminder automatically.</string>
     <string name="block_update_title">Block in-app update checks</string>
     <string name="block_update_summary">Blocks update checks inside the app so no version prompt appears.</string>
+    <string name="block_p2p_title">Block P2P / PCDN</string>
+    <string name="block_p2p_summary">Stops the client from acting as a P2P / PCDN node for video and live streams, so it does not use your upload bandwidth. Takes effect after restarting Bilibili.</string>
     <string name="home_recommend_title_keyword_title">Title keyword filter</string>
     <string name="home_recommend_title_keyword_empty_summary">No keywords set. With card filtering on, recommendations whose title contains a keyword are filtered out.</string>
     <string name="home_recommend_title_keyword_enabled_summary">%1$d keyword(s): %2$s</string>
