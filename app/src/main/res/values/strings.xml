@@ -77,6 +77,8 @@
     <string name="purify_share_summary">移除分享链接中的追踪参数，保留分页与评论定位等必要信息。</string>
     <string name="full_number_format_title">完整数字显示</string>
     <string name="full_number_format_summary">在“我的”和空间页显示完整的播放与统计数字，禁用单位缩写。</string>
+    <string name="space_fix_title">修复已注销用户主页</string>
+    <string name="space_fix_summary">打开已注销、被封禁或被屏蔽账号的空间页时，使用公开接口补全页面，使其可以正常显示。</string>
     <string name="unlock_comment_gif_title">评论区 GIF 解锁</string>
     <string name="unlock_comment_gif_summary">恢复评论区 GIF 缩略图播放，并移除图片右上角的大会员专属角标。</string>
 

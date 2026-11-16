@@ -1298,6 +1298,12 @@ class SettingsContentFactory(
                 ModuleSettings.KEY_FULL_NUMBER_FORMAT_ENABLED,
                 false,
             )
+            rows += createSwitchRow(
+                context.getString(R.string.space_fix_title),
+                context.getString(R.string.space_fix_summary),
+                ModuleSettings.KEY_SPACE_FIX_ENABLED,
+                false,
+            )
         }
     }
 

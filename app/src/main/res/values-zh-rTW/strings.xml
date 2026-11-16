@@ -67,6 +67,8 @@
     <string name="purify_share_summary">移除分享連結中的追蹤參數，保留分頁與評論定位等必要資訊。</string>
     <string name="full_number_format_title">完整數字顯示</string>
     <string name="full_number_format_summary">在「我的」和空間頁顯示完整的播放與統計數字，不使用單位縮寫。</string>
+    <string name="space_fix_title">修復已註銷用戶主頁</string>
+    <string name="space_fix_summary">開啟已註銷、被封禁或被封鎖帳號的空間頁時，使用公開介面補全頁面，使其可以正常顯示。</string>
     <string name="unlock_comment_gif_title">評論區 GIF 解鎖</string>
     <string name="unlock_comment_gif_summary">恢復評論區 GIF 縮圖播放，並移除圖片右上角的大會員專屬角標。</string>
     <string name="story_video_default_launch_title">啟動進入直式影片</string>

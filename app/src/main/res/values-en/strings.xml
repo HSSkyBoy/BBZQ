@@ -67,6 +67,8 @@
     <string name="purify_share_summary">Removes tracking parameters from shared links and keeps necessary ones such as page and comment position.</string>
     <string name="full_number_format_title">Show full numbers</string>
     <string name="full_number_format_summary">Shows full play counts and statistics on the Me and space pages instead of abbreviated units.</string>
+    <string name="space_fix_title">Fix deregistered user spaces</string>
+    <string name="space_fix_summary">When opening the space of a deregistered, banned or blocked account, rebuilds the page from public endpoints so it can be shown.</string>
     <string name="unlock_comment_gif_title">Unlock comment GIFs</string>
     <string name="unlock_comment_gif_summary">Restores animated GIF thumbnails in comments and removes the member-only badge on images.</string>
     <string name="story_video_default_launch_title">Open vertical video at launch</string>

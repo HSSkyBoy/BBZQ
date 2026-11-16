@@ -38,6 +38,7 @@ import io.github.bbzq.feats.hook.SeaBangumiSearchHook
 import io.github.bbzq.feats.hook.SeaBangumiSubtitleHook
 import io.github.bbzq.feats.hook.RewardAdHook
 import io.github.bbzq.feats.hook.SettingHook
+import io.github.bbzq.feats.hook.SpaceFixHook
 import io.github.bbzq.feats.hook.ShareHook
 import io.github.bbzq.feats.hook.SkipVideoAdHook
 import io.github.bbzq.feats.hook.SkipVideoAdProgressHook
@@ -235,6 +236,7 @@ object RoamingRuntime {
                 ::BlockUpdateHook,
                 ::VideoCommentHook,
                 ::FullNumberFormatHook,
+                ::SpaceFixHook,
                 ::MineProfileHook,
                 ::CustomThemeHook,
                 ::BlockActivityMetaStickerHook,

@@ -144,6 +144,7 @@ object ModuleSettings {
     const val KEY_RESOLVER_CDN_CN = "resolver_cdn_cn"
     const val KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS = "sea_unlock_relax_play_limits"
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
+    const val KEY_SPACE_FIX_ENABLED = "space_fix_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
     const val KEY_LAST_ACCESS_KEY = "last_access_key"
     const val KEY_HOST_ACCOUNT_UID = "host_account_uid"
@@ -400,6 +401,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, true) },
         ExportableConfigSpec(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
+        ExportableConfigSpec(KEY_SPACE_FIX_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SPACE_FIX_ENABLED, true) },
         ExportableConfigSpec(KEY_UNLOCK_COMMENT_GIF_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_UNLOCK_COMMENT_GIF_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_DESKTOP_ICON, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_DESKTOP_ICON, false) },
         ExportableConfigSpec(KEY_ACCEPT_PRERELEASE_UPDATE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_ACCEPT_PRERELEASE_UPDATE, false) },
@@ -1168,6 +1170,9 @@ object ModuleSettings {
 
     fun isFullNumberFormatEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false)
+
+    fun isSpaceFixEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_SPACE_FIX_ENABLED, false)
 
     fun isUnlockCommentGifEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_UNLOCK_COMMENT_GIF_ENABLED, false)
