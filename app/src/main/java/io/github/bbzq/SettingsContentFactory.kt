@@ -538,6 +538,19 @@ class SettingsContentFactory(
         ) {
             bottomBarSwitch = it
         }
+        val items = bottomBarItems()
+        if (items.isEmpty()) {
+            rows += createInfoRow(
+                context.getString(R.string.bottom_bar_item_title),
+                context.getString(R.string.bottom_bar_unavailable_summary),
+            )
+        } else {
+            rows += createInfoRow(
+                context.getString(R.string.bottom_bar_item_title),
+                context.getString(R.string.bottom_bar_info_summary),
+            )
+            rows += createBottomBarItemGroup(items)
+        }
         rows += createSwitchRow(
             context.getString(R.string.custom_theme_title),
             context.getString(R.string.custom_theme_summary),
@@ -576,20 +589,6 @@ class SettingsContentFactory(
             customFontScaleSwitch = it
         }
         rows += createCustomFontScaleRow()
-
-        val items = bottomBarItems()
-        if (items.isEmpty()) {
-            rows += createInfoRow(
-                context.getString(R.string.bottom_bar_item_title),
-                context.getString(R.string.bottom_bar_unavailable_summary),
-            )
-        } else {
-            rows += createInfoRow(
-                context.getString(R.string.bottom_bar_item_title),
-                context.getString(R.string.bottom_bar_info_summary),
-            )
-            rows += createBottomBarItemGroup(items)
-        }
         rows += createSwitchRow(
             context.getString(R.string.home_top_bar_promotion_title),
             context.getString(R.string.home_top_bar_promotion_summary),
