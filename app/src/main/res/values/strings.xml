@@ -518,6 +518,9 @@
     <string name="custom_theme_summary">在 Bilibili 主题列表中加入自定义主色主题；修改后重新进入主题页即可生效。</string>
     <string name="custom_theme_color_title">自制主题颜色</string>
     <string name="custom_theme_color_summary">当前颜色：%1$s</string>
+    <string name="custom_theme_color_follow_system">已跟随系统取色，手动颜色不生效</string>
+    <string name="custom_theme_monet_title">跟随系统取色（莫奈）</string>
+    <string name="custom_theme_monet_summary">用系统壁纸取色（Android 12+）作为自制主题主色。开启后手动颜色不生效；更换壁纸后需重启哔哩哔哩。</string>
     <string name="custom_theme_color_dialog_title">自制主题颜色</string>
     <string name="custom_theme_color_dialog_message">请输入 6 位十六进制颜色，例如 FB7299。</string>
     <string name="custom_theme_color_invalid">请输入有效的 6 位十六进制颜色。</string>

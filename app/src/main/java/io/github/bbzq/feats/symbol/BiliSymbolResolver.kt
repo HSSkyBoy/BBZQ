@@ -1251,7 +1251,7 @@ object BiliSymbolResolver {
             matcher(MethodMatcher.create().usingStrings(THEME_DEFAULT_LIST_FILE))
         }.map { it.declaringClass }
             .distinctBy { it.name }
-            .firstOrNull { type -> type.declaredFields.count { it.type == skinListClass } > 1 }
+            .firstOrNull { type -> type.safeDeclaredFields().count { it.type == skinListClass } > 1 }
             ?: return SymbolScanResult.Missing("theme processor class not found")
         val themeResetMethods = findDeclaredMethods(bridge, classLoader) {
             matcher(
@@ -1292,10 +1292,12 @@ object BiliSymbolResolver {
         }?.apply { isAccessible = true }
             ?: return SymbolScanResult.Missing("theme name map field not found")
 
-        val builtInThemeCandidate = findClassNamesByNameContains(bridge, listOf("theme", "garb"))
+        // 優先按 GarbThemeColors 構造函數的調用者所讀的靜態 Map 定位（9.19 為 pia0.c），舊版再按類名搜尋
+        val builtInThemeCandidate = themeColorsClass?.let { findBuiltInThemeMap(currentBridge, classLoader, it) }
+            ?: findClassNamesByNameContains(bridge, listOf("theme", "garb"))
             .mapNotNull(classLoader::loadClassOrNull)
             .firstNotNullOfOrNull { type ->
-                type.declaredFields.firstOrNull {
+                type.safeDeclaredFields().firstOrNull {
                     it.type == Map::class.java && Modifier.isStatic(it.modifiers)
                 }?.apply { isAccessible = true }?.let { type to it }
             }
@@ -1339,6 +1341,23 @@ object BiliSymbolResolver {
         return SymbolScanResult.Found(symbols, themeStoreActivity.name, symbols.evidence)
     }
 
+    private fun findBuiltInThemeMap(
+        bridge: DexKitBridge,
+        classLoader: ClassLoader,
+        colorsClass: Class<*>,
+    ): Pair<Class<*>, java.lang.reflect.Field>? = runCatching {
+        bridge.findMethod(
+            FindMethod.create().matcher(
+                MethodMatcher.create().addInvoke(MethodMatcher.create().declaredClass(colorsClass).name("<init>")),
+            ),
+        ).asSequence()
+            .flatMap { it.usingFields.asSequence() }
+            .mapNotNull { runCatching { it.field.getFieldInstance(classLoader) }.getOrNull() }
+            .firstOrNull { it.type == Map::class.java && Modifier.isStatic(it.modifiers) }
+            ?.apply { isAccessible = true }
+            ?.let { it.declaringClass to it }
+    }.getOrNull()
+
     private fun findThemeNameClass(classLoader: ClassLoader, bridge: DexKitBridge): Class<*>? {
         val candidates = bridge.findClass(
             FindClass.create().matcher(ClassMatcher.create().usingStrings(".garb.GARB_CHANGE")),
@@ -1347,12 +1366,12 @@ object BiliSymbolResolver {
         ).map { it.name }.toList()
         val types = candidates.asSequence().distinct().mapNotNull(classLoader::loadClassOrNull)
             .filter { type ->
-                type.declaredFields.any { Modifier.isStatic(it.modifiers) && it.type == Map::class.java }
+                type.safeDeclaredFields().any { Modifier.isStatic(it.modifiers) && it.type == Map::class.java }
             }
             .toList()
         // "white" 在新版命中多个颜色名映射(如 HtmlColors),按主题 id 映射内容挑出真正的主题名表
         return types.firstOrNull { type ->
-            type.declaredFields.any { field ->
+            type.safeDeclaredFields().any { field ->
                 Modifier.isStatic(field.modifiers) && field.type == Map::class.java &&
                     runCatching {
                         field.isAccessible = true
@@ -4316,6 +4335,10 @@ object BiliSymbolResolver {
             emptyList()
         }
     }
+
+    /** 欄位型別可能無法解析（例如宿主內附的華為 SDK 缺類），此時視為沒有欄位，不讓整個掃描失敗。 */
+    private fun Class<*>.safeDeclaredFields(): List<java.lang.reflect.Field> =
+        runCatching { declaredFields.toList() }.getOrDefault(emptyList())
 
     private fun findClassNamesByNameContains(
         bridge: () -> DexKitBridge?,

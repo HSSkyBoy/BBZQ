@@ -69,7 +69,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("CustomTheme skipped: symbols missing or failed to restore")
             return
         }
-        val initialColor = ModuleSettings.getCustomThemeColor(prefs)
+        val initialColor = ModuleSettings.getEffectiveCustomThemeColor(env.hostContext, prefs)
         if (customColorEnabled) {
             installThemeMaps(symbols, initialColor)
             hookThemeList(symbols)
@@ -291,7 +291,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
     fun insertColorForWebProcess() {
         if (!ModuleSettings.isCustomThemeEnabled(prefs)) return
         val symbols = env.symbols?.customTheme?.restore(classLoader) ?: return
-        val color = ModuleSettings.getCustomThemeColor(prefs)
+        val color = ModuleSettings.getEffectiveCustomThemeColor(env.hostContext, prefs)
         installThemeMaps(symbols, color)
         symbols.columnHelperColorArray?.let { field ->
             putColorArray(field, color)
@@ -322,12 +322,15 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 put("custom2", CUSTOM_THEME_ID2)
             }
             putColorArray(symbols.themeHelperColorArray, primaryColor)
-            buildTheme(primaryColor, symbols.themeColorsClass)?.let { theme ->
-                @Suppress("UNCHECKED_CAST")
-                (symbols.allThemes?.get(null) as? MutableMap<Long, Any>)?.apply {
-                    put(CUSTOM_THEME_ID1.toLong(), theme)
-                    put(CUSTOM_THEME_ID2.toLong(), theme)
-                }
+            val theme = buildTheme(primaryColor, symbols.themeColorsClass)
+            @Suppress("UNCHECKED_CAST")
+            val allThemes = symbols.allThemes?.get(null) as? MutableMap<Long, Any>
+            if (theme == null || allThemes == null) {
+                log("CustomTheme built-in theme skipped: theme=${theme != null} map=${allThemes != null}")
+            } else {
+                allThemes[CUSTOM_THEME_ID1.toLong()] = theme
+                allThemes[CUSTOM_THEME_ID2.toLong()] = theme
+                log("CustomTheme built-in theme installed: ${formatColor(primaryColor)}")
             }
         }.onFailure { log("CustomTheme map installation failed", it) }
     }
@@ -349,7 +352,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 return@hookBefore
             }
             val skin = symbols.skinClass.newInstanceOrNull() ?: return@hookBefore
-            val id = if (ModuleSettings.getCustomThemeColor(prefs) == ModuleSettings.DEFAULT_CUSTOM_THEME_COLOR) {
+            val id = if (ModuleSettings.getEffectiveCustomThemeColor(env.hostContext, prefs) == ModuleSettings.DEFAULT_CUSTOM_THEME_COLOR) {
                 CUSTOM_THEME_ID1
             } else {
                 CUSTOM_THEME_ID2
@@ -370,6 +373,8 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
             val skin = view.tag ?: return@hookBefore
             val id = skin.readIntField("mId")
             if (id != CUSTOM_THEME_ID1 && id != CUSTOM_THEME_ID2) return@hookBefore
+            // 跟隨系統取色時不需要輸入色碼，交給宿主直接套用
+            if (ModuleSettings.isCustomThemeMonetEnabled(prefs)) return@hookBefore
 
             val dialogInput = EditText(view.context).apply {
                 setSingleLine(true)
@@ -409,7 +414,59 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
             ?: themeClass.declaredConstructors.maxByOrNull { it.parameterTypes.size }
             ?: return null
         constructor.isAccessible = true
-        if (constructor.parameterCount != 10) return null
+        return when (constructor.parameterCount) {
+            2 -> buildGarbTheme(constructor, primaryColor)
+            10 -> buildLegacyTheme(constructor, primaryColor)
+            else -> null
+        }
+    }
+
+    // 9.19 起 GarbThemeColors 只剩 (GarbInfo, ThemeDayNight)，顏色由 GarbInfo 的 primary/secondary/textTitle 算出
+    private fun buildGarbTheme(constructor: Constructor<*>, primaryColor: Int): Any? {
+        val garb = newGarbInfo(constructor.parameterTypes[0], primaryColor) ?: return null
+        val dayNightType = constructor.parameterTypes[1]
+        val dayNight = dayNightType.enumConstants?.firstOrNull { (it as Enum<*>).name == "Day" }
+            ?: dayNightType.enumConstants?.firstOrNull()
+            ?: return null
+        return runCatching { constructor.newInstance(garb, dayNight) }.getOrNull()
+    }
+
+    /**
+     * 取參數最多的 Long 版主構造，依宣告順序填值：id、兩個旗標，其後五個 Long 依序是
+     * primary、secondary、(未用)、textTitle、(未用)；其餘一律給零值。
+     */
+    private fun newGarbInfo(garbClass: Class<*>, color: Int): Any? {
+        val constructor = garbClass.declaredConstructors
+            .filter { c ->
+                c.parameterCount > 9 &&
+                    c.parameterTypes[0] == Long::class.javaPrimitiveType &&
+                    c.parameterTypes[5] == Long::class.javaPrimitiveType &&
+                    c.parameterTypes.none { it.name == "kotlin.jvm.internal.DefaultConstructorMarker" }
+            }
+            .maxByOrNull { it.parameterCount } ?: return null
+        val main = color.toLong() and 0xFFFFFFFFL
+        val white = Color.WHITE.toLong() and 0xFFFFFFFFL
+        val args = constructor.parameterTypes.mapIndexed { index, type ->
+            when {
+                index == 0 -> CUSTOM_THEME_ID1.toLong()
+                index == 1 || index == 2 -> true
+                index == 5 || index == 6 || index == 7 -> main
+                index == 8 || index == 9 -> white
+                type == Long::class.javaPrimitiveType -> 0L
+                type == Boolean::class.javaPrimitiveType -> false
+                type == Int::class.javaPrimitiveType -> 0
+                type == String::class.java -> ""
+                List::class.java.isAssignableFrom(type) -> emptyList<Any>()
+                else -> null
+            }
+        }
+        return runCatching {
+            constructor.isAccessible = true
+            constructor.newInstance(*args.toTypedArray())
+        }.getOrNull()
+    }
+
+    private fun buildLegacyTheme(constructor: Constructor<*>, primaryColor: Int): Any? {
         val garbClass = constructor.parameterTypes[0]
         val garb = garbClass.newInstanceOrNull() ?: garbClass.declaredConstructors
             .firstOrNull { it.parameterCount == 9 }

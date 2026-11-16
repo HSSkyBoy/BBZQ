@@ -478,6 +478,9 @@
     <string name="custom_theme_summary">Adds a theme with your own main color to Bilibili\'s theme list. Re-open the theme page after changing it.</string>
     <string name="custom_theme_color_title">Theme color</string>
     <string name="custom_theme_color_summary">Current color: %1$s</string>
+    <string name="custom_theme_color_follow_system">Following the system color; the manual color is ignored</string>
+    <string name="custom_theme_monet_title">Follow system color (Monet)</string>
+    <string name="custom_theme_monet_summary">Uses the wallpaper-based system color (Android 12+) as the custom theme\'s main color. The manual color is ignored while on; restart Bilibili after changing the wallpaper.</string>
     <string name="custom_theme_color_dialog_title">Theme color</string>
     <string name="custom_theme_color_dialog_message">Enter a 6-digit hex color, for example FB7299.</string>
     <string name="custom_theme_color_invalid">Please enter a valid 6-digit hex color.</string>

@@ -478,6 +478,9 @@
     <string name="custom_theme_summary">在嗶哩嗶哩主題列表中加入自訂主色的主題；修改後重新進入主題頁即可生效。</string>
     <string name="custom_theme_color_title">自製主題顏色</string>
     <string name="custom_theme_color_summary">目前顏色：%1$s</string>
+    <string name="custom_theme_color_follow_system">已跟隨系統取色，手動顏色不生效</string>
+    <string name="custom_theme_monet_title">跟隨系統取色（莫奈）</string>
+    <string name="custom_theme_monet_summary">以系統桌布取色（Android 12+）作為自製主題主色。開啟後手動顏色不生效；更換桌布後需重啟嗶哩嗶哩。</string>
     <string name="custom_theme_color_dialog_title">自製主題顏色</string>
     <string name="custom_theme_color_dialog_message">請輸入 6 位十六進位顏色，例如 FB7299。</string>
     <string name="custom_theme_color_invalid">請輸入有效的 6 位十六進位顏色。</string>

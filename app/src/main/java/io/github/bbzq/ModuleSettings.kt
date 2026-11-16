@@ -111,6 +111,7 @@ object ModuleSettings {
     const val LANGUAGE_EN = "en"
     const val KEY_CUSTOM_THEME_ENABLED = "custom_theme_enabled"
     const val KEY_CUSTOM_THEME_COLOR = "custom_theme_color"
+    const val KEY_CUSTOM_THEME_MONET = "custom_theme_monet"
     const val KEY_CUSTOM_SKIN_ENABLED = "custom_skin_enabled"
     const val KEY_CUSTOM_SKIN_JSON = "custom_skin_json"
     const val KEY_CUSTOM_FONT_SCALE_ENABLED = "custom_font_scale_enabled"
@@ -387,6 +388,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_ENHANCE_LONG_PRESS_COPY_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_ENHANCE_LONG_PRESS_COPY_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_BOTTOM_BAR_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_BOTTOM_BAR_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_THEME_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_THEME_ENABLED, false) },
+        ExportableConfigSpec(KEY_CUSTOM_THEME_MONET, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_THEME_MONET, false) },
         ExportableConfigSpec(KEY_CUSTOM_SKIN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_FONT_SCALE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_FONT_SCALE_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, false) },
@@ -1028,6 +1030,21 @@ object ModuleSettings {
     fun getCustomThemeColor(prefs: SharedPreferences): Int =
         prefs.getInt(KEY_CUSTOM_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR)
             .let { color -> (color and 0x00FFFFFF) or 0xFF000000.toInt() }
+
+    /** 系統動態取色（莫奈）需要 Android 12。 */
+    val isMonetSupported: Boolean
+        get() = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+
+    fun isCustomThemeMonetEnabled(prefs: SharedPreferences): Boolean =
+        isMonetSupported && prefs.getBoolean(KEY_CUSTOM_THEME_MONET, false)
+
+    /** 實際套用的主題色：開啟莫奈時取系統強調色，否則取手動設定的顏色。 */
+    fun getEffectiveCustomThemeColor(context: Context, prefs: SharedPreferences): Int {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && isCustomThemeMonetEnabled(prefs)) {
+            return context.getColor(android.R.color.system_accent1_500) or 0xFF000000.toInt()
+        }
+        return getCustomThemeColor(prefs)
+    }
 
     fun isCustomSkinEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false)

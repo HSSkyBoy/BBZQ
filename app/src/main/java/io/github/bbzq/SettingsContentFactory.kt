@@ -77,6 +77,7 @@ class SettingsContentFactory(
     private lateinit var downloadConcurrencySummary: TextView
     private lateinit var bottomBarSwitch: Switch
     private lateinit var customThemeSwitch: Switch
+    private lateinit var customThemeMonetSwitch: Switch
     private lateinit var customSkinSwitch: Switch
     private lateinit var customFontScaleSwitch: Switch
     private lateinit var customFontScaleRow: View
@@ -544,6 +545,16 @@ class SettingsContentFactory(
             false,
         ) {
             customThemeSwitch = it
+        }
+        if (ModuleSettings.isMonetSupported) {
+            rows += createSwitchRow(
+                context.getString(R.string.custom_theme_monet_title),
+                context.getString(R.string.custom_theme_monet_summary),
+                ModuleSettings.KEY_CUSTOM_THEME_MONET,
+                false,
+            ) {
+                customThemeMonetSwitch = it
+            }
         }
         rows += createCustomThemeColorRow()
         rows += createSwitchRow(
@@ -3177,6 +3188,7 @@ class SettingsContentFactory(
             key == ModuleSettings.KEY_DISABLE_LONG_PRESS_COPY_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_BOTTOM_BAR_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_THEME_ENABLED ||
+            key == ModuleSettings.KEY_CUSTOM_THEME_MONET ||
             key == ModuleSettings.KEY_CUSTOM_SKIN_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_FONT_SCALE_ENABLED ||
             key == ModuleSettings.KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED ||
@@ -3596,19 +3608,28 @@ class SettingsContentFactory(
         if (::customSkinSwitch.isInitialized) {
             customSkinSwitch.isChecked = ModuleSettings.isCustomSkinEnabled(prefs)
         }
+        if (::customThemeMonetSwitch.isInitialized) {
+            customThemeMonetSwitch.isChecked = ModuleSettings.isCustomThemeMonetEnabled(prefs)
+            customThemeMonetSwitch.isEnabled = ModuleSettings.isCustomThemeEnabled(prefs)
+        }
+        val monet = ModuleSettings.isCustomThemeMonetEnabled(prefs)
         if (::customThemeColorRow.isInitialized) {
-            val enabled = ModuleSettings.isCustomThemeEnabled(prefs)
+            val enabled = ModuleSettings.isCustomThemeEnabled(prefs) && !monet
             customThemeColorRow.isEnabled = enabled
             customThemeColorRow.alpha = if (enabled) 1f else 0.45f
         }
         if (::customThemeColorSummary.isInitialized) {
-            customThemeColorSummary.text = context.getString(
-                R.string.custom_theme_color_summary,
-                "#%06X".format(ModuleSettings.getCustomThemeColor(prefs) and 0xFFFFFF),
-            )
+            customThemeColorSummary.text = if (monet) {
+                context.getString(R.string.custom_theme_color_follow_system)
+            } else {
+                context.getString(
+                    R.string.custom_theme_color_summary,
+                    "#%06X".format(ModuleSettings.getCustomThemeColor(prefs) and 0xFFFFFF),
+                )
+            }
         }
         if (::customThemeColorSwatch.isInitialized) {
-            customThemeColorSwatch.setBackgroundColor(ModuleSettings.getCustomThemeColor(prefs))
+            customThemeColorSwatch.setBackgroundColor(ModuleSettings.getEffectiveCustomThemeColor(context, prefs))
         }
         if (::customSkinConfigRow.isInitialized) {
             val enabled = ModuleSettings.isCustomSkinEnabled(prefs)
