@@ -269,15 +269,15 @@ jobs:
           MEDIA_JSON+="]"
 
           CURL_ARGS=(
-            --silent --show-error --fail
+            --silent --show-error --fail-with-body
             --request POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMediaGroup"
-            -F "chat_id=${TG_CHAT_ID}"
-            -F "media=${MEDIA_JSON}"
+            --form-string "chat_id=${TG_CHAT_ID}"
+            --form-string "media=${MEDIA_JSON}"
             "${CURL_FORM_ARGS[@]}"
           )
 
           if [ -n "${TG_THREAD_ID:-}" ]; then
-            CURL_ARGS+=(-F "message_thread_id=${TG_THREAD_ID}")
+            CURL_ARGS+=(--form-string "message_thread_id=${TG_THREAD_ID}")
           fi
 
           echo "Uploading ${#APK_FILES[@]} APK(s) to Telegram as a media group..."
@@ -285,5 +285,8 @@ jobs:
             echo "  - $(basename "$apk")"
           done
 
-          curl "${CURL_ARGS[@]}" >/dev/null
+          if ! TG_RESPONSE=$(curl "${CURL_ARGS[@]}"); then
+            echo "::error::Telegram upload failed: ${TG_RESPONSE}"
+            exit 1
+          fi
           echo "Media group uploaded to Telegram successfully."
