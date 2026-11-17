@@ -142,11 +142,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 saveKnownComponents(titles)
             }
 
-            runCatching {
-                items.clear()
-                items.addAll(kept)
-            }
-            param.result = items
+            param.result = kept
         }
     }
 
