@@ -9,7 +9,11 @@ import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
+import io.github.bbzq.feats.hookBeforeAllConstructors
+import io.github.bbzq.feats.MethodHookParam
+import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.lang.reflect.Proxy
 import java.util.concurrent.CopyOnWriteArrayList
 
 class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
@@ -22,6 +26,7 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         installed += installEndPagePureVideoHook()
         installed += installDisableCMTransformerHook()
         installed += installDisableRelatedTransformerHook()
+        installed += installEndPageAdBridgeGuard()
         installed += installHalfScreenWidgetHook()
         installed += installFullScreenWidgetHook()
 
@@ -306,6 +311,80 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 
+    // =========================================================================
+    // 6. 結束頁廣告橋接防崩：CM 組件被攔截後，宿主 theseus2 的 LegacyEndPageAdBridge
+    //    仍會對 null 的 IVDEndPageAdCard 呼叫 getView()，導致影片播完（橫屏/無下一集）
+    //    NPE 閃退，表現為白屏後返回上一級。這裡把 null 的廣告卡替換為空白佔位卡。
+    // =========================================================================
+
+    private fun installEndPageAdBridgeGuard(): Int {
+        val cardClass = classLoader.findClassOrNull(AD_CARD_CLASS) ?: return 0
+        var count = 0
+        val guard: (MethodHookParam) -> Unit = guard@{ param ->
+            val types = (param.executable as? Method)?.parameterTypes
+                ?: (param.executable as? java.lang.reflect.Constructor<*>)?.parameterTypes
+                ?: return@guard
+            for (i in types.indices) {
+                if (i < param.args.size && param.args[i] == null && cardClass.isAssignableFrom(types[i])) {
+                    param.args[i] = createBlankAdCard(cardClass)
+                }
+            }
+        }
+        for (name in AD_BRIDGE_CLASSES) {
+            val bridge = classLoader.findClassOrNull(name) ?: continue
+            count += env.hookBeforeAllConstructors(bridge, guard)
+            bridge.declaredMethods
+                .filter { m -> m.parameterTypes.any { cardClass.isAssignableFrom(it) } }
+                .forEach { m ->
+                    m.isAccessible = true
+                    env.hookBefore(m, guard)
+                    count++
+                }
+        }
+        // create 內部匿名類（LegacyEndPageAdBridge$create$1）才是實際 NPE 現場
+        for (name in AD_BRIDGE_CLASSES) {
+            for (suffix in listOf("\$create\$1", "\$create\$2")) {
+                val inner = classLoader.findClassOrNull(name + suffix) ?: continue
+                count += env.hookBeforeAllConstructors(inner, guard)
+            }
+        }
+        log("VideoEndRecommend: installEndPageAdBridgeGuard hooked $count points")
+        return count
+    }
+
+    private fun createBlankAdCard(cardClass: Class<*>): Any = Proxy.newProxyInstance(
+        cardClass.classLoader, arrayOf(cardClass),
+    ) { proxy, method, args ->
+        when {
+            method.name == "getView" && View::class.java.isAssignableFrom(method.returnType) -> newBlankView()
+            method.declaringClass == Any::class.java -> when (method.name) {
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.firstOrNull()
+                else -> "BlankEndPageAdCard"
+            }
+            else -> when (method.returnType) {
+                java.lang.Boolean.TYPE -> false
+                java.lang.Integer.TYPE -> 0
+                java.lang.Long.TYPE -> 0L
+                java.lang.Float.TYPE -> 0f
+                java.lang.Double.TYPE -> 0.0
+                java.lang.Short.TYPE -> 0.toShort()
+                java.lang.Byte.TYPE -> 0.toByte()
+                java.lang.Character.TYPE -> '\u0000'
+                else -> null
+            }
+        }
+    }
+
+    private fun newBlankView(): View {
+        val app = Class.forName("android.app.ActivityThread")
+            .getMethod("currentApplication").invoke(null) as android.content.Context
+        return View(app).apply {
+            visibility = View.GONE
+            layoutParams = android.view.ViewGroup.LayoutParams(0, 0)
+        }
+    }
+
     private fun java.lang.reflect.Method.isRelateCardMethod(): Boolean =
         parameterTypes.firstOrNull()?.name?.endsWith(".RelateCard") == true
 
@@ -316,6 +395,8 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
 
     private companion object {
+        private const val AD_CARD_CLASS = "com.bilibili.gripper.api.ad.biz.videodetail.endpage.IVDEndPageAdCard"
+        private val AD_BRIDGE_CLASSES = listOf("com.bilibili.ship.theseus2.adaption.endpage.LegacyEndPageAdBridge")
         private val ROOT_VIEW_GETTERS = setOf("onCreateContentView", "createContentView", "getContentView", "getView", "getRoot")
     }
 }
