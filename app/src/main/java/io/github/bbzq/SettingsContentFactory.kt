@@ -1299,12 +1299,6 @@ class SettingsContentFactory(
                 false,
             ),
             createSwitchRow(
-                context.getString(R.string.auto_claim_vip_exp_title),
-                context.getString(R.string.auto_claim_vip_exp_summary),
-                ModuleSettings.KEY_AUTO_CLAIM_VIP_EXP_ENABLED,
-                false,
-            ),
-            createSwitchRow(
                 context.getString(R.string.mine_component_hide_title),
                 context.getString(R.string.mine_component_hide_summary),
                 ModuleSettings.KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED,
@@ -1540,6 +1534,12 @@ class SettingsContentFactory(
                 handleAccessKeyClick()
             }
         }
+        rows += createSwitchRow(
+            context.getString(R.string.auto_claim_vip_exp_title),
+            context.getString(R.string.auto_claim_vip_exp_summary),
+            ModuleSettings.KEY_AUTO_CLAIM_VIP_EXP_ENABLED,
+            false,
+        )
         if (tryFreeQualityVisible) {
             rows += createSwitchRow(
                 context.getString(R.string.unlock_video_features_title),
@@ -1798,6 +1798,9 @@ class SettingsContentFactory(
                 .setTitle(R.string.access_key_error_title)
                 .setMessage(R.string.access_key_error_message)
                 .setPositiveButton(R.string.runtime_environment_ok, null)
+                .setNeutralButton(R.string.access_key_manual_button) { _, _ ->
+                    showManualAccessKeyDialog(null)
+                }
                 .show()
             return
         }
@@ -1821,8 +1824,50 @@ class SettingsContentFactory(
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(context, context.getString(R.string.access_key_copied_toast), Toast.LENGTH_SHORT).show()
             }
+            .setNeutralButton(R.string.access_key_manual_button) { _, _ ->
+                showManualAccessKeyDialog(key)
+            }
             .setNegativeButton(R.string.runtime_environment_ok, null)
             .show()
+    }
+
+    private fun showManualAccessKeyDialog(currentKey: String?) {
+        val input = android.widget.EditText(context).apply {
+            setText(currentKey.orEmpty())
+            hint = context.getString(R.string.access_key_manual_hint)
+            setSingleLine()
+            setTextColor(titleTextColor)
+            setHintTextColor(summaryTextColor)
+        }
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(4))
+            addView(input)
+        }
+
+        val builder = AlertDialog.Builder(context)
+            .setTitle(R.string.access_key_manual_title)
+            .setView(container)
+            .setPositiveButton(R.string.runtime_environment_ok) { _, _ ->
+                val trimmed = input.text.toString().trim()
+                if (trimmed.isEmpty()) {
+                    prefs.edit().remove(ModuleSettings.KEY_LAST_ACCESS_KEY).apply()
+                    Toast.makeText(context, context.getString(R.string.access_key_cleared_toast), Toast.LENGTH_SHORT).show()
+                } else if (AccessKeyRepository.looksLikeAccessKey(trimmed)) {
+                    prefs.edit().putString(ModuleSettings.KEY_LAST_ACCESS_KEY, trimmed).apply()
+                    Toast.makeText(context, context.getString(R.string.access_key_saved_toast), Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, context.getString(R.string.access_key_invalid_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(R.string.skip_video_ad_auto_like_disable_dialog_cancel, null)
+        if (!currentKey.isNullOrBlank()) {
+            builder.setNeutralButton(R.string.access_key_clear_button) { _, _ ->
+                prefs.edit().remove(ModuleSettings.KEY_LAST_ACCESS_KEY).apply()
+                Toast.makeText(context, context.getString(R.string.access_key_cleared_toast), Toast.LENGTH_SHORT).show()
+            }
+        }
+        builder.show()
     }
 
     private fun createSymbolCacheRefreshRow(): View {

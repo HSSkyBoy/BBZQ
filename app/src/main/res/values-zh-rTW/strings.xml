@@ -354,6 +354,13 @@
     <string name="access_key_title">目前 AccessKey</string>
     <string name="access_key_copy_button">複製</string>
     <string name="access_key_copied_toast">已複製到剪貼簿</string>
+    <string name="access_key_manual_button">手動填寫</string>
+    <string name="access_key_manual_title">手動填寫 AccessKey</string>
+    <string name="access_key_manual_hint">請輸入 32 位十六進位 AccessKey</string>
+    <string name="access_key_saved_toast">AccessKey 已儲存</string>
+    <string name="access_key_cleared_toast">已清除手動 AccessKey</string>
+    <string name="access_key_invalid_toast">格式無效：須為 32 位十六進位字元</string>
+    <string name="access_key_clear_button">清除</string>
     <string name="runtime_environment_ok">確定</string>
     <string name="open_url_failed_toast">無法開啟連結</string>
     <string name="skip_mode_dialog_title">%1$s - 跳過</string>

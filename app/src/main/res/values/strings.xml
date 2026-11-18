@@ -388,6 +388,13 @@
     <string name="access_key_title">当前 AccessKey</string>
     <string name="access_key_copy_button">复制</string>
     <string name="access_key_copied_toast">已复制到剪贴板</string>
+    <string name="access_key_manual_button">手动填写</string>
+    <string name="access_key_manual_title">手动填写 AccessKey</string>
+    <string name="access_key_manual_hint">请输入 32 位十六进制 AccessKey</string>
+    <string name="access_key_saved_toast">AccessKey 已保存</string>
+    <string name="access_key_cleared_toast">已清除手动 AccessKey</string>
+    <string name="access_key_invalid_toast">格式无效：需为 32 位十六进制字符</string>
+    <string name="access_key_clear_button">清除</string>
     <string name="runtime_environment_ok">确定</string>
     <string name="open_url_failed_toast">无法打开链接</string>
     <string name="skip_mode_dialog_title">%1$s - 跳过</string>
