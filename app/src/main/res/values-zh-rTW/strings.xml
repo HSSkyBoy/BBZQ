@@ -501,6 +501,8 @@
     <string name="custom_font_scale_summary">調整應用程式內頁面文字縮放比例，適應不同螢幕與閱讀習慣；重新啟動應用程式後生效。</string>
     <string name="custom_font_scale_value_title">字體縮放比例</string>
     <string name="custom_font_scale_value_summary">目前比例：%1$d%%</string>
+    <string name="dialog_blur_background_title">彈窗毛玻璃背景</string>
+    <string name="dialog_blur_background_summary">在支援跨視窗模糊的 Android 12+ 裝置上，為彈窗背景開啟即時高斯模糊。</string>
     <string name="custom_skin_config_imported">自製主題設定已匯入，重啟 B 站後套用。</string>
     <string name="video_detail_relate_custom_filter_title">下方推薦過濾</string>
     <string name="video_detail_relate_custom_filter_summary">依類型和標題關鍵字，屏蔽播放頁下方資訊流中的卡片。</string>

@@ -10,6 +10,7 @@ import io.github.bbzq.RuntimeEnvironmentInfo
 import kotlin.LazyThreadSafetyMode
 import io.github.bbzq.feats.hook.BottomBarHook
 import io.github.bbzq.feats.hook.DaggerCircularDependencyFixHook
+import io.github.bbzq.feats.hook.DialogBlurBackgroundHook
 import io.github.bbzq.feats.hook.AutoClaimVipExpHook
 import io.github.bbzq.feats.hook.AutoLikeHook
 import io.github.bbzq.feats.hook.AiDeclaredVideoHook
@@ -255,6 +256,7 @@ object RoamingRuntime {
                 ::VideoDetailShareRedirectHook,
                 ::PageFontScaleHook,
                 ::AutoClaimVipExpHook,
+                ::DialogBlurBackgroundHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }

@@ -116,6 +116,7 @@ object ModuleSettings {
     const val KEY_CUSTOM_SKIN_JSON = "custom_skin_json"
     const val KEY_CUSTOM_FONT_SCALE_ENABLED = "custom_font_scale_enabled"
     const val KEY_CUSTOM_FONT_SCALE_PERCENT = "custom_font_scale_percent"
+    const val KEY_DIALOG_BLUR_BACKGROUND_ENABLED = "dialog_blur_background_enabled"
     const val DEFAULT_CUSTOM_FONT_SCALE_PERCENT = 100
     const val MIN_CUSTOM_FONT_SCALE_PERCENT = 70
     const val MAX_CUSTOM_FONT_SCALE_PERCENT = 150
@@ -392,6 +393,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_CUSTOM_THEME_MONET, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_THEME_MONET, false) },
         ExportableConfigSpec(KEY_CUSTOM_SKIN_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_SKIN_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_FONT_SCALE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_FONT_SCALE_ENABLED, false) },
+        ExportableConfigSpec(KEY_DIALOG_BLUR_BACKGROUND_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_DIALOG_BLUR_BACKGROUND_ENABLED, true) },
         ExportableConfigSpec(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED, false) },
         ExportableConfigSpec(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_HIDE_HOME_SEARCH_DEFAULT_WORD_ENABLED, false) },
@@ -1060,6 +1062,9 @@ object ModuleSettings {
 
     fun getCustomFontScaleFloat(prefs: SharedPreferences): Float =
         getCustomFontScalePercent(prefs) / 100f
+
+    fun isDialogBlurBackgroundEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_DIALOG_BLUR_BACKGROUND_ENABLED, true)
 
     fun isBlockActivityMetaStickerEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_ACTIVITY_META_STICKER_ENABLED, false)

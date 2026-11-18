@@ -590,6 +590,12 @@ class SettingsContentFactory(
         }
         rows += createCustomFontScaleRow()
         rows += createSwitchRow(
+            context.getString(R.string.dialog_blur_background_title),
+            context.getString(R.string.dialog_blur_background_summary),
+            ModuleSettings.KEY_DIALOG_BLUR_BACKGROUND_ENABLED,
+            true,
+        )
+        rows += createSwitchRow(
             context.getString(R.string.home_top_bar_promotion_title),
             context.getString(R.string.home_top_bar_promotion_summary),
             ModuleSettings.KEY_HIDE_HOME_TOP_BAR_PROMOTION_ENABLED,
