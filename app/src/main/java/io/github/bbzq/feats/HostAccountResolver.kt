@@ -40,11 +40,13 @@ internal object HostAccountResolver {
                 .firstOrNull { it > 0L }
                 ?: (profile?.callMethod("getMid") as? Long)?.takeIf { it > 0L }
             val accessKey = resolveAccessKey(accountClass, account)
+            val level = resolveLevel(profile)
             Snapshot(
                 loggedIn = true,
                 uid = uid?.toString().orEmpty(),
                 userName = profile?.callMethod("getUserName")?.toString().orEmpty(),
                 accessKey = accessKey,
+                level = level,
             )
         }.getOrDefault(Snapshot.LOGGED_OUT)
     }
@@ -76,11 +78,25 @@ internal object HostAccountResolver {
         manager.callMethod("getAccountInfoFromCache")
     }.getOrNull()
 
+    private fun resolveLevel(profile: Any?): Int {
+        if (profile == null) return 0
+        runCatching {
+            val methodLevel = profile.callMethod("getLevel")
+            if (methodLevel is Number) return methodLevel.toInt()
+        }
+        for (fieldName in arrayOf("level", "mLevel")) {
+            val fieldLevel = runCatching { profile.getObjectField(fieldName) }.getOrNull()
+            if (fieldLevel is Number) return fieldLevel.toInt()
+        }
+        return 0
+    }
+
     data class Snapshot(
         val loggedIn: Boolean,
         val uid: String,
         val userName: String,
         val accessKey: String = "",
+        val level: Int = 0,
     ) {
         companion object {
             val LOGGED_OUT = Snapshot(false, "", "", "")

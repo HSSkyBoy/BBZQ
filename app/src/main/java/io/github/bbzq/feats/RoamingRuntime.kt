@@ -109,7 +109,6 @@ object RoamingRuntime {
         if (packageName == WO_MIC_PACKAGE) {
             env.log("BBZQ runtime starting for $packageName (WO Mic mode)")
             ModuleSettingsBridge.attach(env.hostContext, xposed)
-        BbzqLevelGate.init(env.hostContext, classLoader)
             runCatching {
                 RuntimeEnvironmentInfo.recordRuntimeSnapshot(
                     hostContext = env.hostContext,
@@ -128,7 +127,6 @@ object RoamingRuntime {
         if (packageName == READERA_PACKAGE) {
             env.log("BBZQ runtime starting for $packageName (ReadEra mode)")
             ModuleSettingsBridge.attach(env.hostContext, xposed)
-        BbzqLevelGate.init(env.hostContext, classLoader)
             runCatching {
                 RuntimeEnvironmentInfo.recordRuntimeSnapshot(
                     hostContext = env.hostContext,

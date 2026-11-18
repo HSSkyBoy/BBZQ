@@ -2,6 +2,7 @@ package io.github.bbzq
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.bbzq.feats.BbzqLevelGate
 import io.github.libxposed.api.XposedInterface
 import java.lang.ref.WeakReference
 
@@ -41,16 +42,19 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
     }
 
     override fun getAll(): MutableMap<String, *> {
+        if (!BbzqLevelGate.isAllowed()) return mutableMapOf<String, Any>()
         ensureLoaded()
         return synchronized(cacheLock) { localCache.toMutableMap() }
     }
 
     override fun getString(key: String?, defValue: String?): String? {
+        if (!BbzqLevelGate.isAllowed()) return defValue
         ensureLoaded()
         return synchronized(cacheLock) { localCache[key] as? String } ?: defValue
     }
 
     override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
+        if (!BbzqLevelGate.isAllowed()) return defValues
         ensureLoaded()
         val cached = synchronized(cacheLock) { localCache[key] }
         return when (cached) {
@@ -61,11 +65,13 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
     }
 
     override fun getInt(key: String?, defValue: Int): Int {
+        if (!BbzqLevelGate.isAllowed()) return defValue
         ensureLoaded()
         return (synchronized(cacheLock) { localCache[key] } as? Number)?.toInt() ?: defValue
     }
 
     override fun getLong(key: String?, defValue: Long): Long {
+        if (!BbzqLevelGate.isAllowed()) return defValue
         ensureLoaded()
         return when (val value = synchronized(cacheLock) { localCache[key] }) {
             is Number -> value.toLong()
@@ -75,6 +81,7 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
     }
 
     override fun getFloat(key: String?, defValue: Float): Float {
+        if (!BbzqLevelGate.isAllowed()) return defValue
         ensureLoaded()
         return when (val value = synchronized(cacheLock) { localCache[key] }) {
             is Number -> value.toFloat()
@@ -84,11 +91,13 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
     }
 
     override fun getBoolean(key: String?, defValue: Boolean): Boolean {
+        if (!BbzqLevelGate.isAllowed()) return defValue
         ensureLoaded()
         return (synchronized(cacheLock) { localCache[key] } as? Boolean) ?: defValue
     }
 
     override fun contains(key: String?): Boolean {
+        if (!BbzqLevelGate.isAllowed()) return false
         ensureLoaded()
         return synchronized(cacheLock) { localCache.containsKey(key) }
     }
