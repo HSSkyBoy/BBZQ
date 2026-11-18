@@ -287,6 +287,8 @@
     <string name="disable_background_play_summary">無論雲端同步或其他入口如何設定，鎖定螢幕或切到背景後都不再繼續播放聲音。</string>
     <string name="allow_mini_play_title">強制解鎖小窗播放</string>
     <string name="allow_mini_play_summary">忽略部分影片或版權方對小窗（PiP）播放的限制，強制允許開啟小窗。</string>
+    <string name="play_arc_conf_title">解鎖播放器功能權限</string>
+    <string name="play_arc_conf_summary">覆寫播放器下發的 PlayArcConf 限制，強制解鎖投屏、背景播放、小窗與聽影片按鈕權限。</string>
     <string name="playback_fix_media_session_card_summary">修復背景聽影片時封面變成模糊純色、媒體卡片從系統媒體中心消失的問題。</string>
     <string name="about_version_title">版本</string>
     <string name="about_update_title">更新</string>

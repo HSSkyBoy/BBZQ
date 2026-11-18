@@ -16,6 +16,7 @@ import io.github.bbzq.feats.hook.AutoLikeHook
 import io.github.bbzq.feats.hook.AiDeclaredVideoHook
 import io.github.bbzq.feats.hook.AllowMiniPlayHook
 import io.github.bbzq.feats.hook.PgcActivityPopupHook
+import io.github.bbzq.feats.hook.PlayArcConfHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
 import io.github.bbzq.feats.hook.CourseIntroCrashGuardHook
@@ -108,6 +109,7 @@ object RoamingRuntime {
         if (packageName == WO_MIC_PACKAGE) {
             env.log("BBZQ runtime starting for $packageName (WO Mic mode)")
             ModuleSettingsBridge.attach(env.hostContext, xposed)
+        BbzqLevelGate.init(env.hostContext, classLoader)
             runCatching {
                 RuntimeEnvironmentInfo.recordRuntimeSnapshot(
                     hostContext = env.hostContext,
@@ -126,6 +128,7 @@ object RoamingRuntime {
         if (packageName == READERA_PACKAGE) {
             env.log("BBZQ runtime starting for $packageName (ReadEra mode)")
             ModuleSettingsBridge.attach(env.hostContext, xposed)
+        BbzqLevelGate.init(env.hostContext, classLoader)
             runCatching {
                 RuntimeEnvironmentInfo.recordRuntimeSnapshot(
                     hostContext = env.hostContext,
@@ -150,6 +153,7 @@ object RoamingRuntime {
         }
 
         ModuleSettingsBridge.attach(env.hostContext, xposed)
+        BbzqLevelGate.init(env.hostContext, classLoader)
         if (processScope == ProcessScope.MAIN) {
             runCatching {
                 RuntimeEnvironmentInfo.recordRuntimeSnapshot(
@@ -259,6 +263,7 @@ object RoamingRuntime {
                 ::AutoClaimVipExpHook,
                 ::DialogBlurBackgroundHook,
                 ::AllowMiniPlayHook,
+                ::PlayArcConfHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }

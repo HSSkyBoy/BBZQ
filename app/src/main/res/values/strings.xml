@@ -317,6 +317,8 @@
     <string name="disable_background_play_summary">无论云端同步或其他入口如何设置，锁屏或切到后台后都不再继续播放声音。</string>
     <string name="allow_mini_play_title">强制解锁小窗播放</string>
     <string name="allow_mini_play_summary">忽略部分视频或版权方对小窗（PiP）播放的限制，强制允许开启小窗。</string>
+    <string name="play_arc_conf_title">解锁播放器功能权限</string>
+    <string name="play_arc_conf_summary">覆盖播放器下发的 PlayArcConf 限制，强制解锁投屏、后台播放、小窗与听视频按钮权限。</string>
     <string name="playback_fix_media_session_card_summary">修复后台听视频时封面变成模糊纯色、媒体卡片从系统媒体中心消失的问题。</string>
 
     <!-- 關於頁 -->

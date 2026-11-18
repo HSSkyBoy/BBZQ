@@ -1074,6 +1074,12 @@ class SettingsContentFactory(
             false,
         ),
         createSwitchRow(
+            context.getString(R.string.play_arc_conf_title),
+            context.getString(R.string.play_arc_conf_summary),
+            ModuleSettings.KEY_PLAY_ARC_CONF_ENABLED,
+            false,
+        ),
+        createSwitchRow(
             context.getString(R.string.playback_fix_media_session_card_title),
             context.getString(R.string.playback_fix_media_session_card_summary),
             ModuleSettings.KEY_FIX_MEDIA_SESSION_CARD,

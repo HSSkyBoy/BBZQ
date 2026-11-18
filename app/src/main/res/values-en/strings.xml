@@ -287,6 +287,8 @@
     <string name="disable_background_play_summary">No matter what cloud sync or other entries say, audio no longer keeps playing after the screen locks or the app goes to the background.</string>
     <string name="allow_mini_play_title">Force-allow mini player</string>
     <string name="allow_mini_play_summary">Bypasses per-video or copyright restrictions on mini-window (PiP) playback.</string>
+    <string name="play_arc_conf_title">Unlock player feature permissions</string>
+    <string name="play_arc_conf_summary">Overrides PlayArcConf restrictions to unlock casting, background playback, mini-window, and audio-only mode.</string>
     <string name="playback_fix_media_session_card_summary">Fixes the cover turning into a blurred solid colour and the media card disappearing from the system media controls during background playback.</string>
     <string name="about_version_title">Version</string>
     <string name="about_update_title">Updates</string>
