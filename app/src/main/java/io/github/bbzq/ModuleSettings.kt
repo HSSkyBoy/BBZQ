@@ -170,6 +170,7 @@ object ModuleSettings {
     const val DEFAULT_COMMENT_MIN_LEVEL = 3
     const val KEY_MINE_REMOVE_VIP = "mine_remove_vip"
     const val KEY_MINE_KEEP_VIP_SPACE = "mine_keep_vip_space"
+    const val KEY_AUTO_CLAIM_VIP_EXP_ENABLED = "auto_claim_vip_exp_enabled"
     const val KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED = "custom_mine_component_hide_enabled"
     const val KEY_HIDDEN_MINE_COMPONENTS = "hidden_mine_components"
     const val KEY_KNOWN_MINE_COMPONENTS = "known_mine_components"
@@ -422,6 +423,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_COMMENT_MIN_LEVEL_ENABLED, false) },
         ExportableConfigSpec(KEY_MINE_REMOVE_VIP, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_REMOVE_VIP, false) },
         ExportableConfigSpec(KEY_MINE_KEEP_VIP_SPACE, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_MINE_KEEP_VIP_SPACE, false) },
+        ExportableConfigSpec(KEY_AUTO_CLAIM_VIP_EXP_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_AUTO_CLAIM_VIP_EXP_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED, false)
         },
@@ -1258,6 +1260,9 @@ object ModuleSettings {
 
     fun isMineKeepVipSpaceEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_MINE_KEEP_VIP_SPACE, false)
+
+    fun isAutoClaimVipExpEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_AUTO_CLAIM_VIP_EXP_ENABLED, false)
 
     private fun resolveSkipVideoAdMode(
         prefs: SharedPreferences,

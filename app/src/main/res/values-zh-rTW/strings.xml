@@ -396,6 +396,9 @@
     <string name="mine_remove_vip_summary">移除「我的」頁面中的大會員卡片展示。</string>
     <string name="mine_keep_vip_space_title">保留大會員佔位空間</string>
     <string name="mine_keep_vip_space_summary">隱藏大會員入口時保留其佔位空間，避免頁面跳動。</string>
+    <string name="auto_claim_vip_exp_title">自動領取大會員經驗</string>
+    <string name="auto_claim_vip_exp_summary">啟動嗶哩嗶哩時每天自動請求領取一次大會員每日成長經驗。</string>
+    <string name="auto_claim_vip_exp_toast">已自動領取今日大會員經驗</string>
     <string name="mine_component_hide_title">自訂隱藏我的頁元件</string>
     <string name="mine_component_hide_summary">開啟「我的」頁後，可依項目選擇要隱藏的服務入口。</string>
     <string name="mine_component_title">我的頁元件</string>

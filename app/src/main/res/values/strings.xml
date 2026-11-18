@@ -434,6 +434,9 @@
     <string name="mine_remove_vip_summary">移除“我的”页面中的大会员卡片展示。</string>
     <string name="mine_keep_vip_space_title">保留大会员占位空间</string>
     <string name="mine_keep_vip_space_summary">隐藏大会员入口时保留其占位空间，避免页面跳动。</string>
+    <string name="auto_claim_vip_exp_title">自动领取大会员经验</string>
+    <string name="auto_claim_vip_exp_summary">启动哔哩哔哩时每天自动请求领取一次大会员每日成长经验。</string>
+    <string name="auto_claim_vip_exp_toast">已自动领取今日大会员经验</string>
     <string name="mine_component_hide_title">自定义隐藏我的页组件</string>
     <string name="mine_component_hide_summary">打开“我的”页后，可按项目选择需要隐藏的服务入口。</string>
     <string name="mine_component_title">我的页组件</string>

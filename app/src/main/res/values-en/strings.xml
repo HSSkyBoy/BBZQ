@@ -396,6 +396,9 @@
     <string name="mine_remove_vip_summary">Removes the member card from the Me page.</string>
     <string name="mine_keep_vip_space_title">Keep the member card\'s space</string>
     <string name="mine_keep_vip_space_summary">Keeps its space when the member entry is hidden so the page does not jump.</string>
+    <string name="auto_claim_vip_exp_title">Auto-claim VIP daily exp</string>
+    <string name="auto_claim_vip_exp_summary">Automatically claims daily Big Member experience once per day when Bilibili starts.</string>
+    <string name="auto_claim_vip_exp_toast">Claimed today\'s VIP experience</string>
     <string name="mine_component_hide_title">Hide Me page components</string>
     <string name="mine_component_hide_summary">After opening the Me page once, choose which service entries to hide.</string>
     <string name="mine_component_title">Me page components</string>

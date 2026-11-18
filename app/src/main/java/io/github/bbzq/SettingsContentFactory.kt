@@ -1287,6 +1287,12 @@ class SettingsContentFactory(
                 false,
             ),
             createSwitchRow(
+                context.getString(R.string.auto_claim_vip_exp_title),
+                context.getString(R.string.auto_claim_vip_exp_summary),
+                ModuleSettings.KEY_AUTO_CLAIM_VIP_EXP_ENABLED,
+                false,
+            ),
+            createSwitchRow(
                 context.getString(R.string.mine_component_hide_title),
                 context.getString(R.string.mine_component_hide_summary),
                 ModuleSettings.KEY_CUSTOM_MINE_COMPONENT_HIDE_ENABLED,
