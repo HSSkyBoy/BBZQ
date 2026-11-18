@@ -7,8 +7,8 @@
     <string name="intro_module_body">目前版本：BBZQ %1$s</string>
     <string name="intro_desc_title">模組介紹</string>
     <string name="intro_desc_body">面向嗶哩嗶哩用戶端的輕量級 Xposed 模組，提供空降助手、功能增強及元件淨化等常用功能。</string>
-    <string name="intro_launcher_title">桌面入口說明</string>
-    <string name="intro_launcher_body">桌面圖示僅用於展示模組介紹，實際功能開關仍在應用程式內的設定頁調整。</string>
+    <string name="intro_launcher_title">使用說明</string>
+    <string name="intro_launcher_body">所有功能預設皆未開啟，請前往嗶哩嗶哩「我的 → 設定 → 進階設定」打開 BBZQ 設定並依需求啟用。</string>
     <string name="section_about">關於</string>
     <string name="section_video_cdn">影片 CDN</string>
     <string name="entry_title">進階設定</string>

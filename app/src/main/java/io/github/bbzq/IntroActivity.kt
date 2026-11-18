@@ -34,20 +34,6 @@ class IntroActivity : Activity() {
 
             addView(
                 createCard(
-                    "功能开关",
-                    "跳过视频广告位于 BBZQ 设置页的“播放净化”分组；开启后进入视频会提示广告片段加载结果。",
-                ),
-            )
-            addView(
-                createCard(
-                    "打开 BBZQ 设置",
-                    "也可以直接从这里进入设置页调整所有功能开关。",
-                ) {
-                    startActivity(Intent(this@IntroActivity, SettingsActivity::class.java))
-                },
-            )
-            addView(
-                createCard(
                     getString(R.string.intro_launcher_title),
                     getString(R.string.intro_launcher_body),
                 ),

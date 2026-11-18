@@ -7,8 +7,8 @@
     <string name="intro_module_body">Current version: BBZQ %1$s</string>
     <string name="intro_desc_title">About the module</string>
     <string name="intro_desc_body">A lightweight Xposed module for the Bilibili client that provides segment skipping, feature enhancements and component cleanup.</string>
-    <string name="intro_launcher_title">About the launcher icon</string>
-    <string name="intro_launcher_body">The launcher icon only shows this introduction. Feature switches are in the in-app settings page.</string>
+    <string name="intro_launcher_title">Usage notes</string>
+    <string name="intro_launcher_body">All features are disabled by default. Please open Bilibili "Me → Settings → Advanced Settings" to configure BBZQ.</string>
     <string name="section_about">About</string>
     <string name="section_video_cdn">Video CDN</string>
     <string name="entry_title">Advanced settings</string>

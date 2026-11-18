@@ -9,8 +9,8 @@
     <string name="intro_module_body">当前版本：BBZQ %1$s</string>
     <string name="intro_desc_title">模块介绍</string>
     <string name="intro_desc_body">面向哔哩哔哩客户端的轻量级 Xposed 模块，提供空降助手、功能增强及组件净化等常用功能。</string>
-    <string name="intro_launcher_title">桌面入口说明</string>
-    <string name="intro_launcher_body">桌面图标仅用于展示模块介绍，实际功能开关仍在应用内设置页中调整。</string>
+    <string name="intro_launcher_title">使用说明</string>
+    <string name="intro_launcher_body">所有功能默认均未开启，请前往哔哩哔哩「我的 → 设置 → 高级设置」打开 BBZQ 设置并按需启用。</string>
     <string name="section_about">关于</string>
     <string name="section_video_cdn">视频 CDN</string>
 
