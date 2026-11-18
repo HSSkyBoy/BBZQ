@@ -1068,6 +1068,12 @@ class SettingsContentFactory(
             false,
         ),
         createSwitchRow(
+            context.getString(R.string.allow_mini_play_title),
+            context.getString(R.string.allow_mini_play_summary),
+            ModuleSettings.KEY_ALLOW_MINI_PLAY_ENABLED,
+            false,
+        ),
+        createSwitchRow(
             context.getString(R.string.playback_fix_media_session_card_title),
             context.getString(R.string.playback_fix_media_session_card_summary),
             ModuleSettings.KEY_FIX_MEDIA_SESSION_CARD,

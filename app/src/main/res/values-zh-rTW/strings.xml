@@ -285,6 +285,8 @@
     <string name="split_screen_fullscreen_summary">解除分割畫面模式下，點擊全螢幕按鈕提示「暫不支援全螢幕播放」的限制。</string>
     <string name="disable_background_play_title">強制關閉背景聽影片</string>
     <string name="disable_background_play_summary">無論雲端同步或其他入口如何設定，鎖定螢幕或切到背景後都不再繼續播放聲音。</string>
+    <string name="allow_mini_play_title">強制解鎖小窗播放</string>
+    <string name="allow_mini_play_summary">忽略部分影片或版權方對小窗（PiP）播放的限制，強制允許開啟小窗。</string>
     <string name="playback_fix_media_session_card_summary">修復背景聽影片時封面變成模糊純色、媒體卡片從系統媒體中心消失的問題。</string>
     <string name="about_version_title">版本</string>
     <string name="about_update_title">更新</string>

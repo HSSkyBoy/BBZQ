@@ -14,6 +14,7 @@ import io.github.bbzq.feats.hook.DialogBlurBackgroundHook
 import io.github.bbzq.feats.hook.AutoClaimVipExpHook
 import io.github.bbzq.feats.hook.AutoLikeHook
 import io.github.bbzq.feats.hook.AiDeclaredVideoHook
+import io.github.bbzq.feats.hook.AllowMiniPlayHook
 import io.github.bbzq.feats.hook.PgcActivityPopupHook
 import io.github.bbzq.feats.hook.AccessKeyHook
 import io.github.bbzq.feats.hook.ChronosPromotionHook
@@ -257,6 +258,7 @@ object RoamingRuntime {
                 ::PageFontScaleHook,
                 ::AutoClaimVipExpHook,
                 ::DialogBlurBackgroundHook,
+                ::AllowMiniPlayHook,
             )
             ProcessScope.UNSUPPORTED -> emptyList()
         }
