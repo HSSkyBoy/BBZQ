@@ -15,6 +15,7 @@ import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.intercept
 import okhttp3.Headers
+import org.json.JSONObject
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
@@ -43,6 +44,12 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     /** Region that last served an episode, asked first next time. */
     private val servedBy = ConcurrentHashMap<Long, ResolverRegion>()
+
+    /** Region that last served any episode of a season. */
+    private val servedBySeason = ConcurrentHashMap<Long, ResolverRegion>()
+
+    /** Resolver base URL -> when it last failed to answer at all. */
+    private val failedAt = ConcurrentHashMap<String, Long>()
 
     override fun startHook() {
         if (!ModuleSettings.isSeaBangumiPlayEnabled(prefs)) return
@@ -378,90 +385,17 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         fnver: Long,
         fourk: Boolean,
         originalBytes: ByteArray,
-    ): ByteArray? {
-        val preferred = servedBy[epId] ?: ModuleSettings.getResolverDefaultRegion(prefs)
-        val servers = ResolverServers.preferring(ResolverServers.configured(prefs), preferred)
-        if (servers.isEmpty()) return null
-
-        val baseParams = mutableListOf(
-            "ep_id" to epId.toString(),
-            "qn" to (qn.takeIf { it > 0 } ?: DEFAULT_QN).toString(),
-            "fnval" to (fnval.takeIf { it > 0 } ?: DEFAULT_FNVAL).toString(),
-            "fnver" to fnver.toString(),
-            "fourk" to (if (fourk) "1" else "0"),
-            "platform" to "android",
-            "mobi_app" to "android",
+    ): ByteArray? = raceServers(epId, seasonId, aid, cid, qn, fnval, fnver, fourk, label = "unite") { region, result ->
+        SeaBangumiPlayCodec.buildUniteReply(
+            original = originalBytes,
+            result = result,
+            relaxPlayLimits = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs),
+            cdnHost = ModuleSettings.getResolverCdnHost(prefs, region),
+            aid = aid,
+            cid = cid,
+            epId = epId,
+            seasonId = seasonId,
         )
-        if (cid > 0) baseParams += "cid" to cid.toString()
-        if (seasonId > 0) baseParams += "season_id" to seasonId.toString()
-        if (ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)) {
-            prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)?.takeIf { it.isNotBlank() }
-                ?.let { baseParams += "access_key" to it }
-        }
-        val relax = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs)
-        val headers = HostAccountCookies.headers(env.hostContext, ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs))
-        val completion = ExecutorCompletionService<Pair<ResolverServer, ByteArray?>>(executor)
-
-        val tasks = servers.mapIndexed { index, server ->
-            val delay = if (preferred != null && index > 0) STAGGER_MILLIS else 0L
-            completion.submit {
-                if (delay > 0) Thread.sleep(delay)
-                val serverParams = baseParams.toMutableList()
-                if (!serverParams.any { it.first == "area" }) {
-                    serverParams += "area" to server.region.areaCode
-                }
-                val client = SeaResolverClient(server.baseUrl, ::log)
-
-                // Try play paths: App playurl -> Web playurl -> SEA international playurl
-                val candidatePaths = when (server.region) {
-                    ResolverRegion.SEA -> listOf(PLAYURL_PATH, PLAYURL_INTL_PATH, PLAYURL_APP_PATH)
-                    else -> listOf(PLAYURL_APP_PATH, PLAYURL_PATH)
-                }
-
-                var result: org.json.JSONObject? = null
-                for (path in candidatePaths) {
-                    val body = client.get(path, serverParams, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS)
-                    if (body != null) {
-                        result = SeaBangumiPlayCodec.playableResult(body)
-                        if (result != null) break
-                    }
-                }
-
-                if (result == null) {
-                    server to null
-                } else {
-                    val cdnHost = ModuleSettings.getResolverCdnHost(prefs, server.region)
-                    val bytes = SeaBangumiPlayCodec.buildUniteReply(
-                        original = originalBytes,
-                        result = result,
-                        relaxPlayLimits = relax,
-                        cdnHost = cdnHost,
-                        aid = aid,
-                        cid = cid,
-                        epId = epId,
-                        seasonId = seasonId,
-                    )
-                    server to bytes
-                }
-            }
-        }
-        val deadline = System.currentTimeMillis() + TOTAL_BUDGET_MILLIS
-        try {
-            repeat(servers.size) {
-                val left = (deadline - System.currentTimeMillis()).coerceAtLeast(0)
-                val finished = completion.poll(left, TimeUnit.MILLISECONDS) ?: return null
-                val (server, bytes) = runCatching { finished.get() }.getOrNull() ?: return@repeat
-                if (bytes != null) {
-                    servedBy[epId] = server.region
-                    SeaBangumiSession.record(epId, cid, server.region, seasonId, aid)
-                    log("SeaBangumiPlay: ${server.region} served unite ep $epId season $seasonId")
-                    return bytes
-                }
-            }
-            return null
-        } finally {
-            tasks.forEach { it.cancel(true) }
-        }
     }
 
     private fun resolveLegacyPlayBytes(
@@ -473,66 +407,83 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         fnver: Long,
         fourk: Boolean,
         originalBytes: ByteArray,
+    ): ByteArray? = raceServers(epId, seasonId, 0L, cid, qn, fnval, fnver, fourk, label = "legacy") { region, result ->
+        SeaBangumiPlayCodec.buildReply(
+            original = originalBytes,
+            result = result,
+            relaxPlayLimits = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs),
+            cdnHost = ModuleSettings.getResolverCdnHost(prefs, region),
+        )
+    }
+
+    /** 依序（錯開）向各解析伺服器取流，第一個能組出回覆的勝出。 */
+    private fun raceServers(
+        epId: Long,
+        seasonId: Long,
+        aid: Long,
+        cid: Long,
+        qn: Long,
+        fnval: Long,
+        fnver: Long,
+        fourk: Boolean,
+        label: String,
+        build: (ResolverRegion, JSONObject) -> ByteArray?,
     ): ByteArray? {
-        val preferred = servedBy[epId] ?: ModuleSettings.getResolverDefaultRegion(prefs)
-        val servers = ResolverServers.preferring(ResolverServers.configured(prefs), preferred)
+        // 同一季多半由同一地區解鎖，換集時沿用，省掉重新試探與錯開延遲
+        val preferred = servedBy[epId]
+            ?: seasonId.takeIf { it > 0L }?.let { servedBySeason[it] }
+            ?: ModuleSettings.getResolverDefaultRegion(prefs)
+        val servers = demoteRecentlyFailed(ResolverServers.preferring(ResolverServers.configured(prefs), preferred))
         if (servers.isEmpty()) return null
 
+        val sendAccessKey = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
         val baseParams = mutableListOf(
             "ep_id" to epId.toString(),
             "qn" to (qn.takeIf { it > 0 } ?: DEFAULT_QN).toString(),
             "fnval" to (fnval.takeIf { it > 0 } ?: DEFAULT_FNVAL).toString(),
             "fnver" to fnver.toString(),
             "fourk" to (if (fourk) "1" else "0"),
+            // 強制回傳 https 串流位址，部分伺服器預設給 http
+            "force_host" to "2",
+            "module" to "bangumi",
             "platform" to "android",
             "mobi_app" to "android",
+            "device" to "android",
         )
         if (cid > 0) baseParams += "cid" to cid.toString()
         if (seasonId > 0) baseParams += "season_id" to seasonId.toString()
-        if (ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)) {
+        if (sendAccessKey) {
             prefs.getString(ModuleSettings.KEY_LAST_ACCESS_KEY, null)?.takeIf { it.isNotBlank() }
                 ?.let { baseParams += "access_key" to it }
         }
-        val relax = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs)
-        val headers = HostAccountCookies.headers(env.hostContext, ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs))
+        val headers = HostAccountCookies.headers(env.hostContext, sendAccessKey)
         val completion = ExecutorCompletionService<Pair<ResolverServer, ByteArray?>>(executor)
 
         val tasks = servers.mapIndexed { index, server ->
             val delay = if (preferred != null && index > 0) STAGGER_MILLIS else 0L
             completion.submit {
                 if (delay > 0) Thread.sleep(delay)
-                val serverParams = baseParams.toMutableList()
-                if (!serverParams.any { it.first == "area" }) {
-                    serverParams += "area" to server.region.areaCode
-                }
+                val serverParams = baseParams + ("area" to server.region.areaCode)
                 val client = SeaResolverClient(server.baseUrl, ::log)
 
+                // Try play paths: App playurl -> Web playurl -> SEA international playurl
                 val candidatePaths = when (server.region) {
                     ResolverRegion.SEA -> listOf(PLAYURL_PATH, PLAYURL_INTL_PATH, PLAYURL_APP_PATH)
                     else -> listOf(PLAYURL_APP_PATH, PLAYURL_PATH)
                 }
 
-                var result: org.json.JSONObject? = null
+                var answered = false
+                var result: JSONObject? = null
                 for (path in candidatePaths) {
-                    val body = client.get(path, serverParams, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS)
-                    if (body != null) {
-                        result = SeaBangumiPlayCodec.playableResult(body)
-                        if (result != null) break
-                    }
+                    val body = client.get(path, serverParams, headers, timeoutMillis = PLAY_TIMEOUT_MILLIS) ?: continue
+                    answered = true
+                    result = runCatching { SeaBangumiPlayCodec.playableResult(body) }.getOrNull()
+                    if (result != null) break
                 }
+                // 只有完全連不上才記為失敗；有回應但該集無權限不算伺服器故障
+                if (answered) failedAt.remove(server.baseUrl) else failedAt[server.baseUrl] = System.currentTimeMillis()
 
-                if (result == null) {
-                    server to null
-                } else {
-                    val cdnHost = ModuleSettings.getResolverCdnHost(prefs, server.region)
-                    val bytes = SeaBangumiPlayCodec.buildReply(
-                        original = originalBytes,
-                        result = result,
-                        relaxPlayLimits = relax,
-                        cdnHost = cdnHost,
-                    )
-                    server to bytes
-                }
+                server to result?.let { build(server.region, it) }
             }
         }
         val deadline = System.currentTimeMillis() + TOTAL_BUDGET_MILLIS
@@ -543,8 +494,9 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 val (server, bytes) = runCatching { finished.get() }.getOrNull() ?: return@repeat
                 if (bytes != null) {
                     servedBy[epId] = server.region
-                    SeaBangumiSession.record(epId, cid, server.region, seasonId)
-                    log("SeaBangumiPlay: ${server.region} served legacy ep $epId season $seasonId")
+                    if (seasonId > 0L) servedBySeason[seasonId] = server.region
+                    SeaBangumiSession.record(epId, cid, server.region, seasonId, aid)
+                    log("SeaBangumiPlay: ${server.region} served $label ep $epId season $seasonId")
                     return bytes
                 }
             }
@@ -552,6 +504,15 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         } finally {
             tasks.forEach { it.cancel(true) }
         }
+    }
+
+    /** 最近連不上的伺服器排到最後，避免每次起播都先撞逾時。 */
+    private fun demoteRecentlyFailed(servers: List<ResolverServer>): List<ResolverServer> {
+        val now = System.currentTimeMillis()
+        val (down, up) = servers.partition { server ->
+            failedAt[server.baseUrl]?.let { now - it < FAILURE_COOLDOWN_MILLIS } == true
+        }
+        return up + down
     }
 
     private fun resolveTarget(request: Any, isUnite: Boolean): Pair<Long, Long>? {
@@ -720,5 +681,6 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         const val PLAY_TIMEOUT_MILLIS = 6_000L
         const val TOTAL_BUDGET_MILLIS = 10_000L
         const val STAGGER_MILLIS = 700L
+        const val FAILURE_COOLDOWN_MILLIS = 5 * 60_000L
     }
 }
