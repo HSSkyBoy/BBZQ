@@ -5,6 +5,7 @@ import android.os.Looper
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.HostAccountCookies
+import io.github.bbzq.feats.ResolverCdnSelector
 import io.github.bbzq.feats.ResolverRegion
 import io.github.bbzq.feats.ResolverServer
 import io.github.bbzq.feats.ResolverServers
@@ -386,11 +387,13 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         fourk: Boolean,
         originalBytes: ByteArray,
     ): ByteArray? = raceServers(epId, seasonId, aid, cid, qn, fnval, fnver, fourk, label = "unite") { region, result ->
+        val cdnHost = ModuleSettings.getResolverCdnHost(prefs, region)
         SeaBangumiPlayCodec.buildUniteReply(
             original = originalBytes,
             result = result,
             relaxPlayLimits = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs),
-            cdnHost = ModuleSettings.getResolverCdnHost(prefs, region),
+            cdnHost = cdnHost,
+            autoCdnHost = autoCdnHost(cdnHost, result),
             aid = aid,
             cid = cid,
             epId = epId,
@@ -408,12 +411,22 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         fourk: Boolean,
         originalBytes: ByteArray,
     ): ByteArray? = raceServers(epId, seasonId, 0L, cid, qn, fnval, fnver, fourk, label = "legacy") { region, result ->
+        val cdnHost = ModuleSettings.getResolverCdnHost(prefs, region)
         SeaBangumiPlayCodec.buildReply(
             original = originalBytes,
             result = result,
             relaxPlayLimits = ModuleSettings.isSeaRelaxPlayLimitsEnabled(prefs),
-            cdnHost = ModuleSettings.getResolverCdnHost(prefs, region),
+            cdnHost = cdnHost,
+            autoCdnHost = autoCdnHost(cdnHost, result),
         )
+    }
+
+    /** 手動指定的地區 CDN 優先；沒指定且開了自動測速才選線。 */
+    private fun autoCdnHost(manualHost: String?, result: JSONObject): String? {
+        if (manualHost != null || !ModuleSettings.isResolverCdnAutoEnabled(prefs)) return null
+        return runCatching { ResolverCdnSelector.choose(env.hostContext, result, ::log) }
+            .onFailure { log("SeaBangumiPlay: CDN auto select failed", it) }
+            .getOrNull()
     }
 
     /** 依序（錯開）向各解析伺服器取流，第一個能組出回覆的勝出。 */

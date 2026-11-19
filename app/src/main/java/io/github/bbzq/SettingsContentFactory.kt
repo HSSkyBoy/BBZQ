@@ -101,6 +101,7 @@ class SettingsContentFactory(
     private val seaServerRows = mutableMapOf<ResolverRegion, View>()
     private val seaServerSummaries = mutableMapOf<ResolverRegion, TextView>()
     private lateinit var seaRelaxSwitch: Switch
+    private lateinit var seaCdnAutoSwitch: Switch
     private val seaCdnSummaries = mutableMapOf<ResolverRegion, TextView>()
     private val seaCdnRows = mutableMapOf<ResolverRegion, View>()
     private lateinit var seaDefaultRegionRow: View
@@ -772,7 +773,12 @@ class SettingsContentFactory(
         listOf(createInfoRow(
             context.getString(R.string.sea_cdn_info_title),
             context.getString(R.string.sea_cdn_info_summary),
-        )) + ResolverRegion.values().map { createSeaCdnRow(it) }
+        ), createSwitchRow(
+            context.getString(R.string.sea_cdn_auto_title),
+            context.getString(R.string.sea_cdn_auto_summary),
+            ModuleSettings.KEY_RESOLVER_CDN_AUTO,
+            false,
+        ) { seaCdnAutoSwitch = it }) + ResolverRegion.values().map { createSeaCdnRow(it) }
 
     private fun createSeaDefaultRegionRow(): View {
         val title = context.getString(R.string.sea_default_region_title)
@@ -3826,6 +3832,7 @@ class SettingsContentFactory(
         if (::seaSearchSwitch.isInitialized) gate(seaSearchSwitch, seaUnlockOn)
         if (::seaPlaySwitch.isInitialized) gate(seaPlaySwitch, seaUnlockOn)
         if (::seaRelaxSwitch.isInitialized) gate(seaRelaxSwitch, seaUnlockOn)
+        if (::seaCdnAutoSwitch.isInitialized) gate(seaCdnAutoSwitch, seaUnlockOn)
         if (::seaSubtitleSwitch.isInitialized) gate(seaSubtitleSwitch, seaUnlockOn)
         if (::seaDetailSwitch.isInitialized) gate(seaDetailSwitch, seaUnlockOn)
         if (::seaAccessKeySwitch.isInitialized) gate(seaAccessKeySwitch, seaUnlockOn)

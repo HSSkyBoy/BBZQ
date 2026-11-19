@@ -217,6 +217,8 @@
     <string name="sea_unlock_section_cdn">Anime CDN</string>
     <string name="sea_cdn_info_title">CDN by region</string>
     <string name="sea_cdn_info_summary">Streams of unlocked anime can be slow on your network. Setting a CDN domain for a region replaces the domain of that region\'s main stream address. Leave empty to follow the regular video CDN settings.</string>
+    <string name="sea_cdn_auto_title">Auto-pick the fastest CDN line</string>
+    <string name="sea_cdn_auto_summary">When playing unlocked bangumi, measure the download speed of each CDN line (addresses issued by the server and interchangeable UPOS mirrors) and use the fastest. The first time probes before playback and may add about 2 seconds; afterwards picks from past results and re-probes in the background. Uses a little extra data. A manually set regional CDN takes precedence.</string>
     <string name="sea_cdn_title_format">%1$s anime CDN</string>
     <string name="sea_cdn_follow_summary">Follows the regular video CDN settings</string>
     <string name="sea_cdn_hint">e.g. cdn.example.com</string>

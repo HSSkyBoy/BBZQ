@@ -150,6 +150,26 @@ class SeaBangumiPlayCodecTest {
     }
 
     @Test
+    fun autoCdnHostMovesOnlyWhereTheSignatureStaysValid() {
+        val upos = "https://upos-sz-mirrorcos.bilivideo.com/x/32.m4s?sig=1"
+        val akam = "https://upos-hz-mirrorakam.akamaized.net/x/32.m4s?sig=2"
+        val result = JSONObject(
+            """{"dash":{"video":[{"id":32,"base_url":"$upos","backup_url":["$akam"]}],
+               "audio":[{"id":30280,"base_url":"https://a/80.m4s"}]}}""",
+        )
+
+        val mirrored = fields(SeaBangumiPlayCodec.encodeVideoInfo(result, autoCdnHost = "upos-sz-mirrorhwov.bilivideo.com")!!)
+        val video = fields(fields(mirrored.bytes(5)).bytes(2))
+        assertEquals("https://upos-sz-mirrorhwov.bilivideo.com/x/32.m4s?sig=1", video.string(1))
+        assertEquals(upos, video.string(2))
+        // 非 UPOS 的音訊位址換 host 會簽名失效，維持原樣
+        assertEquals("https://a/80.m4s", fields(mirrored.bytes(6)).string(2))
+
+        val issued = fields(SeaBangumiPlayCodec.encodeVideoInfo(result, autoCdnHost = "upos-hz-mirrorakam.akamaized.net")!!)
+        assertEquals(akam, fields(fields(issued.bytes(5)).bytes(2)).string(1))
+    }
+
+    @Test
     fun aReplyWithoutStreamsIsRefusedWhateverTheDialogSays() {
         assertTrue(SeaBangumiPlayCodec.isRefusedReply(0, emptyList()))
         assertTrue(SeaBangumiPlayCodec.isRefusedReply(0, listOf("pay", null)))

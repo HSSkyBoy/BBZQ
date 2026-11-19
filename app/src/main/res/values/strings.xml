@@ -245,6 +245,8 @@
     <string name="sea_unlock_section_cdn">番剧 CDN</string>
     <string name="sea_cdn_info_title">按地区指定 CDN</string>
     <string name="sea_cdn_info_summary">解锁番剧的取流地址可能在你的网络下较慢。为对应地区指定一个 CDN 域名后，会替换该地区番剧主地址的域名；留空则跟随常规视频 CDN 设置。</string>
+    <string name="sea_cdn_auto_title">自动测速选择 CDN 线路</string>
+    <string name="sea_cdn_auto_summary">播放解锁番剧时，实测各 CDN 线路（服务器下发的地址与可互换的 UPOS 镜像）下载速度并选用最快的一条。首次需同步测速，可能延迟起播约 2 秒；之后按历史结果选择并在后台复测。会额外消耗少量流量。已手动指定地区 CDN 的以手动为准。</string>
     <string name="sea_cdn_title_format">%1$s番剧 CDN</string>
     <string name="sea_cdn_follow_summary">跟随常规视频 CDN 设置</string>
     <string name="sea_cdn_hint">例如 cdn.example.com</string>

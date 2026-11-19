@@ -1,5 +1,6 @@
 package io.github.bbzq.feats.hook
 
+import io.github.bbzq.feats.ResolverCdnSelector
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -137,8 +138,9 @@ internal object SeaBangumiPlayCodec {
         result: JSONObject,
         relaxPlayLimits: Boolean = false,
         cdnHost: String? = null,
+        autoCdnHost: String? = null,
     ): ByteArray? {
-        val videoInfo = encodeVideoInfo(result, cdnHost) ?: return null
+        val videoInfo = encodeVideoInfo(result, cdnHost, autoCdnHost) ?: return null
         val dropped = if (relaxPlayLimits) setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO, REPLY_PLAY_CONF)
         else setOf(REPLY_VIDEO_INFO, REPLY_VIEW_INFO)
         val rest = ProtoWire.dropFields(original, dropped) ?: return null
@@ -160,12 +162,13 @@ internal object SeaBangumiPlayCodec {
         result: JSONObject,
         relaxPlayLimits: Boolean = false,
         cdnHost: String? = null,
+        autoCdnHost: String? = null,
         aid: Long = 0L,
         cid: Long = 0L,
         epId: Long = 0L,
         seasonId: Long = 0L,
     ): ByteArray? {
-        val vodInfo = encodeVideoInfo(result, cdnHost) ?: return null
+        val vodInfo = encodeVideoInfo(result, cdnHost, autoCdnHost) ?: return null
 
         val shouldInjectArc = aid > 0L || cid > 0L || epId > 0L || seasonId > 0L
 
@@ -234,14 +237,17 @@ internal object SeaBangumiPlayCodec {
         }.toByteArray()
     }
 
-    /** With [cdnHost] the main address of every stream moves to that host; backups stay as given. */
-    fun encodeVideoInfo(result: JSONObject, cdnHost: String? = null): ByteArray? {
+    /**
+     * With [cdnHost] the main address of every stream moves to that host; backups stay as given.
+     * Otherwise with [autoCdnHost] each stream moves there only where its signature stays valid.
+     */
+    fun encodeVideoInfo(result: JSONObject, cdnHost: String? = null, autoCdnHost: String? = null): ByteArray? {
         val dash = result.optJSONObject("dash") ?: return null
-        val audios = dash.optJSONArray("audio").objects().mapNotNull { audio -> audio.stream(cdnHost)?.let { audio to it } }
+        val audios = dash.optJSONArray("audio").objects().mapNotNull { audio -> audio.stream(cdnHost, autoCdnHost)?.let { audio to it } }
         val bestAudio = audios.maxByOrNull { (audio, _) -> audio.optLong("bandwidth") }?.first
         val formats = result.optJSONArray("support_formats").objects().associateBy { it.optInt("quality") }
         val videos = dash.optJSONArray("video").objects().mapNotNull { video ->
-            video.stream(cdnHost)?.let { video to it }
+            video.stream(cdnHost, autoCdnHost)?.let { video to it }
         }
         if (videos.isEmpty()) return null
 
@@ -312,12 +318,17 @@ internal object SeaBangumiPlayCodec {
     private class Stream(val base: String, val backups: List<String>)
 
     /** The playable address of a DASH entry; the resolver emits both snake and camel spellings. */
-    private fun JSONObject.stream(cdnHost: String? = null): Stream? {
+    private fun JSONObject.stream(cdnHost: String? = null, autoCdnHost: String? = null): Stream? {
         val original = optString("base_url").ifEmpty { optString("baseUrl") }
         if (original.isEmpty()) return null
-        val base = if (cdnHost.isNullOrEmpty()) original else CustomCdnProcessor.replaceHost(original, cdnHost)
         val backupArray = optJSONArray("backup_url") ?: optJSONArray("backupUrl")
         val backups = (0 until (backupArray?.length() ?: 0)).mapNotNull { backupArray?.optString(it)?.takeIf(String::isNotEmpty) }
+        if (cdnHost.isNullOrEmpty() && !autoCdnHost.isNullOrEmpty()) {
+            // 原位址退到備援第一位，選中的線路臨時出問題時播放器還能退回
+            val moved = ResolverCdnSelector.rehost(original, backups, autoCdnHost) ?: return Stream(original, backups)
+            return Stream(moved, (listOf(original) + backups).filter { it != moved }.distinct())
+        }
+        val base = if (cdnHost.isNullOrEmpty()) original else CustomCdnProcessor.replaceHost(original, cdnHost)
         return Stream(base, backups)
     }
 

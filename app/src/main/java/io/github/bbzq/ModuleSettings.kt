@@ -148,6 +148,7 @@ object ModuleSettings {
     const val KEY_RESOLVER_CDN_SEA = "resolver_cdn_sea"
     const val KEY_RESOLVER_CDN_CN = "resolver_cdn_cn"
     const val KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS = "sea_unlock_relax_play_limits"
+    const val KEY_RESOLVER_CDN_AUTO = "resolver_cdn_auto"
     const val KEY_FULL_NUMBER_FORMAT_ENABLED = "full_number_format_enabled"
     const val KEY_SPACE_FIX_ENABLED = "space_fix_enabled"
     const val KEY_UNLOCK_COMMENT_GIF_ENABLED = "unlock_comment_gif_enabled"
@@ -414,6 +415,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_SEA_UNLOCK_DETAIL_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_DETAIL_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_SUBTITLE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_SUBTITLE_ENABLED, true) },
         ExportableConfigSpec(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_UNLOCK_RELAX_PLAY_LIMITS, true) },
+        ExportableConfigSpec(KEY_RESOLVER_CDN_AUTO, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_RESOLVER_CDN_AUTO, false) },
         ExportableConfigSpec(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SEA_RESOLVER_SEND_ACCESS_KEY, false) },
         ExportableConfigSpec(KEY_FULL_NUMBER_FORMAT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_FULL_NUMBER_FORMAT_ENABLED, false) },
         ExportableConfigSpec(KEY_SPACE_FIX_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SPACE_FIX_ENABLED, true) },
@@ -1184,6 +1186,10 @@ object ModuleSettings {
     /** Host that replaces the stream host of a region's bangumi; null follows the regular CDN settings. */
     fun getResolverCdnHost(prefs: SharedPreferences, region: ResolverRegion): String? =
         normalizeCdnHost(prefs.getString(region.cdnKey, null))
+
+    /** Off by default: probing downloads a few hundred KB from several CDN lines. */
+    fun isResolverCdnAutoEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_RESOLVER_CDN_AUTO, false)
 
     /** Clears the substituted reply's ability switches (mini window, background play, cast...). */
     fun isSeaRelaxPlayLimitsEnabled(prefs: SharedPreferences): Boolean =
