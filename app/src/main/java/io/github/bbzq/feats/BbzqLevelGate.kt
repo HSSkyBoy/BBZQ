@@ -4,7 +4,7 @@ import android.content.Context
 
 internal object BbzqLevelGate {
     private const val MIN_LEVEL = 2
-    private const val CACHE_TTL_MS = 2_000L
+    private const val UNKNOWN_RETRY_MS = 10_000L
 
     @Volatile
     private var appContext: Context? = null
@@ -16,45 +16,56 @@ internal object BbzqLevelGate {
     private var enabled = false
 
     @Volatile
-    private var cachedAllowed = false
+    private var decision: Boolean? = null
 
     @Volatile
-    private var cachedAtMs = 0L
+    private var retryAtMs = 0L
+
+    @Volatile
+    private var logger: ((String) -> Unit)? = null
 
     private val lock = Any()
     private val evaluating = ThreadLocal<Boolean>()
 
-    fun init(context: Context, classLoader: ClassLoader) {
+    fun init(context: Context, classLoader: ClassLoader, log: ((String) -> Unit)? = null) {
+        logger = log
         appContext = context.applicationContext ?: context
         hostClassLoader = classLoader
         enabled = true
-        cachedAtMs = 0L
+        decision = null
+        retryAtMs = 0L
     }
 
     fun isAllowed(): Boolean {
         if (!enabled) return true
+        decision?.let { return it }
         if (evaluating.get() == true) return false
-        val now = System.currentTimeMillis()
-        if (cachedAtMs > 0L && now - cachedAtMs < CACHE_TTL_MS) {
-            return cachedAllowed
-        }
+        if (System.currentTimeMillis() < retryAtMs) return false
         synchronized(lock) {
-            val innerNow = System.currentTimeMillis()
-            if (cachedAtMs > 0L && innerNow - cachedAtMs < CACHE_TTL_MS) {
-                return cachedAllowed
+            decision?.let { return it }
+            if (System.currentTimeMillis() < retryAtMs) return false
+            return evaluate()
+        }
+    }
+
+    private fun evaluate(): Boolean {
+        val ctx = appContext ?: return false
+        val cl = hostClassLoader ?: return false
+        evaluating.set(true)
+        try {
+            val snapshot = HostAccountResolver.resolve(ctx, cl)
+            if (snapshot.loggedIn && snapshot.level <= 0) {
+                // 等級還讀不到，不下定論，稍後再試
+                retryAtMs = System.currentTimeMillis() + UNKNOWN_RETRY_MS
+                logger?.invoke("BbzqLevelGate: level not available yet, retry later")
+                return false
             }
-            evaluating.set(true)
-            return try {
-                val ctx = appContext ?: return false
-                val cl = hostClassLoader ?: return false
-                val snapshot = HostAccountResolver.resolve(ctx, cl)
-                val allowed = snapshot.loggedIn && snapshot.level >= MIN_LEVEL
-                cachedAllowed = allowed
-                cachedAtMs = innerNow
-                allowed
-            } finally {
-                evaluating.remove()
-            }
+            val allowed = snapshot.loggedIn && snapshot.level >= MIN_LEVEL
+            logger?.invoke("BbzqLevelGate: allowed=$allowed loggedIn=${snapshot.loggedIn} level=${snapshot.level}")
+            decision = allowed
+            return allowed
+        } finally {
+            evaluating.remove()
         }
     }
 

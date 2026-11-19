@@ -151,7 +151,7 @@ object RoamingRuntime {
         }
 
         ModuleSettingsBridge.attach(env.hostContext, xposed)
-        BbzqLevelGate.init(env.hostContext, classLoader)
+        BbzqLevelGate.init(env.hostContext, classLoader) { env.log(it) }
         if (processScope == ProcessScope.MAIN) {
             runCatching {
                 RuntimeEnvironmentInfo.recordRuntimeSnapshot(

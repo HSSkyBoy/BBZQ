@@ -231,6 +231,7 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     return@InvocationHandler MossCallbacks.invoke(delegate, method, arguments)
                 }
 
+                log("SeaBangumiPlay (KMP): ${method.name} intercepted for ep $epId season $seasonId cid $cid")
                 gate.start()
                 executor.execute {
                     val targetEpId = if (epId > 0L) epId else {
@@ -447,7 +448,10 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
             ?: seasonId.takeIf { it > 0L }?.let { servedBySeason[it] }
             ?: ModuleSettings.getResolverDefaultRegion(prefs)
         val servers = demoteRecentlyFailed(ResolverServers.preferring(ResolverServers.configured(prefs), preferred))
-        if (servers.isEmpty()) return null
+        if (servers.isEmpty()) {
+            log("SeaBangumiPlay: no resolver server configured, ep $epId left as refused")
+            return null
+        }
 
         val sendAccessKey = ModuleSettings.isSeaResolverSendAccessKeyEnabled(prefs)
         val baseParams = mutableListOf(
