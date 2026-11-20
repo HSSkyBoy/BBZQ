@@ -123,7 +123,9 @@ class SeaBangumiPlayCodecTest {
 
         val relaxed = fields(SeaBangumiPlayCodec.buildUniteReply(original, JSONObject(playurl).getJSONObject("result"), relaxPlayLimits = true)!!)
 
-        assertEquals(listOf(1, 7), relaxed.map { it.first })
+        assertEquals(listOf(1, 2, 7), relaxed.map { it.first })
+        val confTypes = fields(relaxed.bytes(2)).map { (_, entry) -> fields(entry as ByteArray).first().second }
+        assertTrue(confTypes.containsAll(listOf(4L, 25L, 26L, 40L)))
     }
 
     @Test

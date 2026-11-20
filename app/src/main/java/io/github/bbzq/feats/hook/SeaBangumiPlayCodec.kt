@@ -200,6 +200,7 @@ internal object SeaBangumiPlayCodec {
 
         return ProtoWriter().apply {
             message(1, vodInfo)
+            if (relaxPlayLimits) message(2, encodeSupportedArcConf())
             if (supplement != null) {
                 message(5, supplement)
             }
@@ -209,6 +210,23 @@ internal object SeaBangumiPlayCodec {
             if (rest.isNotEmpty()) raw(rest)
         }.toByteArray()
     }
+
+    /**
+     * A play_arc_conf that marks every ConfType as supported. 9.19 treats a missing entry as
+     * unsupported and hides the matching control (subtitles, danmaku, comments...), so dropping
+     * the field is not enough.
+     */
+    fun encodeSupportedArcConf(): ByteArray = ProtoWriter().apply {
+        for (type in 1..MAX_CONF_TYPE) {
+            message(1, ProtoWriter().apply {
+                int(1, type.toLong())
+                message(2, ProtoWriter().apply { bool(1, true) }.toByteArray())
+            }.toByteArray())
+        }
+    }.toByteArray()
+
+    /** Highest playershared.ConfType value on 9.19 (FAVORITE). */
+    private const val MAX_CONF_TYPE = 41
 
     private fun encodePlaySupplement(aid: Long, cid: Long, epId: Long, seasonId: Long): ByteArray {
         val seasonInfo = ProtoWriter().apply {
