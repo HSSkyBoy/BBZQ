@@ -81,7 +81,7 @@ class SeaBangumiSubtitleHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     return@InvocationHandler MossCallbacks.defaultValue(method)
                 }
                 val reply = arguments.takeIf { method.name == "onNext" && it.size == 1 }?.get(0)
-                if (reply == null || !lacksSubtitles(reply)) {
+                if (reply == null || !(lacksSubtitles(reply) || lacksDefault(reply))) {
                     MossCallbacks.invoke(delegate, method, arguments)
                 } else {
                     gate.start()
@@ -102,14 +102,27 @@ class SeaBangumiSubtitleHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
     }
 
+    /** 官方回覆有字幕軌但沒指定預設語言：播放器就不會自動選字幕。 */
+    private fun lacksDefault(reply: Any): Boolean {
+        val subtitle = reply.callMethod("getSubtitle") ?: return false
+        val count = (subtitle.callMethod("getSubtitlesCount") as? Number)?.toInt() ?: 0
+        return count > 0 && (subtitle.callMethod("getLan") as? String).isNullOrEmpty()
+    }
+
     private fun lacksSubtitles(reply: Any): Boolean =
         ((reply.callMethod("getSubtitle")?.callMethod("getSubtitlesCount") as? Number)?.toInt() ?: 0) == 0
 
     /** [reply] with the resolver subtitles merged in, or null when there is nothing to add. */
     private fun withSubtitles(request: Any, reply: Any): Any? {
-        if (!lacksSubtitles(reply)) return null
         val oid = request.callMethod("getOid").asLong()
         val served = SeaBangumiSession.recentFor(oid) ?: return null
+        if (!lacksSubtitles(reply)) {
+            if (!lacksDefault(reply)) return null
+            val original = reply.callMethod("toByteArray") as? ByteArray ?: return null
+            val bytes = SeaBangumiSubtitleCodec.withDefaultTrack(original) ?: return null
+            log("SeaBangumiSubtitle: set default track for ep ${served.epId}")
+            return replyClass!!.getMethod("parseFrom", ByteArray::class.java).invoke(null, bytes)
+        }
         val pid = request.callMethod("getPid").asLong()
         val servers = ResolverServers.preferring(ResolverServers.configured(prefs), served.region)
         val params = mutableListOf(

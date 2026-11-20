@@ -153,33 +153,35 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return 1
     }
 
-    private fun resolveKmpTarget(req: SeaBangumiPlayCodec.DecodedUniteReq): TargetMeta {
-        var epId = req.epId
-        var seasonId = req.seasonId
-        var aid = req.aid
-        var cid = req.cid
+    private fun resolveKmpTarget(req: SeaBangumiPlayCodec.DecodedUniteReq): TargetMeta =
+        fillTarget(req.epId, req.seasonId, req.aid, req.cid)
 
-        if (epId <= 0L && cid > 0L) {
-            SeaBangumiSession.episodeForCid(cid)?.let {
-                epId = it.epId
-                if (seasonId <= 0L) seasonId = it.seasonId
-                if (aid <= 0L) aid = it.aid
-            }
+    /**
+     * 補齊缺的 ep_id。從追番、歷史紀錄進入時請求常只帶 season_id + cid（上次看到的那集），
+     * 必須用 cid 對回正確集數；只有連 cid 都沒有時才退回第一集。
+     */
+    private fun fillTarget(epId0: Long, seasonId0: Long, aid0: Long, cid0: Long): TargetMeta {
+        var epId = epId0
+        var seasonId = seasonId0
+        var aid = aid0
+        var cid = cid0
+
+        fun take(meta: SeaBangumiSession.EpisodeMeta?) {
+            meta ?: return
+            epId = meta.epId
+            if (seasonId <= 0L) seasonId = meta.seasonId
+            if (aid <= 0L) aid = meta.aid
+            if (cid <= 0L) cid = meta.cid
         }
-        if (epId <= 0L && seasonId > 0L) {
-            SeaBangumiSession.firstEpisodeForSeason(seasonId)?.let {
-                epId = it.epId
-                if (aid <= 0L) aid = it.aid
-                if (cid <= 0L) cid = it.cid
-            }
-        }
-        if (epId <= 0L && seasonId > 0L) {
-            fetchAndCacheSeason(seasonId)?.let {
-                SeaBangumiSession.firstEpisodeForSeason(seasonId)?.let {
-                    epId = it.epId
-                    if (aid <= 0L) aid = it.aid
-                    if (cid <= 0L) cid = it.cid
-                }
+
+        if (epId <= 0L && cid > 0L) take(SeaBangumiSession.episodeForCid(cid))
+        if (epId <= 0L && seasonId > 0L && cid <= 0L) take(SeaBangumiSession.firstEpisodeForSeason(seasonId))
+        if (epId <= 0L && seasonId > 0L && fetchAndCacheSeason(seasonId) != null) {
+            // 整季資料已逐集記錄 cid，先按 cid 找
+            if (cid > 0L) take(SeaBangumiSession.episodeForCid(cid))
+            if (epId <= 0L) {
+                if (cid > 0L) log("SeaBangumiPlay: cid $cid not found in season $seasonId, falling back to first episode")
+                take(SeaBangumiSession.firstEpisodeForSeason(seasonId))
             }
         }
         return TargetMeta(epId, seasonId, aid, cid)
@@ -548,41 +550,14 @@ class SeaBangumiPlayHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         val extra = (request.callMethod("getExtraContentMap") as? Map<*, *>)
             ?: (request.callMethod("getExtraContent") as? Map<*, *>)
-        var epId = (extra?.get("ep_id") as? String)?.toLongOrNull() ?: 0L
-        var seasonId = (extra?.get("season_id") as? String)?.toLongOrNull() ?: 0L
+        val epId = (extra?.get("ep_id") as? String)?.toLongOrNull() ?: 0L
+        val seasonId = (extra?.get("season_id") as? String)?.toLongOrNull() ?: 0L
 
         val vod = request.callMethod("getVod")
-        var cid = (vod?.callMethod("getCid") ?: request.callMethod("getCid")).asLong()
-        var aid = (vod?.callMethod("getAid") ?: request.callMethod("getAid")).asLong()
+        val cid = (vod?.callMethod("getCid") ?: request.callMethod("getCid")).asLong()
+        val aid = (vod?.callMethod("getAid") ?: request.callMethod("getAid")).asLong()
 
-        if (epId <= 0L && cid > 0L) {
-            SeaBangumiSession.episodeForCid(cid)?.let {
-                epId = it.epId
-                if (seasonId <= 0L) seasonId = it.seasonId
-                if (aid <= 0L) aid = it.aid
-            }
-        }
-
-        if (epId <= 0L && seasonId > 0L) {
-            SeaBangumiSession.firstEpisodeForSeason(seasonId)?.let {
-                epId = it.epId
-                if (aid <= 0L) aid = it.aid
-                if (cid <= 0L) cid = it.cid
-            }
-        }
-
-        if (epId <= 0L && seasonId > 0L) {
-            fetchAndCacheSeason(seasonId)?.let {
-                SeaBangumiSession.firstEpisodeForSeason(seasonId)?.let {
-                    epId = it.epId
-                    if (aid <= 0L) aid = it.aid
-                    if (cid <= 0L) cid = it.cid
-                }
-            }
-        }
-
-        if (epId <= 0L) return null
-        return TargetMeta(epId, seasonId, aid, cid)
+        return fillTarget(epId, seasonId, aid, cid).takeIf { it.epId > 0L }
     }
 
     private fun fetchAndCacheSeason(seasonId: Long): String? {

@@ -200,6 +200,7 @@ internal object SeaBangumiPlayCodec {
 
         return ProtoWriter().apply {
             message(1, vodInfo)
+            if (relaxPlayLimits) message(2, encodeSupportedArcConf(original))
             if (supplement != null) {
                 message(5, supplement)
             }
@@ -209,6 +210,48 @@ internal object SeaBangumiPlayCodec {
             if (rest.isNotEmpty()) raw(rest)
         }.toByteArray()
     }
+
+    /**
+     * The play_arc_conf for a substituted reply. 9.19 maps it to the player menu and treats a
+     * missing ConfType as unsupported (hiding the control), so every ordinary control is marked
+     * supported. Content-bound ones (Dolby, lossless, panorama, dubbing...) keep what the official
+     * reply in [original] said, or stay absent: forcing them on would show buttons with no data.
+     */
+    fun encodeSupportedArcConf(original: ByteArray = ByteArray(0)): ByteArray {
+        val official = officialArcConfs(original)
+        return ProtoWriter().apply {
+            for (type in 1..MAX_CONF_TYPE) {
+                val conf = if (type in CONTENT_BOUND_CONF_TYPES) {
+                    official[type] ?: continue
+                } else {
+                    ProtoWriter().apply { bool(1, true) }.toByteArray()
+                }
+                message(1, ProtoWriter().apply {
+                    int(1, type.toLong())
+                    message(2, conf)
+                }.toByteArray())
+            }
+        }.toByteArray()
+    }
+
+    /** ConfType -> ArcConf bytes from the official reply's play_arc_conf (field 2); empty if unreadable. */
+    private fun officialArcConfs(original: ByteArray): Map<Int, ByteArray> {
+        if (original.isEmpty()) return emptyMap()
+        val conf = ProtoWire.readFields(original)?.lastOrNull { it.number == 2 && it.wireType == 2 } ?: return emptyMap()
+        val entries = ProtoWire.readFields(conf.bytes) ?: return emptyMap()
+        return entries.filter { it.number == 1 && it.wireType == 2 }.mapNotNull { entry ->
+            val kv = ProtoWire.readFields(entry.bytes) ?: return@mapNotNull null
+            val key = kv.firstOrNull { it.number == 1 }?.varint?.toInt() ?: return@mapNotNull null
+            val value = kv.firstOrNull { it.number == 2 }?.bytes ?: return@mapNotNull null
+            key to value
+        }.toMap()
+    }
+
+    /** Highest playershared.ConfType value on 9.19 (FAVORITE). */
+    private const val MAX_CONF_TYPE = 41
+
+    /** PANORAMA, DOLBY, LOSSLESS, FREYAENTER, FREYAFULLENTER, SKIPOPED, DUBBING, TRANSLATE. */
+    private val CONTENT_BOUND_CONF_TYPES = setOf(27, 28, 30, 31, 32, 33, 35, 39)
 
     private fun encodePlaySupplement(aid: Long, cid: Long, epId: Long, seasonId: Long): ByteArray {
         val seasonInfo = ProtoWriter().apply {

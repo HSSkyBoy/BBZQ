@@ -123,7 +123,9 @@ class SeaBangumiPlayCodecTest {
 
         val relaxed = fields(SeaBangumiPlayCodec.buildUniteReply(original, JSONObject(playurl).getJSONObject("result"), relaxPlayLimits = true)!!)
 
-        assertEquals(listOf(1, 7), relaxed.map { it.first })
+        assertEquals(listOf(1, 2, 7), relaxed.map { it.first })
+        val confTypes = fields(relaxed.bytes(2)).map { (_, entry) -> fields(entry as ByteArray).first().second }
+        assertTrue(confTypes.containsAll(listOf(4L, 25L, 26L, 40L)))
     }
 
     @Test
@@ -147,6 +149,33 @@ class SeaBangumiPlayCodecTest {
         assertEquals("https://b/32.m4s", video.string(2))
         val firstAudio = fields(info.bytes(6))
         assertEquals("https://cdn.example.com/16.m4s", firstAudio.string(2))
+    }
+
+    @Test
+    fun supportedArcConfKeepsContentBoundEntriesFromTheOfficialReply() {
+        // 官方：杜比（28）支援、全景（27）不支援；其餘不提
+        fun entry(type: Long, support: Boolean) = ProtoWriter().apply {
+            int(1, type)
+            message(2, ProtoWriter().apply { bool(1, support) }.toByteArray())
+        }.toByteArray()
+        val official = ProtoWriter().apply {
+            message(1, entry(28, true))
+            message(1, entry(27, false))
+        }.toByteArray()
+        val original = ProtoWriter().apply { message(2, official) }.toByteArray()
+
+        val conf = fields(SeaBangumiPlayCodec.encodeSupportedArcConf(original)).associate { (_, raw) ->
+            val kv = fields(raw as ByteArray)
+            (kv.first { it.first == 1 }.second as Long) to fields(kv.first { it.first == 2 }.second as ByteArray)
+        }
+
+        // 一般控制項一律支援
+        assertEquals(1L, conf.getValue(4).first { it.first == 1 }.second)
+        assertEquals(1L, conf.getValue(40).first { it.first == 1 }.second)
+        // 綁內容的沿用官方：杜比保留、全景維持不支援（is_support 為 0 不編碼）、配音官方沒有就不出現
+        assertEquals(1L, conf.getValue(28).first { it.first == 1 }.second)
+        assertTrue(conf.getValue(27).none { it.first == 1 })
+        assertFalse(conf.containsKey(35))
     }
 
     @Test

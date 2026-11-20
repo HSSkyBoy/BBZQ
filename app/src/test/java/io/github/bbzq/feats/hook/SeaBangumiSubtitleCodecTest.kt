@@ -55,4 +55,21 @@ class SeaBangumiSubtitleCodecTest {
         assertTrue(!String(replaced, Charsets.ISO_8859_1).contains("old"))
         assertNull(SeaBangumiSubtitleCodec.replaceSubtitle(byteArrayOf(0x0A, 0x7F), subtitle))
     }
+
+    @Test
+    fun withDefaultTrackPicksChineseWhenTheOfficialReplyNamesNone() {
+        val entries = SeaBangumiSubtitleCodec.parse(answer)
+        val official = SeaBangumiSubtitleCodec.encodeSubtitle(entries)!!
+        // 官方回覆：有字幕軌但預設語言欄位為空
+        val noDefault = ProtoWire.dropFields(official, setOf(1, 2))!!
+        val reply = SeaBangumiSubtitleCodec.replaceSubtitle(ByteArray(0), noDefault)!!
+
+        val fixed = SeaBangumiSubtitleCodec.withDefaultTrack(reply)!!
+
+        val subtitle = ProtoWire.readFields(ProtoWire.readFields(fixed)!!.first { it.number == 3 }.bytes)!!
+        assertEquals("zh-Hant", subtitle.first { it.number == 1 }.string())
+        assertEquals(2, subtitle.count { it.number == 3 })
+        // 已有預設語言時不動
+        assertNull(SeaBangumiSubtitleCodec.withDefaultTrack(fixed))
+    }
 }

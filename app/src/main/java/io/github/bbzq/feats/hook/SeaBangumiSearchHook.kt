@@ -66,11 +66,15 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
     ): Int {
         val requestClass = classLoader.findClassOrNull(requestClassName) ?: return 0
         var installed = 0
-        mossClass.declaredMethods.firstOrNull {
+        val syncMethod = mossClass.declaredMethods.firstOrNull {
             it.name == syncName &&
                 it.parameterTypes.contentEquals(arrayOf(requestClass)) &&
                 !Modifier.isStatic(it.modifiers)
-        }?.let { sync ->
+        }
+        if (syncMethod != null) {
+            installed += installKotlinSearch(asyncName, requestClass, syncMethod.returnType, itemField, itemsGetter, targetOf)
+        }
+        syncMethod?.let { sync ->
             env.hookAfter(sync) { param ->
                 val response = param.result ?: return@hookAfter
                 val (keyword, type) = param.args.firstOrNull()?.let(targetOf) ?: return@hookAfter
@@ -98,6 +102,37 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
         return installed
+    }
+
+    private fun installKotlinSearch(
+        rpc: String,
+        requestClass: Class<*>,
+        replyClass: Class<*>,
+        itemField: Int,
+        itemsGetter: String,
+        targetOf: (Any) -> Pair<String, Int?>?,
+    ): Int {
+        val owner = classLoader.findClassOrNull(K_MOSS_CLASS) ?: return 0
+        val entry = KotlinMossBridge.callbackEntry(owner, rpc) ?: return 0
+        val replyCodec = KotlinMossCodec.resolve(classLoader, replyClass) ?: return 0
+        val requestCodec = KotlinMossCodec.resolve(classLoader, requestClass) ?: return 0
+        val installed = env.hookBefore(entry) { param ->
+            val request = param.args.getOrNull(0) ?: return@hookBefore
+            val requestBridge = requestCodec.bind(param.args.getOrNull(4), param.args.getOrNull(1)) ?: return@hookBefore
+            var target: Pair<String, Int?>? = null
+            runCatching { requestBridge.transform(request) { req -> req.also { target = targetOf(it) } } }
+                .onFailure { log("SeaBangumiSearch: could not read Kotlin $rpc request", it) }
+            val (keyword, type) = target ?: return@hookBefore
+            val pending = query(keyword, type) ?: return@hookBefore
+            val delegate = param.args.getOrNull(3) ?: return@hookBefore
+            val replyBridge = replyCodec.bind(param.args.getOrNull(4), param.args.getOrNull(2)) ?: return@hookBefore
+            param.args[3] = KotlinMossBridge.wrap(entry.parameterTypes[3], delegate, { value ->
+                replyBridge.transform(value) { merge(it, itemField, itemsGetter, pending) ?: it }
+            }, { failure ->
+                log("SeaBangumiSearch: Kotlin $rpc reply unchanged after failure", failure)
+            }) ?: return@hookBefore
+        }
+        return if (installed) 1 else 0
     }
 
     private fun firstPageKeyword(request: Any): String? {
@@ -276,6 +311,7 @@ class SeaBangumiSearchHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private companion object {
         const val V1 = "com.bapis.bilibili.polymer.app.search.v1."
         const val MOSS_CLASS = V1 + "SearchMoss"
+        const val K_MOSS_CLASS = V1 + "KSearchMoss"
         const val ALL_REQUEST = V1 + "SearchAllRequest"
         const val BY_TYPE_REQUEST = V1 + "SearchByTypeRequest"
         const val MOSS_HANDLER = "com.bilibili.lib.moss.api.MossResponseHandler"
