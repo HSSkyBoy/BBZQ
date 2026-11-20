@@ -72,6 +72,31 @@ internal object SeaBangumiSubtitleCodec {
         }.toByteArray()
     }
 
+    /**
+     * The reply with its default subtitle set to a Chinese track (else the first), for replies that
+     * already carry tracks but name no default; null when nothing needs changing or it is malformed.
+     */
+    fun withDefaultTrack(original: ByteArray): ByteArray? {
+        val top = ProtoWire.readFields(original) ?: return null
+        val subtitleBytes = top.lastOrNull { it.number == REPLY_SUBTITLE && it.wireType == 2 }?.bytes ?: return null
+        val inner = ProtoWire.readFields(subtitleBytes) ?: return null
+        if (inner.any { it.number == 1 && it.bytes.isNotEmpty() }) return null
+        val tracks = inner.filter { it.number == 3 && it.wireType == 2 }.mapNotNull { track ->
+            val f = ProtoWire.readFields(track.bytes) ?: return@mapNotNull null
+            val lan = f.firstOrNull { it.number == 3 }?.string().orEmpty()
+            val doc = f.firstOrNull { it.number == 4 }?.string().orEmpty()
+            if (lan.isEmpty()) null else lan to doc
+        }
+        val pick = tracks.firstOrNull { it.first.startsWith("zh") } ?: tracks.firstOrNull() ?: return null
+        val rest = ProtoWire.dropFields(subtitleBytes, setOf(1, 2)) ?: return null
+        val rebuilt = ProtoWriter().apply {
+            string(1, pick.first)
+            string(2, pick.second)
+            raw(rest)
+        }.toByteArray()
+        return replaceSubtitle(original, rebuilt)
+    }
+
     /** The official reply with its subtitle field replaced; null if [original] is not well-formed. */
     fun replaceSubtitle(original: ByteArray, subtitle: ByteArray): ByteArray? {
         val rest = ProtoWire.dropFields(original, setOf(REPLY_SUBTITLE)) ?: return null
