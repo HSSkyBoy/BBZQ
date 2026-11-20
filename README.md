@@ -32,7 +32,8 @@ BBZQ 是一款适配 Modern API 的哔哩哔哩功能增强模组，采用 Kotli
 
 > [!WARNING]
 > **避坑提示：** 请勿使用 Hide My Applist (HMA) 等应用隐藏模组去对「哔哩哔哩」或「BBZQ」启用隐藏列表，否则会导致功能失效或应用崩溃。
-> 參考 https://github.com/Nk-Be/BBZQ/issues/5 和 https://github.com/Nk-Be/BBZQ/issues/17
+>
+> 參考 https://github.com/HSSkyBoy/BBZQ/issues/5 和 https://github.com/HSSkyBoy/BBZQ/issues/17
 
 
 > 桌面图标是模组自身介绍页，不是独立的调试工具。  
