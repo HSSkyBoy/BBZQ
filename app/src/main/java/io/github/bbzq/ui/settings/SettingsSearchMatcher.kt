@@ -8,6 +8,7 @@ data class SettingsSearchItem(
     val title: String,
     val detail: String,
     val section: String,
+    val enabled: Boolean = false,
 )
 
 data class SettingsSearchMatch(
@@ -21,6 +22,7 @@ data class SettingsSearchTarget(
     val item: SettingsSearchItem,
     val view: View?,
     val page: String,
+    val isEnabledProvider: (() -> Boolean)? = null,
 )
 
 object SettingsSearchMatcher {
@@ -29,6 +31,31 @@ object SettingsSearchMatcher {
         items: List<SettingsSearchItem>,
         limit: Int = 40,
     ): List<SettingsSearchItem> = searchMatches(query, items, limit).map(SettingsSearchMatch::item)
+
+    fun filterEnabled(
+        query: String,
+        items: List<SettingsSearchItem>,
+        limit: Int = 80,
+    ): List<SettingsSearchMatch> {
+        if (limit <= 0) return emptyList()
+        val enabledItems = items.filter { it.enabled }
+        if (enabledItems.isEmpty()) return emptyList()
+        if (query.isBlank()) {
+            return enabledItems.asSequence()
+                .distinctBy { normalize(it.title) }
+                .take(limit)
+                .map { item ->
+                    SettingsSearchMatch(
+                        item = item,
+                        titleRanges = emptyList(),
+                        detailRanges = emptyList(),
+                        sectionRanges = emptyList(),
+                    )
+                }
+                .toList()
+        }
+        return searchMatches(query, enabledItems, limit)
+    }
 
     fun searchMatches(
         query: String,

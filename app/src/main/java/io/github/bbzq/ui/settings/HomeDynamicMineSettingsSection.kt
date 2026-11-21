@@ -108,6 +108,15 @@ internal fun SettingsContentFactory.dynamicRows(): List<View> {
             ModuleSettings.KEY_DYNAMIC_REMOVE_SCHOOL_TAB_ENABLED,
             false,
         ),
+        createSwitchRow(
+            context.getString(R.string.dynamic_keyword_filter_title),
+            context.getString(R.string.dynamic_keyword_filter_summary),
+            ModuleSettings.KEY_DYNAMIC_KEYWORD_FILTER_ENABLED,
+            false,
+        ) {
+            dynamicKeywordFilterSwitch = it
+        },
+        createDynamicKeywordRow(),
     )
 }
 
@@ -219,6 +228,77 @@ private fun SettingsContentFactory.showHomeRecommendTitleKeywordDialog() {
             refresh()
         }
         .show()
+}
+
+private fun SettingsContentFactory.createDynamicKeywordRow(): View {
+    dynamicKeywordSummaryView = TextView(context).apply {
+        textSize = 12f
+        setTextColor(summaryTextColor)
+        setPadding(0, dp(4), 0, 0)
+    }
+    return LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { showDynamicKeywordDialog() }
+        addView(TextView(context).apply {
+            text = context.getString(R.string.dynamic_keyword_title)
+            textSize = 15f
+            setTextColor(titleTextColor)
+        })
+        addView(dynamicKeywordSummaryView)
+    }.also {
+        dynamicKeywordRow = it
+        registerSearchTarget(
+            it,
+            context.getString(R.string.dynamic_keyword_title),
+            context.getString(R.string.dynamic_keyword_title),
+            "action:${context.getString(R.string.dynamic_keyword_title)}",
+        )
+    }
+}
+
+private fun SettingsContentFactory.showDynamicKeywordDialog() {
+    val input = EditText(context).apply {
+        setText(ModuleSettings.getDynamicKeywordsText(prefs))
+        minLines = 4
+        maxLines = 8
+        inputType = InputType.TYPE_CLASS_TEXT or
+            InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+            InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        setSingleLine(false)
+        setSelectAllOnFocus(false)
+        setHint(R.string.dynamic_keyword_hint)
+    }
+    val content = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), dp(10), dp(20), 0)
+        addView(input)
+    }
+    AlertDialog.Builder(context)
+        .setTitle(R.string.dynamic_keyword_dialog_title)
+        .setView(content)
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .setPositiveButton(R.string.dialog_save) { _, _ ->
+            prefs.edit()
+                .putString(ModuleSettings.KEY_DYNAMIC_KEYWORDS, input.text?.toString()?.trim().orEmpty())
+                .apply()
+            refresh()
+        }
+        .show()
+}
+
+internal fun SettingsContentFactory.dynamicKeywordSummary(): String {
+    val keywords = ModuleSettings.parseDynamicKeywords(ModuleSettings.getDynamicKeywordsText(prefs))
+    if (keywords.isEmpty()) {
+        return context.getString(R.string.dynamic_keyword_empty_summary)
+    }
+    return context.getString(
+        R.string.dynamic_keyword_summary,
+        keywords.size,
+        keywords.take(TITLE_KEYWORD_SUMMARY_MAX_ITEMS).joinToString(context.getString(R.string.list_separator)),
+    )
 }
 
 internal fun SettingsContentFactory.createTagGroup(): View {

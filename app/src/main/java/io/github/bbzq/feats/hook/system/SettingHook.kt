@@ -16,8 +16,10 @@ import io.github.bbzq.feats.hookAfterMethod
 import io.github.bbzq.feats.methodsNamed
 import io.github.bbzq.prefs.ModuleSettingsNavigator
 import java.lang.reflect.Proxy
+import java.util.WeakHashMap
 
 class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
+    private val boundAvatarViews = WeakHashMap<View, Boolean>()
     override fun startHook() {
         var installed = 0
         HELP_FRAGMENT_CLASSES.mapNotNull(classLoader::findClassOrNull).distinct().forEach { fragmentClass ->
@@ -134,7 +136,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
             env.hookAfterMethod(Activity::class.java, "onResume") { param ->
                 val activity = param.thisObject as? Activity ?: return@hookAfterMethod
                 if (isHomeActivity(activity.javaClass.name)) {
-                    attachAvatarLongClick(activity)
+                    attachAvatarLongClick(activity, root = null, fromMainFragment = false)
                 }
             }
             log("SettingHook：已安裝首頁 Activity.onResume 長按頭像監聽")
@@ -151,7 +153,7 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     val fragment = param.thisObject ?: return@hookAfter
                     val view = param.args[0] as? View ?: return@hookAfter
                     val activity = fragment.callMethod("getActivity") as? Activity ?: return@hookAfter
-                    attachAvatarLongClick(activity, view)
+                    attachAvatarLongClick(activity, root = view, fromMainFragment = true)
                 }
                 log("SettingHook：已在 ${fragmentClass.name}.onViewCreated 安裝長按頭像監聽")
             }
@@ -161,48 +163,58 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun isHomeActivity(className: String): Boolean =
         className in HOME_ACTIVITIES || className.contains("MainActivity", ignoreCase = true)
 
-    private fun attachAvatarLongClick(activity: Activity, root: View? = null) {
+    private fun attachAvatarLongClick(activity: Activity, root: View?, fromMainFragment: Boolean) {
         val targetRoot = root ?: runCatching { activity.window?.peekDecorView() ?: activity.window?.decorView }.getOrNull() ?: return
-        bindAvatarLongClickToViewTree(activity, targetRoot)
+        bindAvatarLongClickToViewTree(activity, targetRoot, fromMainFragment)
         targetRoot.post {
             if (!activity.isFinishing && !activity.isDestroyed) {
-                bindAvatarLongClickToViewTree(activity, targetRoot)
+                bindAvatarLongClickToViewTree(activity, targetRoot, fromMainFragment)
             }
         }
     }
 
-    private fun bindAvatarLongClickToViewTree(activity: Activity, root: View) {
+    /**
+     * 僅對實際承接單擊事件的單一節點綁定長按監聽器：
+     * 若同時對不可點擊的子 View（avatar）呼叫 setOnLongClickListener，Android 會自動將其設為
+     * longClickable=true，進而攔截 ACTION_DOWN 吞掉父容器（avatar_layout）的單擊事件（Issue #139）。
+     */
+    private fun bindAvatarLongClickToViewTree(activity: Activity, root: View, fromMainFragment: Boolean) {
         val avatarId = resolveResId(activity, "avatar", FALLBACK_AVATAR_ID)
         val avatarLayoutId = resolveResId(activity, "avatar_layout", FALLBACK_AVATAR_LAYOUT_ID)
 
-        val onLongClick = View.OnLongClickListener { v ->
+        val layoutView = if (avatarLayoutId != 0) root.findViewById<View>(avatarLayoutId) else null
+        val target = when {
+            layoutView != null -> {
+                val childAvatar = if (avatarId != 0) layoutView.findViewById<View>(avatarId) else null
+                when {
+                    layoutView.isClickable || layoutView.hasOnClickListeners() -> layoutView
+                    childAvatar != null && (childAvatar.isClickable || childAvatar.hasOnClickListeners()) -> childAvatar
+                    else -> layoutView
+                }
+            }
+            fromMainFragment && avatarId != 0 -> {
+                root.findViewById<View>(avatarId)?.takeIf { it.isClickable || it.hasOnClickListeners() }
+            }
+            else -> null
+        } ?: return
+
+        synchronized(boundAvatarViews) {
+            if (boundAvatarViews[target] == true) return
+            boundAvatarViews[target] = true
+        }
+
+        target.setOnLongClickListener { v ->
             val account = HostAccountResolver.resolve(activity, classLoader)
             if (!account.loggedIn) {
                 log("SettingHook：首頁頭像被長按，但用戶未登入，忽略操作")
-                return@OnLongClickListener false
+                return@setOnLongClickListener false
             }
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             log("SettingHook：首頁頭像被長按，正在開啟 BBZQ 設置")
             ModuleSettingsNavigator.open(activity, runtimeSnapshot())
             true
         }
-
-        var bound = false
-        if (avatarId != 0) {
-            root.findViewById<View>(avatarId)?.let { avatarView ->
-                avatarView.setOnLongClickListener(onLongClick)
-                bound = true
-            }
-        }
-        if (avatarLayoutId != 0) {
-            root.findViewById<View>(avatarLayoutId)?.let { layoutView ->
-                layoutView.setOnLongClickListener(onLongClick)
-                bound = true
-            }
-        }
-        if (bound) {
-            log("SettingHook：已在 ${activity.javaClass.simpleName} 綁定長按頭像監聽器")
-        }
+        log("SettingHook：已在 ${activity.javaClass.simpleName} 綁定長按頭像監聽器 (${target.javaClass.simpleName})")
     }
 
     private fun resolveResId(activity: Activity, name: String, fallback: Int): Int {

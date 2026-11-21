@@ -23,12 +23,18 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     override fun startHook() {
         if (env.processName != env.packageName) return
-        if (
-            !ModuleSettings.isDynamicPreferredVideoTabEnabled(prefs) &&
-            !ModuleSettings.isDynamicRemoveCityTabEnabled(prefs) &&
-            !ModuleSettings.isDynamicRemoveSchoolTabEnabled(prefs)
-        ) {
+        val tabFeaturesEnabled = ModuleSettings.isDynamicPreferredVideoTabEnabled(prefs) ||
+            ModuleSettings.isDynamicRemoveCityTabEnabled(prefs) ||
+            ModuleSettings.isDynamicRemoveSchoolTabEnabled(prefs)
+        val keywordFilterEnabled = ModuleSettings.isDynamicKeywordFilterEnabled(prefs)
+        if (!tabFeaturesEnabled && !keywordFilterEnabled) {
             log("startHook: DynamicPage disabled")
+            return
+        }
+
+        val keywordHooks = if (keywordFilterEnabled) env.hookDynamicKeywordFilter() else 0
+        if (!tabFeaturesEnabled) {
+            log("startHook: DynamicPage keyword filter installed ($keywordHooks hook(s))")
             return
         }
 
@@ -58,7 +64,7 @@ class DynamicPageHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("DynamicPage Fragment.onViewCreated hook unavailable")
         }
 
-        log("startHook: DynamicPage Activity.onResume + Fragment.onViewCreated, Kotlin hooks=$kotlinHooks")
+        log("startHook: DynamicPage Activity.onResume + Fragment.onViewCreated, Kotlin tab hooks=$kotlinHooks, keyword hooks=$keywordHooks")
     }
 
     private fun scheduleSweep(activity: Activity, root: View, ownerName: String) {

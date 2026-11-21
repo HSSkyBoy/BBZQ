@@ -52,7 +52,7 @@ internal fun SettingsContentFactory.aboutRows(): List<View> {
     }
     rows += createClickableInfoRow(
         context.getString(R.string.about_project_repository_title),
-        "Nk-Be/BBZQ",
+        "HSSkyBoy/BBZQ",
     ) {
         openUrl(PROJECT_REPOSITORY_URL)
     }

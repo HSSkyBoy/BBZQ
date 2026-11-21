@@ -314,7 +314,6 @@
     <string name="about_accept_prerelease_title">Receive pre-release updates</string>
     <string name="about_accept_prerelease_summary">Includes pre-release versions when checking for updates.</string>
     <string name="check_update_dialog_confirm">Download</string>
-    <string name="hook_update_available_toast">BBZQ %1$s is available. Open the module settings to download it.</string>
     <string name="about_export_config_title">Export settings</string>
     <string name="about_export_config_summary">Packs feature switches and manual settings into a ZIP. No data or account content is included.</string>
     <string name="about_import_config_title">Import settings</string>
@@ -599,7 +598,7 @@
     <string name="category_comment_title">Comments</string>
     <string name="category_comment_summary">Keywords · User level · Polls · Follow button</string>
     <string name="category_dynamic_title">Dynamics</string>
-    <string name="category_dynamic_summary">Preferred video tab · City / campus tabs</string>
+    <string name="category_dynamic_summary">Preferred video tab · City / campus · Keywords</string>
     <string name="category_mine_title">Me page</string>
     <string name="category_mine_summary">Member entry · Hide components · Full numbers</string>
     <string name="section_search">Search</string>
@@ -620,4 +619,41 @@
     <string name="settings_language_zh_cn">Simplified Chinese</string>
     <string name="settings_language_zh_tw">Traditional Chinese</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Dynamic keyword filter -->
+    <string name="dynamic_keyword_filter_title">Block dynamics by keyword</string>
+    <string name="dynamic_keyword_filter_summary">Hides dynamic posts matching your keywords across All, Video, and personal feeds (case-insensitive, matches text, reposts, titles, authors, and promo cards).</string>
+    <string name="dynamic_keyword_title">Dynamic blocked keywords</string>
+    <string name="dynamic_keyword_empty_summary">No keywords set. Tap to add keywords separated by new lines or commas.</string>
+    <string name="dynamic_keyword_summary">%1$d keywords active: %2$s</string>
+    <string name="dynamic_keyword_hint">One keyword per line, or separate with commas / semicolons</string>
+    <string name="dynamic_keyword_dialog_title">Edit dynamic blocked keywords</string>
+
+    <!-- Settings UX enhancements -->
+    <string name="settings_search_filter_all">All</string>
+    <string name="settings_search_filter_enabled">Enabled (%1$d)</string>
+    <string name="settings_search_enabled_empty">No matching enabled features</string>
+    <string name="settings_search_enabled_badge">ON</string>
+    <string name="home_status_enabled_chip">%1$d enabled</string>
+    <string name="home_status_symbol_ok">Symbols OK</string>
+    <string name="home_status_symbol_issue">Symbol issues</string>
+    <string name="home_status_symbol_pending">Pending scan</string>
+    <string name="home_category_enabled_count">%1$d</string>
+
+    <!-- Standalone launcher page (IntroActivity) -->
+    <string name="intro_hero_subtitle">Feature enhancements &amp; purification Xposed module for Bilibili</string>
+    <string name="intro_open_bilibili">Open Bilibili</string>
+    <string name="intro_open_bilibili_failed">Bilibili client is not installed</string>
+    <string name="intro_check_update">Check updates</string>
+    <string name="intro_open_settings">About &amp; launcher icon</string>
+    <string name="intro_open_settings_summary">Version info, hide launcher icon, and runtime environment</string>
+    <string name="intro_guide_hint">Full settings: open Bilibili → Me → Settings → Advanced settings, or long-press the top-left home avatar.</string>
+    <string name="intro_section_extras">Extra modules</string>
+    <string name="intro_section_links">About &amp; update channel</string>
+    <string name="intro_womic_title">WO Mic Unlock</string>
+    <string name="intro_womic_summary">Unlocks subscription &amp; volume boost, blocks ads, with compatible version info</string>
+    <string name="intro_readera_title">ReadEra Unlock</string>
+    <string name="intro_readera_summary">Removes background / screen-off TTS pause limits and paywall prompts</string>
+    <string name="intro_repo_summary">Official repository: HSSkyBoy/BBZQ (all future releases are published here)</string>
+    <string name="intro_repo_notice">Official releases and in-app update checks are now unified under HSSkyBoy/BBZQ.</string>
 </resources>

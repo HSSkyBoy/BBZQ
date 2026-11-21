@@ -38,6 +38,7 @@ class SettingsContentFactory(
     internal val onExportClick: () -> Unit,
     internal val onImportClick: () -> Unit,
     internal val onCustomSkinImportClick: () -> Unit,
+    internal val onOpenEnabledSettings: () -> Unit = {},
 ) {
     internal val pageBackgroundColor: Int by lazy { context.getColor(R.color.page_background) }
 
@@ -137,6 +138,12 @@ class SettingsContentFactory(
 
     internal lateinit var homeRecommendTitleKeywordSummaryView: TextView
 
+    internal lateinit var dynamicKeywordFilterSwitch: Switch
+
+    internal lateinit var dynamicKeywordRow: View
+
+    internal lateinit var dynamicKeywordSummaryView: TextView
+
     internal val seaServerRows = mutableMapOf<ResolverRegion, View>()
 
     internal val seaServerSummaries = mutableMapOf<ResolverRegion, TextView>()
@@ -234,7 +241,14 @@ class SettingsContentFactory(
 
     fun collectSearchTargets(): List<SettingsSearchTarget> {
         if (page == SettingsActivity.PAGE_ROOT) indexAllPages()
-        return searchTargets.toList()
+        return searchTargets.map { target ->
+            val provider = target.isEnabledProvider
+            if (provider != null) {
+                target.copy(item = target.item.copy(enabled = provider()))
+            } else {
+                target
+            }
+        }
     }
 
     fun findSearchTarget(key: String): SettingsSearchTarget? =
@@ -665,6 +679,17 @@ class SettingsContentFactory(
             commentKeywordRow.isEnabled = commentKeywordFilterEnabled
             commentKeywordRow.alpha = if (commentKeywordFilterEnabled) 1f else 0.45f
         }
+        val dynamicKeywordFilterEnabled = ModuleSettings.isDynamicKeywordFilterEnabled(prefs)
+        if (::dynamicKeywordFilterSwitch.isInitialized) {
+            dynamicKeywordFilterSwitch.isChecked = dynamicKeywordFilterEnabled
+        }
+        if (::dynamicKeywordSummaryView.isInitialized) {
+            dynamicKeywordSummaryView.text = dynamicKeywordSummary()
+        }
+        if (::dynamicKeywordRow.isInitialized) {
+            dynamicKeywordRow.isEnabled = dynamicKeywordFilterEnabled
+            dynamicKeywordRow.alpha = if (dynamicKeywordFilterEnabled) 1f else 0.45f
+        }
         val commentMinLevelEnabled = ModuleSettings.isCommentMinLevelEnabled(prefs)
         if (::commentMinLevelSwitch.isInitialized) {
             commentMinLevelSwitch.isChecked = commentMinLevelEnabled
@@ -807,7 +832,7 @@ class SettingsContentFactory(
     }
 
     internal companion object {
-        internal const val PROJECT_REPOSITORY_URL = "https://github.com/Nk-Be/BBZQ"
+        internal const val PROJECT_REPOSITORY_URL = "https://github.com/HSSkyBoy/BBZQ"
         internal const val TELEGRAM_CHANNEL_URL = "https://t.me/bbx_show"
         internal const val VERSION_TAP_WINDOW_MS = 1500L
         internal const val TITLE_KEYWORD_SUMMARY_MAX_ITEMS = 4
@@ -824,6 +849,6 @@ class SettingsContentFactory(
         )
         /** 检查更新弹窗「前往下载」的兜底地址，当 Release 未给出链接时使用。 */
         internal const val RELEASE_PAGE_URL =
-            "https://github.com/Xposed-Modules-Repo/io.github.bbzq/releases/latest"
+            "https://github.com/HSSkyBoy/BBZQ/releases/latest"
     }
 }

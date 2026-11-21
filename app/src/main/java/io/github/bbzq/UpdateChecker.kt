@@ -1,5 +1,6 @@
 package io.github.bbzq
 
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import java.io.IOException
@@ -13,7 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 通过 LSPosed 模块仓库的 GitHub Release API 检查模组是否有新版本。
+ * 通过主仓库（HSSkyBoy/BBZQ）的 GitHub Release API 检查模组是否有新版本。
  *
  * 先按发布通道过滤（默认仅正式版；接收测试版时纳入 prerelease），再取最新 Release
  * 与当前版本比较，判定优先级：
@@ -21,9 +22,10 @@ import org.json.JSONObject
  * 2. 版本号（versionName）：最新版版本号更高 → 有更新；
  * 3. 其余情况（版本号相同或更低）→ 已是最新。
  *
- * versionCode 取自 tag_name 开头的数字（如 133-v1.0.3-133 → 133），versionName 优先取 tag_name
- * （剥离 versionCode 前后缀，name 字段作为备选），
- * 更新日志取 body，安装包大小取 APK 资产的 size。
+ * versionCode 优先从 APK 资产文件名提取（如 `bbzq_v1.6.0-440-arm64-v8a.apk` → 440），
+ * 若资产名未包含则兼容从 tag_name 开头数字解析（如 `356-v1.5.1-356` → 356）；
+ * versionName 优先取 tag_name（剥离 versionCode 前后缀，name 字段作为备选），
+ * 更新日志取 body，安装包大小优先取当前设备 ABI 对应的 APK 资产大小。
  *
  * 结果回调统一切回主线程，便于直接更新 UI。
  */
@@ -33,7 +35,7 @@ object UpdateChecker {
     data class Result(
         /** 检查结果状态：已最新 / 有更新 / 失败 */
         val status: Status,
-        /** 最新 Release 的版本名（已规范化，如 1.0.3），失败时为 null */
+        /** 最新 Release 的版本名（已规范化，如 1.6.0），失败时为 null */
         val latestVersion: String? = null,
         /** 本地当前版本名（BuildConfig.RELEASE_NAME），便于回显 */
         val currentVersion: String? = null,
@@ -58,13 +60,13 @@ object UpdateChecker {
 
     /** 单个 Release 的精简信息。 */
     private data class ReleaseInfo(
-        /** 版本名（优先取自 tag_name，name 字段为备选，如 v1.0.3） */
+        /** 版本名（优先取自 tag_name，name 字段为备选，如 v1.6.0） */
         val versionName: String,
         /** Release 详情页地址（来自 html_url） */
         val htmlUrl: String,
         /** 更新日志原文（来自 body） */
         val body: String,
-        /** 从 tag_name 开头数字解析出的 versionCode，无则为 0 */
+        /** 从 APK 资产名或 tag_name 解析出的 versionCode，无则为 0 */
         val versionCode: Int,
         /** APK 安装包大小（字节），无则为 0 */
         val apkSizeBytes: Long,
@@ -151,7 +153,7 @@ object UpdateChecker {
             return Result(Status.UP_TO_DATE, currentVersion = currentVersion)
         }
 
-        // 优先按 versionCode、其次按版本号选出最新 Release。
+        // 优先按版本号、同版本号再按 versionCode 选出最新 Release。
         val latest = releases.maxWithOrNull { left, right -> compareRelease(left, right) }
             ?: return Result(Status.FAILED, currentVersion = currentVersion)
 
@@ -171,27 +173,31 @@ object UpdateChecker {
     /**
      * 判断是否有更新。
      *
-     * - 两端 versionCode 均有效：直接以 versionCode 高低为准；
-     * - 否则按版本号：最新版版本号更高 → 有更新；
-     * - 其余情况（版本号相同或更低）→ 已是最新。
+     * - 语义化版本号更高 → 有更新；版本号更低 → 无更新；
+     * - 版本号相同且两端 versionCode 均有效 → 以 versionCode 高低为准；
+     * - 其余情况 → 已是最新。
      */
     private fun hasUpdate(
         latest: ReleaseInfo,
         currentVersion: String,
         currentVersionCode: Int,
     ): Boolean {
+        val versionCmp = compareVersion(latest.versionName, currentVersion)
+        if (versionCmp != 0) return versionCmp > 0
         if (latest.versionCode > 0 && currentVersionCode > 0) {
             return latest.versionCode > currentVersionCode
         }
-        return compareVersion(latest.versionName, currentVersion) > 0
+        return false
     }
 
-    /** 列表内排序用：先比 versionCode，缺失则比版本号。 */
+    /** 列表内排序用：先比版本号，同版本再比 versionCode。 */
     private fun compareRelease(left: ReleaseInfo, right: ReleaseInfo): Int {
+        val versionCmp = compareVersion(left.versionName, right.versionName)
+        if (versionCmp != 0) return versionCmp
         if (left.versionCode > 0 && right.versionCode > 0) {
             return left.versionCode.compareTo(right.versionCode)
         }
-        return compareVersion(left.versionName, right.versionName)
+        return 0
     }
 
     /** 解析 Release 列表，丢弃 draft 与无版本名的条目。 */
@@ -202,10 +208,9 @@ object UpdateChecker {
             val releaseObject = releaseArray.optJSONObject(index) ?: continue
             if (releaseObject.optBoolean("draft", false)) continue
             val tagName = jsonString(releaseObject, "tag_name")
-            val versionCode = parseVersionCode(tagName)
-            // 版本名优先取 tag_name（剥离首尾 versionCode 前后缀，避免 `133-v1.0.3-133`
-            // 的数字前缀被当成主版本号），无法得出时退回 name 字段。
-            val versionName = versionNameFromTag(tagName, versionCode).ifBlank { jsonString(releaseObject, "name") }
+            val tagVersionCode = parseTagVersionCode(tagName)
+            val versionCode = parseAssetVersionCode(releaseObject).takeIf { it > 0 } ?: tagVersionCode
+            val versionName = versionNameFromTag(tagName, tagVersionCode).ifBlank { jsonString(releaseObject, "name") }
             if (versionName.isBlank()) continue
             val htmlUrl = jsonString(releaseObject, "html_url").takeIf { it.isNotBlank() } ?: RELEASE_PAGE_URL
             releases += ReleaseInfo(
@@ -221,23 +226,34 @@ object UpdateChecker {
     }
 
     /**
-     * 从 tag_name 开头的数字解析 versionCode。
-     *
-     * LSPosed 仓库 tag 形如 `133-v1.0.3-133`，开头第一段即 versionCode；无则返回 0。
+     * 从 APK 资产文件名中提取 versionCode（如 `bbzq_v1.6.0-440-arm64-v8a.apk` → 440）。
      */
-    private fun parseVersionCode(tagName: String): Int =
+    private fun parseAssetVersionCode(release: JSONObject): Int {
+        val assets = release.optJSONArray("assets") ?: return 0
+        for (index in 0 until assets.length()) {
+            val asset = assets.optJSONObject(index) ?: continue
+            val name = asset.optString("name")
+            if (!name.endsWith(".apk", ignoreCase = true)) continue
+            val match = APK_VERSION_CODE_REGEX.find(name) ?: continue
+            val code = match.groupValues[1].toIntOrNull() ?: 0
+            if (code > 0) return code
+        }
+        return 0
+    }
+
+    /**
+     * 兼容旧式 tag_name 开头数字解析 versionCode（如 `356-v1.5.1-356` → 356）；无则返回 0。
+     */
+    private fun parseTagVersionCode(tagName: String): Int =
         tagName.substringBefore('-', "").toIntOrNull() ?: 0
 
     /**
      * 由 tag_name 推导可读版本名（版本名的首选来源）。
-     *
-     * LSPosed tag 形如 `133-v1.0.3-133`：先剥离开头的 versionCode 前缀，再剥离结尾的 `-133` 后缀，
-     * 得到 `v1.0.3`，避免数字前缀被 compareVersion 误当成主版本号。tag 为空时返回空串（交由调用方退回 name）。
      */
-    private fun versionNameFromTag(tagName: String, versionCode: Int): String {
+    private fun versionNameFromTag(tagName: String, tagVersionCode: Int): String {
         if (tagName.isBlank()) return ""
-        if (versionCode <= 0) return tagName
-        val codeText = versionCode.toString()
+        if (tagVersionCode <= 0) return tagName
+        val codeText = tagVersionCode.toString()
         return tagName
             .removePrefix("$codeText-")
             .removeSuffix("-$codeText")
@@ -248,18 +264,37 @@ object UpdateChecker {
     private fun jsonString(jsonObject: JSONObject, key: String): String =
         if (jsonObject.isNull(key)) "" else jsonObject.optString(key)
 
-    /** 取 Release 中 APK 资产的大小（字节），多个时取最大值，无则返回 0。 */
+    /** 取 Release 中优先匹配当前设备 ABI 的 APK 资产大小（字节），无匹配时取最大 APK 大小。 */
     private fun parseApkSize(release: JSONObject): Long {
         val assets = release.optJSONArray("assets") ?: return 0
+        val abiTokens = preferredAbiTokens()
+        var preferredSize = 0L
         var maxSize = 0L
         for (index in 0 until assets.length()) {
             val asset = assets.optJSONObject(index) ?: continue
-            if (!asset.optString("name").endsWith(".apk", ignoreCase = true)) continue
+            val name = asset.optString("name")
+            if (!name.endsWith(".apk", ignoreCase = true)) continue
             val assetSize = asset.optLong("size", 0)
             if (assetSize > maxSize) maxSize = assetSize
+            if (preferredSize == 0L && abiTokens.any { token -> name.contains(token, ignoreCase = true) }) {
+                preferredSize = assetSize
+            }
         }
-        return maxSize
+        return if (preferredSize > 0L) preferredSize else maxSize
     }
+
+    private fun preferredAbiTokens(): List<String> =
+        runCatching { Build.SUPPORTED_ABIS.toList() }
+            .getOrDefault(emptyList())
+            .mapNotNull { abi ->
+                when (abi) {
+                    "arm64-v8a" -> "-arm64-v8a"
+                    "armeabi-v7a" -> "-armv7a"
+                    "x86_64" -> "-x86_64"
+                    else -> null
+                }
+            }
+            .distinct()
 
     private fun postResult(onResult: (Result) -> Unit, result: Result) {
         mainHandler.post { onResult(result) }
@@ -283,20 +318,26 @@ object UpdateChecker {
             .split('.')
             .map { part -> part.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
 
-    /** 去掉前缀 v / V 与首尾空白（如 v1.0.3 → 1.0.3）。 */
+    /** 去掉前缀 v / V 与首尾空白（如 v1.6.0 → 1.6.0）。 */
     private fun normalizeVersion(version: String): String =
         version.trim()
             .removePrefix("v")
             .removePrefix("V")
             .trim()
 
-    /** LSPosed 模块仓库的 Release 列表 API，单次最多取 30 条。 */
+    private val APK_VERSION_CODE_REGEX = Regex("""v\d+(?:\.\d+)+-(\d+)(?:-|(?:\.apk$))""", RegexOption.IGNORE_CASE)
+
+    /** 主仓库 Release 列表 API，单次最多取 30 条。 */
     private const val RELEASE_API_URL =
-        "https://api.github.com/repos/Xposed-Modules-Repo/io.github.bbzq/releases?per_page=30"
+        "https://api.github.com/repos/HSSkyBoy/BBZQ/releases?per_page=30"
 
     /** Release 列表为空或缺少链接时，跳转的兜底 Release 页地址。 */
-    private const val RELEASE_PAGE_URL =
-        "https://github.com/Xposed-Modules-Repo/io.github.bbzq/releases/latest"
+    const val RELEASE_PAGE_URL =
+        "https://github.com/HSSkyBoy/BBZQ/releases/latest"
+
+    /** 主仓库首页地址。 */
+    const val PROJECT_REPOSITORY_URL =
+        "https://github.com/HSSkyBoy/BBZQ"
 
     /** 请求头 User-Agent，GitHub API 要求携带。 */
     private const val USER_AGENT = "BBZQ-UpdateChecker"

@@ -314,7 +314,6 @@
     <string name="about_accept_prerelease_title">接收測試版更新</string>
     <string name="about_accept_prerelease_summary">開啟後檢查更新將包含預發布（pre-release）版本。</string>
     <string name="check_update_dialog_confirm">前往下載</string>
-    <string name="hook_update_available_toast">BBZQ 發現新版本 %1$s，請前往模組設定下載。</string>
     <string name="about_export_config_title">匯出設定</string>
     <string name="about_export_config_summary">以 ZIP 打包匯出功能開關與手動設定，不包含資料或帳號內容。</string>
     <string name="about_import_config_title">匯入設定</string>
@@ -606,7 +605,7 @@
     <string name="category_comment_title">評論區</string>
     <string name="category_comment_summary">關鍵字 · 用戶等級 · 投票 · 關注按鈕</string>
     <string name="category_dynamic_title">動態</string>
-    <string name="category_dynamic_summary">首選影片標籤 · 同城／校園標籤</string>
+    <string name="category_dynamic_summary">首選影片標籤 · 同城／校園 · 關鍵字屏蔽</string>
     <string name="category_mine_title">我的頁</string>
     <string name="category_mine_summary">大會員入口 · 元件隱藏 · 完整數字</string>
     <string name="section_search">搜尋</string>
@@ -627,4 +626,41 @@
     <string name="settings_language_zh_cn">簡體中文</string>
     <string name="settings_language_zh_tw">正體中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- 動態頁關鍵字屏蔽 -->
+    <string name="dynamic_keyword_filter_title">依關鍵字屏蔽動態</string>
+    <string name="dynamic_keyword_filter_summary">在動態「綜合」「影片」及個人動態流中隱藏包含指定關鍵字的動態（不區分大小寫，涵蓋內文、轉發、標題、作者與商品卡片）。</string>
+    <string name="dynamic_keyword_title">動態屏蔽關鍵字</string>
+    <string name="dynamic_keyword_empty_summary">尚未設定關鍵字。點擊新增，多筆關鍵字支援換行或逗號分隔。</string>
+    <string name="dynamic_keyword_summary">已設定 %1$d 個關鍵字：%2$s</string>
+    <string name="dynamic_keyword_hint">每行一個關鍵字，或使用逗號／頓號／分號分隔</string>
+    <string name="dynamic_keyword_dialog_title">編輯動態屏蔽關鍵字</string>
+
+    <!-- 設定介面互動與狀態增強 -->
+    <string name="settings_search_filter_all">全部</string>
+    <string name="settings_search_filter_enabled">僅看已開啟 (%1$d)</string>
+    <string name="settings_search_enabled_empty">目前沒有已開啟的相符功能</string>
+    <string name="settings_search_enabled_badge">已開啟</string>
+    <string name="home_status_enabled_chip">已開啟 %1$d 項</string>
+    <string name="home_status_symbol_ok">符號正常</string>
+    <string name="home_status_symbol_issue">符號異常</string>
+    <string name="home_status_symbol_pending">等待掃描</string>
+    <string name="home_category_enabled_count">%1$d</string>
+
+    <!-- 獨立啟動頁（IntroActivity） -->
+    <string name="intro_hero_subtitle">嗶哩嗶哩功能增強與淨化 Xposed 模組</string>
+    <string name="intro_open_bilibili">開啟嗶哩嗶哩</string>
+    <string name="intro_open_bilibili_failed">找不到已安裝的嗶哩嗶哩用戶端</string>
+    <string name="intro_check_update">檢查更新</string>
+    <string name="intro_open_settings">關於與桌面圖示</string>
+    <string name="intro_open_settings_summary">版本資訊、隱藏桌面圖示與執行環境</string>
+    <string name="intro_guide_hint">完整設定入口：開啟嗶哩嗶哩 → 我的 → 設定 → 進階設定，或長按首頁左上角頭像。</string>
+    <string name="intro_section_extras">附加模組</string>
+    <string name="intro_section_links">關於與更新管道</string>
+    <string name="intro_womic_title">WO Mic 解鎖</string>
+    <string name="intro_womic_summary">解鎖訂閱與進階音量、攔截廣告，並提供已適配版本說明</string>
+    <string name="intro_readera_title">ReadEra 解鎖</string>
+    <string name="intro_readera_summary">解除背景與熄屏朗讀限制，移除付費提示</string>
+    <string name="intro_repo_summary">官方發布倉庫：HSSkyBoy/BBZQ（後續更新統一由此倉庫發布）</string>
+    <string name="intro_repo_notice">官方倉庫已統一至 HSSkyBoy/BBZQ，內建檢查更新與正式版皆於此發布。</string>
 </resources>

@@ -7,9 +7,11 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -371,6 +373,7 @@ class SettingsActivity : Activity() {
             onExportClick = { launchExportConfig() },
             onImportClick = { launchImportConfig() },
             onCustomSkinImportClick = { launchCustomSkinImport() },
+            onOpenEnabledSettings = { showSettingsSearchDialog(initialEnabledOnly = true) },
         )
 
     // ── File Picking / Import / Export ────────────────────────────────────────
@@ -540,7 +543,23 @@ class SettingsActivity : Activity() {
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
 
+    private fun toolbarRipple(rippleBaseColor: Int): RippleDrawable {
+        val rippleColor = Color.argb(
+            0x2C,
+            Color.red(rippleBaseColor),
+            Color.green(rippleBaseColor),
+            Color.blue(rippleBaseColor),
+        )
+        val mask = GradientDrawable().apply {
+            cornerRadius = dp(8).toFloat()
+            setColor(Color.WHITE)
+        }
+        return RippleDrawable(ColorStateList.valueOf(rippleColor), null, mask)
+    }
+
     private fun createToolbar(page: String): LinearLayout {
+        val titleColor = getColor(R.color.title_text)
+        val accentColor = getColor(R.color.accent_pink)
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -551,10 +570,11 @@ class SettingsActivity : Activity() {
             addView(TextView(this@SettingsActivity).apply {
                 text = "←"
                 textSize = 22f
-                setTextColor(getColor(R.color.title_text))
+                setTextColor(titleColor)
                 isClickable = true
                 isFocusable = true
-                setPadding(0, dp(2), dp(12), dp(2))
+                background = toolbarRipple(titleColor)
+                setPadding(dp(4), dp(2), dp(10), dp(2))
                 visibility = if (pageStack.size > 1) View.VISIBLE else View.GONE
                 setOnClickListener { navigateBack() }
                 backButtonView = this
@@ -563,7 +583,7 @@ class SettingsActivity : Activity() {
             addView(TextView(this@SettingsActivity).apply {
                 text = toolbarTitle(page)
                 textSize = 20f
-                setTextColor(getColor(R.color.title_text))
+                setTextColor(titleColor)
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 toolbarTitleView = this
             })
@@ -573,6 +593,7 @@ class SettingsActivity : Activity() {
                 contentDescription = getString(R.string.settings_search_description)
                 isClickable = true
                 isFocusable = true
+                background = toolbarRipple(titleColor)
                 setPadding(dp(8), dp(4), dp(8), dp(4))
                 visibility = if (hostEntry) View.VISIBLE else View.GONE
                 setOnClickListener { showSettingsSearchDialog() }
@@ -582,9 +603,10 @@ class SettingsActivity : Activity() {
                 text = getString(R.string.toolbar_save_and_restart)
                 visibility = if (hostEntry) View.VISIBLE else View.GONE
                 textSize = 15f
-                setTextColor(getColor(R.color.accent_pink))
+                setTextColor(accentColor)
                 isClickable = true
                 isFocusable = true
+                background = toolbarRipple(accentColor)
                 setPadding(dp(8), dp(4), dp(8), dp(4))
                 setOnClickListener {
                     RootUtils.showRestartBilibiliDialog(this@SettingsActivity, prefs)
@@ -594,9 +616,10 @@ class SettingsActivity : Activity() {
             addView(TextView(this@SettingsActivity).apply {
                 text = getString(R.string.settings_done)
                 textSize = 15f
-                setTextColor(getColor(R.color.accent_pink))
+                setTextColor(accentColor)
                 isClickable = true
                 isFocusable = true
+                background = toolbarRipple(accentColor)
                 setPadding(dp(8), dp(4), dp(8), dp(4))
                 setOnClickListener { finish() }
             })
@@ -615,10 +638,11 @@ class SettingsActivity : Activity() {
             ?: getString(R.string.settings_title)
     }
 
-    private fun showSettingsSearchDialog() {
+    private fun showSettingsSearchDialog(initialEnabledOnly: Boolean = false) {
         SettingsSearchDialog.show(
             activity = this,
             targets = globalSearchFactory().collectSearchTargets(),
+            initialEnabledOnly = initialEnabledOnly,
             onPick = ::revealSearchTarget,
         )
     }

@@ -346,7 +346,6 @@
     <string name="about_accept_prerelease_title">接收测试版更新</string>
     <string name="about_accept_prerelease_summary">开启后检查更新将包含预发布（pre-release）版本。</string>
     <string name="check_update_dialog_confirm">前往下载</string>
-    <string name="hook_update_available_toast">BBZQ 发现新版本 %1$s，请前往模块设置下载。</string>
     <string name="about_export_config_title">导出配置</string>
     <string name="about_export_config_summary">以 ZIP 打包导出功能开关与手动配置，不包含数据或账户内容。</string>
     <string name="about_import_config_title">导入配置</string>
@@ -650,7 +649,7 @@
     <string name="category_comment_title">评论区</string>
     <string name="category_comment_summary">关键词 · 用户等级 · 投票 · 关注按钮</string>
     <string name="category_dynamic_title">动态</string>
-    <string name="category_dynamic_summary">首选视频标签 · 同城 / 校园标签</string>
+    <string name="category_dynamic_summary">首选视频标签 · 同城 / 校园 · 关键词屏蔽</string>
     <string name="category_mine_title">我的页</string>
     <string name="category_mine_summary">大会员入口 · 组件隐藏 · 完整数字</string>
     <string name="section_search">搜索</string>
@@ -671,4 +670,41 @@
     <string name="settings_language_zh_cn">简体中文</string>
     <string name="settings_language_zh_tw">正体中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- 动态页关键词屏蔽 -->
+    <string name="dynamic_keyword_filter_title">按关键词屏蔽动态</string>
+    <string name="dynamic_keyword_filter_summary">在动态「综合」「视频」及个人动态流中隐藏包含指定关键词的动态（不区分大小写，覆盖正文、转发、标题、作者与商品卡片）。</string>
+    <string name="dynamic_keyword_title">动态屏蔽关键词</string>
+    <string name="dynamic_keyword_empty_summary">未设置关键词。点击添加，多条关键词支持换行或逗号分隔。</string>
+    <string name="dynamic_keyword_summary">已设置 %1$d 个关键词：%2$s</string>
+    <string name="dynamic_keyword_hint">每行一个关键词，或使用逗号 / 顿号 / 分号分隔</string>
+    <string name="dynamic_keyword_dialog_title">编辑动态屏蔽关键词</string>
+
+    <!-- 设置界面交互与状态增强 -->
+    <string name="settings_search_filter_all">全部</string>
+    <string name="settings_search_filter_enabled">仅看已开启 (%1$d)</string>
+    <string name="settings_search_enabled_empty">当前没有已开启的匹配功能</string>
+    <string name="settings_search_enabled_badge">已开启</string>
+    <string name="home_status_enabled_chip">已开启 %1$d 项</string>
+    <string name="home_status_symbol_ok">符号正常</string>
+    <string name="home_status_symbol_issue">符号异常</string>
+    <string name="home_status_symbol_pending">等待扫描</string>
+    <string name="home_category_enabled_count">%1$d</string>
+
+    <!-- 独立启动页（IntroActivity） -->
+    <string name="intro_hero_subtitle">哔哩哔哩功能增强与净化 Xposed 模块</string>
+    <string name="intro_open_bilibili">打开哔哩哔哩</string>
+    <string name="intro_open_bilibili_failed">未找到已安装的哔哩哔哩客户端</string>
+    <string name="intro_check_update">检查更新</string>
+    <string name="intro_open_settings">关于与桌面图标</string>
+    <string name="intro_open_settings_summary">版本信息、隐藏桌面图标与运行环境</string>
+    <string name="intro_guide_hint">完整设置入口：打开哔哩哔哩 → 我的 → 设置 → 高级设置，或长按首页左上角头像。</string>
+    <string name="intro_section_extras">附加模块</string>
+    <string name="intro_section_links">关于与更新渠道</string>
+    <string name="intro_womic_title">WO Mic 解锁</string>
+    <string name="intro_womic_summary">解锁订阅与高级音量、拦截广告，并提供已适配版本说明</string>
+    <string name="intro_readera_title">ReadEra 解锁</string>
+    <string name="intro_readera_summary">解除后台与熄屏朗读限制，去除付费提示</string>
+    <string name="intro_repo_summary">官方发布仓库：HSSkyBoy/BBZQ（后续更新统一从此仓库发布）</string>
+    <string name="intro_repo_notice">官方仓库已统一至 HSSkyBoy/BBZQ，内置检查更新与正式版均在此发布。</string>
 </resources>

@@ -1,9 +1,11 @@
 package io.github.bbzq.ui.settings
 
 import android.app.AlertDialog
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.text.Editable
 import android.text.SpannableString
 import android.text.Spanned
@@ -27,16 +29,24 @@ internal object SettingsSearchDialog {
     fun show(
         activity: SettingsActivity,
         targets: List<SettingsSearchTarget>,
+        initialEnabledOnly: Boolean = false,
         onPick: (SettingsSearchTarget) -> Unit,
     ) {
         val density = activity.resources.displayMetrics.density
         val titleColor = activity.getColor(R.color.title_text)
         val summaryColor = activity.getColor(R.color.summary_text)
         val accent = activity.getColor(R.color.accent_pink)
+        val accentPrimary = activity.getColor(R.color.accent_primary)
+        val onAccent = activity.getColor(R.color.on_accent_primary)
         val cardColor = activity.getColor(R.color.card_background)
         val pageColor = activity.getColor(R.color.page_background)
+        val secondaryBg = activity.getColor(R.color.secondary_button_background)
+        val rippleColor = colorWithAlpha(summaryColor, 0x26)
         val targetByKey = targets.associateBy { it.item.key }
+        val allItems = targets.map(SettingsSearchTarget::item)
+        val enabledCount = SettingsSearchMatcher.filterEnabled("", allItems).size
 
+        var enabledOnly = initialEnabledOnly
         var dialog: AlertDialog? = null
         var picked = false
         fun pick(target: SettingsSearchTarget) {
@@ -65,6 +75,90 @@ internal object SettingsSearchDialog {
             }
         }
 
+        fun pillBackground(fillColor: Int): RippleDrawable {
+            val content = GradientDrawable().apply {
+                cornerRadius = 16f * density
+                setColor(fillColor)
+            }
+            val mask = GradientDrawable().apply {
+                cornerRadius = 16f * density
+                setColor(Color.WHITE)
+            }
+            return RippleDrawable(ColorStateList.valueOf(rippleColor), content, mask)
+        }
+
+        fun itemRippleBackground(): RippleDrawable {
+            val content = GradientDrawable().apply {
+                cornerRadius = 10f * density
+                setColor(Color.TRANSPARENT)
+            }
+            val mask = GradientDrawable().apply {
+                cornerRadius = 10f * density
+                setColor(Color.WHITE)
+            }
+            return RippleDrawable(ColorStateList.valueOf(rippleColor), content, mask)
+        }
+
+        val allTab = TextView(activity).apply {
+            text = activity.getString(R.string.settings_search_filter_all)
+            textSize = 12f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setPadding(
+                (12 * density).toInt(),
+                (6 * density).toInt(),
+                (12 * density).toInt(),
+                (6 * density).toInt(),
+            )
+            isClickable = true
+            isFocusable = true
+        }
+        val enabledTab = TextView(activity).apply {
+            text = activity.getString(R.string.settings_search_filter_enabled, enabledCount)
+            textSize = 12f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setPadding(
+                (12 * density).toInt(),
+                (6 * density).toInt(),
+                (12 * density).toInt(),
+                (6 * density).toInt(),
+            )
+            isClickable = true
+            isFocusable = true
+        }
+
+        fun updateFilterTabs() {
+            if (enabledOnly) {
+                allTab.setTextColor(summaryColor)
+                allTab.background = pillBackground(secondaryBg)
+                enabledTab.setTextColor(onAccent)
+                enabledTab.background = pillBackground(accentPrimary)
+            } else {
+                allTab.setTextColor(onAccent)
+                allTab.background = pillBackground(accentPrimary)
+                enabledTab.setTextColor(summaryColor)
+                enabledTab.background = pillBackground(secondaryBg)
+            }
+        }
+
+        val filterBar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                allTab,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(
+                enabledTab,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = (8 * density).toInt() },
+            )
+        }
+
         val resultContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -91,20 +185,20 @@ internal object SettingsSearchDialog {
 
         fun renderResults(query: String) {
             resultContainer.removeAllViews()
-            val results = SettingsSearchMatcher.searchMatches(
-                query = query,
-                items = targets.map(SettingsSearchTarget::item),
-            )
-            if (query.isBlank() || results.isEmpty()) {
+            val results = if (enabledOnly) {
+                SettingsSearchMatcher.filterEnabled(query = query, items = allItems)
+            } else {
+                SettingsSearchMatcher.searchMatches(query = query, items = allItems)
+            }
+            if ((!enabledOnly && query.isBlank()) || results.isEmpty()) {
+                val emptyTextRes = when {
+                    enabledOnly -> R.string.settings_search_enabled_empty
+                    query.isBlank() -> R.string.settings_search_prompt
+                    else -> R.string.settings_search_empty
+                }
                 resultContainer.addView(
                     TextView(activity).apply {
-                        text = activity.getString(
-                            if (query.isBlank()) {
-                                R.string.settings_search_prompt
-                            } else {
-                                R.string.settings_search_empty
-                            },
-                        )
+                        text = activity.getString(emptyTextRes)
                         gravity = Gravity.CENTER
                         setTextColor(summaryColor)
                         textSize = 13f
@@ -136,15 +230,47 @@ internal object SettingsSearchDialog {
                             (12 * density).toInt(),
                             (10 * density).toInt(),
                         )
+                        background = itemRippleBackground()
                         isClickable = true
                         isFocusable = true
                         contentDescription = "${item.title}. ${item.section}"
                         setOnClickListener { pick(target) }
                         addView(
-                            TextView(activity).apply {
-                                text = highlightedSettingsSearchText(item.title, match.titleRanges, accent)
-                                setTextColor(titleColor)
-                                textSize = 15f
+                            LinearLayout(activity).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = Gravity.CENTER_VERTICAL
+                                addView(
+                                    TextView(activity).apply {
+                                        text = highlightedSettingsSearchText(item.title, match.titleRanges, accent)
+                                        setTextColor(titleColor)
+                                        textSize = 15f
+                                    },
+                                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                                )
+                                if (item.enabled) {
+                                    addView(
+                                        TextView(activity).apply {
+                                            text = activity.getString(R.string.settings_search_enabled_badge)
+                                            textSize = 10f
+                                            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                                            setTextColor(accentPrimary)
+                                            setPadding(
+                                                (7 * density).toInt(),
+                                                (2 * density).toInt(),
+                                                (7 * density).toInt(),
+                                                (2 * density).toInt(),
+                                            )
+                                            background = GradientDrawable().apply {
+                                                cornerRadius = 8f * density
+                                                setColor(colorWithAlpha(accentPrimary, 0x22))
+                                            }
+                                        },
+                                        LinearLayout.LayoutParams(
+                                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                                        ).apply { marginStart = (8 * density).toInt() },
+                                    )
+                                }
                             },
                         )
                         if (item.detail.isNotBlank()) {
@@ -184,6 +310,19 @@ internal object SettingsSearchDialog {
             }
         }
 
+        allTab.setOnClickListener {
+            if (!enabledOnly) return@setOnClickListener
+            enabledOnly = false
+            updateFilterTabs()
+            renderResults(editor.text?.toString().orEmpty())
+        }
+        enabledTab.setOnClickListener {
+            if (enabledOnly) return@setOnClickListener
+            enabledOnly = true
+            updateFilterTabs()
+            renderResults(editor.text?.toString().orEmpty())
+        }
+
         editor.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -191,6 +330,7 @@ internal object SettingsSearchDialog {
                 renderResults(editable?.toString().orEmpty())
             }
         })
+        updateFilterTabs()
         renderResults("")
 
         val container = LinearLayout(activity).apply {
@@ -218,11 +358,18 @@ internal object SettingsSearchDialog {
                 ).apply { topMargin = (12 * density).toInt() },
             )
             addView(
-                resultScroll,
+                filterBar,
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = (10 * density).toInt() },
+            )
+            addView(
+                resultScroll,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = (8 * density).toInt() },
             )
         }
 
@@ -233,9 +380,15 @@ internal object SettingsSearchDialog {
         @Suppress("DEPRECATION")
         dialog?.window?.setSoftInputMode(
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE,
+                if (initialEnabledOnly) {
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+                } else {
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+                },
         )
-        dialog?.setOnShowListener { editor.requestFocus() }
+        if (!initialEnabledOnly) {
+            dialog?.setOnShowListener { editor.requestFocus() }
+        }
         dialog?.show()
     }
 

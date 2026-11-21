@@ -733,6 +733,10 @@ private fun SettingsContentFactory.createCustomCdnWifiRow(): View {
             context.getString(R.string.cdn_wifi_priority_title),
             context.getString(R.string.cdn_wifi_priority_summary_empty),
             "action:${context.getString(R.string.cdn_wifi_priority_title)}",
+            isEnabledProvider = {
+                prefs.getBoolean(ModuleSettings.KEY_CDN_WIFI_ENABLED, false) &&
+                    ModuleSettings.getCdnPriorityList(prefs, ModuleSettings.KEY_CDN_WIFI_PRIORITY).isNotEmpty()
+            },
         )
     }
 }
@@ -764,6 +768,10 @@ private fun SettingsContentFactory.createCustomCdnCellularRow(): View {
             context.getString(R.string.cdn_cellular_priority_title),
             context.getString(R.string.cdn_wifi_priority_summary_empty),
             "action:${context.getString(R.string.cdn_cellular_priority_title)}",
+            isEnabledProvider = {
+                prefs.getBoolean(ModuleSettings.KEY_CDN_CELLULAR_ENABLED, false) &&
+                    ModuleSettings.getCdnPriorityList(prefs, ModuleSettings.KEY_CDN_CELLULAR_PRIORITY).isNotEmpty()
+            },
         )
     }
 }

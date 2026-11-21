@@ -71,6 +71,9 @@ object ModuleSettings {
     const val KEY_DYNAMIC_PREFERRED_VIDEO_TAB_ENABLED = "dynamic_preferred_video_tab_enabled"
     const val KEY_DYNAMIC_REMOVE_CITY_TAB_ENABLED = "dynamic_remove_city_tab_enabled"
     const val KEY_DYNAMIC_REMOVE_SCHOOL_TAB_ENABLED = "dynamic_remove_school_tab_enabled"
+    const val KEY_DYNAMIC_KEYWORD_FILTER_ENABLED = "dynamic_keyword_filter_enabled"
+    const val KEY_DYNAMIC_KEYWORDS = "dynamic_keywords"
+    const val MAX_DYNAMIC_KEYWORDS = 64
     const val KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED = "custom_home_recommend_filter_enabled"
     const val KEY_HIDDEN_HOME_RECOMMEND_ITEMS = "hidden_home_recommend_items"
     const val KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED = "custom_home_recommend_tab_filter_enabled"
@@ -369,6 +372,9 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_DYNAMIC_REMOVE_SCHOOL_TAB_ENABLED, ExportableValueType.BOOLEAN) {
             it.getBoolean(KEY_DYNAMIC_REMOVE_SCHOOL_TAB_ENABLED, false)
         },
+        ExportableConfigSpec(KEY_DYNAMIC_KEYWORD_FILTER_ENABLED, ExportableValueType.BOOLEAN) {
+            it.getBoolean(KEY_DYNAMIC_KEYWORD_FILTER_ENABLED, false)
+        },
         ExportableConfigSpec(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_TAB_FILTER_ENABLED, false) },
         ExportableConfigSpec(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_CUSTOM_VIDEO_DETAIL_RELATE_FILTER_ENABLED, false) },
@@ -443,6 +449,7 @@ object ModuleSettings {
 
     val exportableManualSpecs = buildList<ExportableConfigSpec> {
         add(ExportableConfigSpec(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_HOME_RECOMMEND_TITLE_KEYWORDS, "").orEmpty() })
+        add(ExportableConfigSpec(KEY_DYNAMIC_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_DYNAMIC_KEYWORDS, "").orEmpty() })
         add(ExportableConfigSpec(KEY_COMMENT_KEYWORDS, ExportableValueType.STRING) { it.getString(KEY_COMMENT_KEYWORDS, "").orEmpty() })
         add(ExportableConfigSpec(KEY_COMMENT_MIN_LEVEL, ExportableValueType.INT) { getCommentMinLevel(it) })
         add(ExportableConfigSpec(KEY_CUSTOM_DOWNLOAD_CONCURRENCY, ExportableValueType.INT) { prefs ->
@@ -835,6 +842,24 @@ object ModuleSettings {
 
     fun isDynamicRemoveSchoolTabEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_DYNAMIC_REMOVE_SCHOOL_TAB_ENABLED, false)
+
+    fun isDynamicKeywordFilterEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_DYNAMIC_KEYWORD_FILTER_ENABLED, false)
+
+    fun getDynamicKeywordsText(prefs: SharedPreferences): String =
+        prefs.getString(KEY_DYNAMIC_KEYWORDS, "").orEmpty()
+
+    fun parseDynamicKeywords(raw: String): List<String> =
+        raw.split('\n', '\r', ',', '，', ';', '；')
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .take(MAX_DYNAMIC_KEYWORDS)
+            .toList()
+
+    fun getDynamicKeywords(prefs: SharedPreferences): List<String> =
+        parseDynamicKeywords(getDynamicKeywordsText(prefs))
 
     fun isCustomHomeRecommendFilterEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_CUSTOM_HOME_RECOMMEND_FILTER_ENABLED, false) ||

@@ -99,14 +99,19 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         env.hookAfter(getItemList) { param ->
             val group = param.thisObject ?: return@hookAfter
-            @Suppress("UNCHECKED_CAST")
-            val items = param.result as? MutableList<Any?> ?: return@hookAfter
+            val items = param.result as? List<*> ?: return@hookAfter
+            val itemsSnapshot = runCatching { ArrayList<Any?>(items) }.getOrNull() ?: return@hookAfter
 
-            val master = masterMenuLists.getOrPut(group) { ArrayList(items) }
-            for (item in items) {
-                if (item != null && !master.contains(item)) {
-                    master.add(item)
+            val master = synchronized(masterMenuLists) {
+                masterMenuLists.getOrPut(group) { ArrayList(itemsSnapshot) }
+            }
+            val masterSnapshot = synchronized(master) {
+                for (item in itemsSnapshot) {
+                    if (item != null && !master.contains(item)) {
+                        master.add(item)
+                    }
                 }
+                ArrayList(master)
             }
 
             val hidden = if (ModuleSettings.isCustomMineComponentHideEnabled(prefs)) {
@@ -115,9 +120,9 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 emptySet()
             }
             val titles = linkedSetOf<String>()
-            val kept = ArrayList<Any?>()
+            val kept = ArrayList<Any?>(masterSnapshot.size)
 
-            for (item in master) {
+            for (item in masterSnapshot) {
                 if (item == null) {
                     kept.add(item)
                     continue
@@ -142,7 +147,60 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 saveKnownComponents(titles)
             }
 
-            param.result = kept
+            // 每次返回獨立列表副本以避免併發遍歷 ConcurrentModificationException（#134），
+            // 同時將宿主對回傳列表的 add/addAll（如追加本地「設定」項）同步回 master，避免入口消失（#135）。
+            param.result = SyncedMenuItemList(kept, master)
+        }
+    }
+
+    private class SyncedMenuItemList(
+        initialItems: List<Any?>,
+        private val master: MutableList<Any?>,
+    ) : ArrayList<Any?>(initialItems) {
+        override fun add(element: Any?): Boolean {
+            val changed = super.add(element)
+            recordIntoMaster(element, insertAtStart = false)
+            return changed
+        }
+
+        override fun add(index: Int, element: Any?) {
+            super.add(index, element)
+            recordIntoMaster(element, insertAtStart = index == 0)
+        }
+
+        override fun addAll(elements: Collection<Any?>): Boolean {
+            val changed = super.addAll(elements)
+            if (changed) {
+                elements.forEach { recordIntoMaster(it, insertAtStart = false) }
+            }
+            return changed
+        }
+
+        override fun addAll(index: Int, elements: Collection<Any?>): Boolean {
+            val changed = super.addAll(index, elements)
+            if (changed) {
+                elements.forEach { recordIntoMaster(it, insertAtStart = index == 0) }
+            }
+            return changed
+        }
+
+        override fun set(index: Int, element: Any?): Any? {
+            val previous = super.set(index, element)
+            recordIntoMaster(element, insertAtStart = false)
+            return previous
+        }
+
+        private fun recordIntoMaster(element: Any?, insertAtStart: Boolean) {
+            if (element == null) return
+            synchronized(master) {
+                if (!master.contains(element)) {
+                    if (insertAtStart) {
+                        master.add(0, element)
+                    } else {
+                        master.add(element)
+                    }
+                }
+            }
         }
     }
 
