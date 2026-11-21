@@ -11,6 +11,7 @@ import java.lang.reflect.Modifier
 
 internal object PlayerPromotionAccess {
     const val NETWORK_PACKAGE = "com.bilibili.ship.theseus.united.player.mediaplay.network"
+    const val THESEUS2_NETWORK_PACKAGE = "com.bilibili.ship.theseus2.united.player.mediaplay.network"
     const val MODEL_PACKAGE = "com.bilibili.adcommon.data.model"
     const val GUIDE_MARK = "already show free data guide toast in this cold start"
     const val GUIDE_METHOD = "player.freeDataGuide"
@@ -27,6 +28,16 @@ internal object PlayerPromotionAccess {
             !Modifier.isStatic(it.modifiers) && it.type.name.startsWith("$NETWORK_PACKAGE.") && it.type != continuation
         }.map { it.type }.distinct().singleOrNull() ?: return null
         owner.declaredMethods.singleOrNull(::isGuide)?.apply { isAccessible = true }
+    }.getOrNull()
+
+    fun directTheseus2Guide(loader: ClassLoader): Method? = runCatching {
+        val lambda = loader.findClassOrNull("$THESEUS2_NETWORK_PACKAGE.NetworkShowToastService\$tryToShowFreeDataGuideToast\$1")
+            ?.takeIf { it.superclass?.name == "kotlin.coroutines.jvm.internal.SuspendLambda" } ?: return null
+        lambda.declaredMethods.singleOrNull { method ->
+            !Modifier.isStatic(method.modifiers) && !Modifier.isAbstract(method.modifiers) && !method.isBridge &&
+                method.name == "invokeSuspend" && method.returnType == Any::class.java &&
+                method.parameterTypes.contentEquals(arrayOf(Any::class.java))
+        }?.apply { isAccessible = true }
     }.getOrNull()
 
     fun isGuide(method: Method): Boolean {
@@ -73,12 +84,17 @@ internal fun RoamingEnv.hookPlayerPromotions(symbols: RestoredChronosPromotionSy
         }
     }.onFailure { log("Player promotion list hooks unavailable", it) }
     runCatching {
-        val method = PlayerPromotionAccess.directGuide(classLoader)
-            ?: symbols?.firstMethod(PlayerPromotionAccess.GUIDE_METHOD)?.takeIf(PlayerPromotionAccess::isGuide)
-            ?: return@runCatching
+        val methods = listOfNotNull(
+            PlayerPromotionAccess.directGuide(classLoader)
+                ?: symbols?.firstMethod(PlayerPromotionAccess.GUIDE_METHOD)?.takeIf(PlayerPromotionAccess::isGuide),
+            PlayerPromotionAccess.directTheseus2Guide(classLoader),
+        ).distinctBy(Method::toGenericString)
+        if (methods.isEmpty()) return@runCatching
         val unitType = classLoader.findClassOrNull("kotlin.Unit") ?: return@runCatching
         val unit = unitType.getField("INSTANCE").get(null)?.takeIf(unitType::isInstance) ?: return@runCatching
-        if (hookBefore(method) { param -> if (enabled()) param.result = unit }) installed++
+        methods.forEach { method ->
+            if (hookBefore(method) { param -> if (enabled()) param.result = unit }) installed++
+        }
     }.onFailure { log("Automatic free data promotion hook unavailable", it) }
     runCatching {
         val reply = classLoader.findClassOrNull("com.bapis.bilibili.app.view.v1.TFInfoReply") ?: return@runCatching

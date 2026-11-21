@@ -66,7 +66,7 @@ internal object MossCallbacks {
         else -> null
     }
 
-    private val KNOWN_KMP_MOSS_CALLBACKS = setOf("cbx0", "Kh1.h")
+    private val KNOWN_KMP_MOSS_CALLBACKS = setOf("kxz0", "cbx0", "Kh1.h")
 
     fun isKmpMossCallback(iface: Class<*>): Boolean =
         iface.name in KNOWN_KMP_MOSS_CALLBACKS ||
