@@ -778,7 +778,7 @@ object BiliSymbolResolver {
                 ?.declaredFields
                 ?.singleOrNull { field ->
                     Modifier.isStatic(field.modifiers) &&
-                        (field.type == java.lang.Long::class.java || field.type == Long::class.javaPrimitiveType)
+                        (field.type == Long::class.javaObjectType || field.type == Long::class.javaPrimitiveType)
                 }
                 ?.apply { isAccessible = true }
         }
@@ -786,7 +786,7 @@ object BiliSymbolResolver {
         // small timer model and the jump-return clock is an instance field on the display.
         val displayClass = classLoader.loadClassOrNull(REWARD_DISPLAY)
         val jumpStartField = displayClass?.declaredFields
-            ?.singleOrNull { !Modifier.isStatic(it.modifiers) && it.type == java.lang.Long::class.java }
+            ?.singleOrNull { !Modifier.isStatic(it.modifiers) && it.type == Long::class.javaObjectType }
             ?.apply { isAccessible = true }
         val jumpResumeMethod = if (displayClass != null && jumpStartField != null) {
             findDeclaredMethods(bridge, classLoader) {
@@ -855,14 +855,14 @@ object BiliSymbolResolver {
             timerSetTotalMethod = timerSetTotalMethod?.let(MethodDescriptor::of),
             jumpResumeMethod = jumpResumeMethod?.let(MethodDescriptor::of),
             jumpStartField = if (jumpResumeMethod != null) jumpStartField?.let(FieldDescriptor::of) else null,
-            miniGameRewardShow = if (miniGameRewardReady) miniGameRewardShow?.let(MethodDescriptor::of) else null,
+            miniGameRewardShow = if (miniGameRewardReady) MethodDescriptor.of(miniGameRewardShow) else null,
             miniGameRewardEmitEvent = if (miniGameRewardReady) {
-                miniGameRewardEmitEvent?.let(MethodDescriptor::of)
+                MethodDescriptor.of(miniGameRewardEmitEvent)
             } else {
                 null
             },
             miniGameRewardCallback = if (miniGameRewardReady) {
-                miniGameRewardCallback?.let(MethodDescriptor::of)
+                MethodDescriptor.of(miniGameRewardCallback)
             } else {
                 null
             },
@@ -1915,7 +1915,7 @@ object BiliSymbolResolver {
         findMethod(name, Void.TYPE, String::class.java)
 
     private fun Class<*>.findIntegerSetter(name: String): Method? =
-        findMethod(name, Void.TYPE, java.lang.Integer::class.java)
+        findMethod(name, Void.TYPE, Int::class.javaObjectType)
 
     private fun Class<*>?.copyLikeMethods(): List<Method> {
         val type = this ?: return emptyList()
@@ -2541,31 +2541,31 @@ object BiliSymbolResolver {
         val symbols = VideoDetailBannerAdSymbols(
             getVideoDetail = getVideoDetail?.let(MethodDescriptor::of),
             videoDetailTypeName = if (hasProxyHook || hasPausedPageRequestHook || hasPausedPagePanelHook) {
-                videoDetailType?.name
+                videoDetailType.name
             } else {
                 null
             },
-            underPlayerTypeName = if (hasProxyHook) underPlayerType?.name else null,
+            underPlayerTypeName = if (hasProxyHook) underPlayerType.name else null,
             relateTypeName = relateType?.name,
             merchandiseTypeName = merchandiseType?.name,
-            pausedPageTypeName = if (hasPausedPageRequestHook) pausedPageType?.name else null,
-            adPanelTypeName = if (hasPausedPagePanelHook) adPanelType?.name else null,
-            requestPausedPage = if (hasPausedPageRequestHook) requestPausedPage?.let(MethodDescriptor::of) else null,
-            getPausedPagePanel = if (hasPausedPagePanelHook) getPausedPagePanel?.let(MethodDescriptor::of) else null,
+            pausedPageTypeName = if (hasPausedPageRequestHook) pausedPageType.name else null,
+            adPanelTypeName = if (hasPausedPagePanelHook) adPanelType.name else null,
+            requestPausedPage = if (hasPausedPageRequestHook) MethodDescriptor.of(requestPausedPage) else null,
+            getPausedPagePanel = if (hasPausedPagePanelHook) MethodDescriptor.of(getPausedPagePanel) else null,
             getBrandPausedPagePanel = if (hasPausedPagePanelHook) {
-                getBrandPausedPagePanel?.let(MethodDescriptor::of)
+                MethodDescriptor.of(getBrandPausedPagePanel)
             } else {
                 null
             },
-            relateGameComponentTypeName = if (hasRelateGameHook) relateGameComponent.type?.name else null,
+            relateGameComponentTypeName = if (hasRelateGameHook) relateGameComponent.type.name else null,
             simpleViewEntryConstructor = if (hasRelateGameHook) {
-                simpleViewEntryConstructor?.let(ConstructorDescriptor::of)
+                ConstructorDescriptor.of(simpleViewEntryConstructor)
             } else {
                 null
             },
-            createViewEntry = if (hasRelateGameHook) createViewEntry?.let(MethodDescriptor::of) else null,
-            bindToView = if (hasRelateGameHook) bindToView?.let(MethodDescriptor::of) else null,
-            kotlinUnitField = if (hasRelateGameHook) unitField?.let(FieldDescriptor::of) else null,
+            createViewEntry = if (hasRelateGameHook) MethodDescriptor.of(createViewEntry) else null,
+            bindToView = if (hasRelateGameHook) MethodDescriptor.of(bindToView) else null,
+            kotlinUnitField = if (hasRelateGameHook) FieldDescriptor.of(unitField) else null,
             evidence = "proxy=$hasProxyHook,pausedRequest=$hasPausedPageRequestHook," +
                 "pausedPanel=$hasPausedPagePanelHook,relateGame=$hasRelateGameHook," +
                 "component=${relateGameComponent.type?.name ?: "-"}",

@@ -261,7 +261,7 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         runCatching { field.type.declaredFields.any { it.type == serviceType } }.getOrDefault(false)
                 }?.apply { isAccessible = true }
             }
-            val holderServiceField = if (holderField != null && ugcServiceClass != null) {
+            val holderServiceField = if (holderField != null) {
                 holderField.type.declaredFields.firstOrNull {
                     !Modifier.isStatic(it.modifiers) && it.type == ugcServiceClass
                 }?.apply { isAccessible = true }

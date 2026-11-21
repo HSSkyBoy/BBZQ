@@ -10,6 +10,7 @@ import io.github.bbzq.feats.hookAfterMethod
 
 class FakeWifiHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
+    @Suppress("DEPRECATION")
     override fun startHook() {
         if (!ModuleSettings.isFakeWifiEnabled(prefs)) return
 

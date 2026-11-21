@@ -82,8 +82,8 @@ private class MineVipHiddenLayout(
             val placement = function(function1, "MineVipUnplaced") { unit }
             val block = function(function3, "MineVipMeasure") { args ->
                 val receiver = requireNotNull(args?.getOrNull(0)).also { check(scope.isInstance(it)) }
-                val child = requireNotNull(args?.getOrNull(1)).also { check(measurable.isInstance(it)) }
-                val constraints = args?.getOrNull(2) as Long
+                val child = requireNotNull(args.getOrNull(1)).also { check(measurable.isInstance(it)) }
+                val constraints = args.getOrNull(2) as Long
                 nativeCall {
                     val measured = requireNotNull(measure.invoke(child, constraints))
                     requireNotNull(layout.invoke(receiver, width.invoke(measured), height.invoke(measured),

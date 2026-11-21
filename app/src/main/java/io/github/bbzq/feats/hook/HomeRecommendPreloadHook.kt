@@ -5,7 +5,6 @@ import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.hookAfter
 import java.lang.reflect.Modifier
-import kotlin.jvm.functions.Function0
 
 /**
  * Lets Bilibili's own home-feed listener decide when to load the next page.

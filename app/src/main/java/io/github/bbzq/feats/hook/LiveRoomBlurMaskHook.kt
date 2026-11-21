@@ -30,7 +30,7 @@ class LiveRoomBlurMaskHook(env: RoamingEnv) : BaseRoamingHook(env) {
             it.parameterTypes.size == 3 && 
             it.parameterTypes[0] == String::class.java &&
             it.parameterTypes[1] == Type::class.java &&
-            it.parameterTypes[2].isArray && it.parameterTypes[2].componentType.name.endsWith("Feature")
+            it.parameterTypes[2].isArray && it.parameterTypes[2].componentType?.name?.endsWith("Feature") == true
         }?.let { method ->
             env.hookAfter(method) { param ->
                 checkAndPurifyResult(param.result, roomInfoClassName)

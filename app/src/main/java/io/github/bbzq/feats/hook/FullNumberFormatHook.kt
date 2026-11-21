@@ -138,7 +138,7 @@ class FullNumberFormatHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun Any.readLong(vararg names: String): Long? = readField(*names)?.let { value ->
-        (value as? Number)?.toLong() ?: value?.toString()?.toLongOrNull()
+        (value as? Number)?.toLong() ?: value.toString().toLongOrNull()
     }
 
     private fun Any.readField(vararg names: String): Any? {

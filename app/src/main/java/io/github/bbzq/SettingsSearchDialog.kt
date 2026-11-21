@@ -228,6 +228,7 @@ internal object SettingsSearchDialog {
             .setView(container)
             .setNegativeButton(R.string.dialog_cancel, null)
             .create()
+        @Suppress("DEPRECATION")
         dialog?.window?.setSoftInputMode(
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE,

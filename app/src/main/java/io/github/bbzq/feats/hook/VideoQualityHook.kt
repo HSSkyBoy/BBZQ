@@ -51,9 +51,7 @@ class VideoQualityHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
         }
 
-        env.hostContext?.let { context ->
-            StorySceneDetector.register(context)
-        }
+        StorySceneDetector.register(env.hostContext)
 
         // 1. VIP privilege spoofing for quality management classes:
         if (unlockHighestBitrate || unlockVideoFeatures) {

@@ -36,10 +36,8 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
         if (highestBitrateEnabled) {
             highestBitrate.avoidHdrDolby = ModuleSettings.isAvoidHdrDolbyEnabled(prefs)
         }
-        env.hostContext?.let { context ->
-            StorySceneDetector.register(context)
-            VideoStatsOverlayController.getOrCreate(context)
-        }
+        StorySceneDetector.register(env.hostContext)
+        VideoStatsOverlayController.getOrCreate(env.hostContext)
 
         // Hook TextView to append Download Link to description when enabled
         if (videoDownloadEnabled) {
@@ -279,7 +277,7 @@ class TryFreeQualityHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingHook
             if (stats != null) {
                 VideoStatsOverlayController.instance?.update(stats)
             }
-            val isCellular = env.hostContext?.let { NetworkTypeDetector.isCellular(it) } ?: false
+            val isCellular = NetworkTypeDetector.isCellular(env.hostContext)
             CustomCdnProcessor.rewriteResponse(target, prefs, isCellular, ::log)
         }.onFailure {
             log("PlayView quality response processing failed at ${target.javaClass.name}", it)

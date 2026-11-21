@@ -228,11 +228,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                             toKeep.add(item)
                         }
                         if (modified) {
-                            val success = runCatching {
-                                (rawList as? MutableList<Any?>)?.clear()
-                                (rawList as? MutableList<Any?>)?.addAll(toKeep)
-                                true
-                            }.getOrDefault(false)
+                            val success = replaceItemsInPlace(rawList, toKeep)
                             if (!success) {
                                 runCatching { itemListField.set(section, toKeep) }
                             }
@@ -269,11 +265,7 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         toKeep.add(item)
                     }
                     if (modified) {
-                        val success = runCatching {
-                            (rawList as? MutableList<Any?>)?.clear()
-                            (rawList as? MutableList<Any?>)?.addAll(toKeep)
-                            true
-                        }.getOrDefault(false)
+                        val success = replaceItemsInPlace(rawList, toKeep)
                         if (!success) {
                             runCatching { listField.set(mineData, toKeep) }
                         }
@@ -288,6 +280,15 @@ class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }.onFailure { throwable ->
         log("purifyMineData error", throwable)
     }
+
+    private fun replaceItemsInPlace(rawList: List<*>, toKeep: List<Any?>): Boolean = runCatching {
+        if (rawList !is MutableList<*>) return false
+        @Suppress("UNCHECKED_CAST")
+        val mutableList = rawList as MutableList<Any?>
+        mutableList.clear()
+        mutableList.addAll(toKeep)
+        true
+    }.getOrDefault(false)
 
     private fun isMineSettingsItem(title: String?, uri: String?): Boolean {
         if (ModuleSettings.isMineSettingsTitle(title)) return true

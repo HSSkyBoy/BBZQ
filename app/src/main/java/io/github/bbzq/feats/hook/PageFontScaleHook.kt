@@ -13,6 +13,7 @@ import io.github.bbzq.feats.hookAfterMethod
 import io.github.bbzq.feats.hookBeforeMethod
 
 class PageFontScaleHook(env: RoamingEnv) : BaseRoamingHook(env) {
+    @Suppress("DEPRECATION")
     override fun startHook() {
         if (!ModuleSettings.isCustomFontScaleEnabled(prefs)) return
         val scale = ModuleSettings.getCustomFontScaleFloat(prefs)
@@ -85,6 +86,7 @@ class PageFontScaleHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("PageFontScaleHook installed with scale=$scale (${ModuleSettings.getCustomFontScalePercent(prefs)}%)")
     }
 
+    @Suppress("DEPRECATION")
     private fun applyFontScale(res: Resources, scale: Float) {
         runCatching {
             val config = res.configuration ?: return
@@ -95,7 +97,6 @@ class PageFontScaleHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     fontScale = scale
                 }
                 metrics.scaledDensity = targetScaledDensity
-                @Suppress("DEPRECATION")
                 res.updateConfiguration(newConfig, metrics)
             }
         }

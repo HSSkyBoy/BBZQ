@@ -30,7 +30,7 @@ object NetworkTypeDetector {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val activeNetwork = cm?.activeNetwork
             if (activeNetwork != null) {
-                val caps = cm?.getNetworkCapabilities(activeNetwork)
+                val caps = cm.getNetworkCapabilities(activeNetwork)
                 if (caps != null) {
                     NetworkTransportReadScope.read {
                         when {

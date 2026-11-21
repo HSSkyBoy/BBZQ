@@ -2,11 +2,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 plugins {
     alias(libs.plugins.androidApplication)
-    alias(libs.plugins.kotlin.android)
-    id("org.lsposed.lsplugin.jgit") version "1.1" 
-    id("org.lsposed.lsplugin.resopt") version "1.6" 
+    id("org.lsposed.lsplugin.resopt") version "1.6"
     id("org.lsposed.lsplugin.apksign") version "1.4"
-    id("org.lsposed.lsplugin.apktransform") version "1.2" 
+    id("org.lsposed.lsplugin.apktransform") version "1.2"
 }
 
 fun gitOutput(vararg args: String): String? {
@@ -148,17 +146,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+}
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_21)
-            freeCompilerArgs.addAll(
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+        freeCompilerArgs.addAll(
             "-Xno-param-assertions",
             "-Xno-call-assertions",
             "-Xno-receiver-assertions",
             "-language-version=2.4",
-            )
-        }
+        )
     }
 }
 

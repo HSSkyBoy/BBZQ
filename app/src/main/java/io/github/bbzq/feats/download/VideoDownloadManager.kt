@@ -52,7 +52,7 @@ object VideoDownloadManager {
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    val rawBody = response.body?.string().orEmpty()
+                    val rawBody = response.body.string()
                     try {
                         if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                         val viewJson = JSONObject(rawBody)
@@ -97,7 +97,7 @@ object VideoDownloadManager {
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    val rawBody = response.body?.string().orEmpty()
+                    val rawBody = response.body.string()
                     try {
                         if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                         val playurlJson = JSONObject(rawBody)
@@ -232,8 +232,8 @@ object VideoDownloadManager {
                 videoThread.join()
                 audioThread.join()
 
-                if (videoError != null) throw videoError!!
-                if (audioError != null) throw audioError!!
+                videoError?.let { throw it }
+                audioError?.let { throw it }
 
                 postProgress(activity, onProgress, "正在合并 MP4 音视频轨道...", 95)
                 val success = if (audioFile.exists() && audioFile.length() > 0) {
@@ -278,7 +278,7 @@ object VideoDownloadManager {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code} during download")
             
-            val body = response.body ?: throw IOException("Empty response body")
+            val body = response.body
             val contentLength = body.contentLength()
             
             body.byteStream().buffered(128 * 1024).use { input ->

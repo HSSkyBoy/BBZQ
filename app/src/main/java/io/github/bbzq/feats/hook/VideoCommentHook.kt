@@ -556,7 +556,7 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
             },
             singleReplies = type.declaredMethods.filter {
                 !Modifier.isStatic(it.modifiers) && it.name.startsWith("get") && it.parameterCount == 0 &&
-                    it.returnType.name?.endsWith(".ReplyInfo") == true
+                    it.returnType.name.endsWith(".ReplyInfo")
             }.onEach { it.isAccessible = true },
         )
 

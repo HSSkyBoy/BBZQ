@@ -298,6 +298,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         symbols.themeIdHelperColorId?.let { field ->
             runCatching {
+                @Suppress("UNCHECKED_CAST")
                 val ids = field.get(null) as? SparseArray<Any?> ?: return@runCatching
                 ids.put(CUSTOM_THEME_ID1, CUSTOM_THEME_ID1)
                 ids.put(CUSTOM_THEME_ID2, CUSTOM_THEME_ID2)
@@ -336,6 +337,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
     }
 
     private fun putColorArray(field: Field, primaryColor: Int) {
+        @Suppress("UNCHECKED_CAST")
         val array = field.get(null) as? SparseArray<IntArray> ?: return
         val colors = generateColorArray(primaryColor)
         array.put(CUSTOM_THEME_ID1, colors)
@@ -346,6 +348,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         env.hookBefore(symbols.skinListMethod) { param ->
             val listHolder = param.args.firstOrNull() ?: return@hookBefore
             val list = listHolder.javaClass.fieldOrNull("mList")?.let { field ->
+                @Suppress("UNCHECKED_CAST")
                 runCatching { field.get(listHolder) as? MutableList<Any> }.getOrNull()
             } ?: return@hookBefore
             if (list.any { it.readIntField("mId") == CUSTOM_THEME_ID1 || it.readIntField("mId") == CUSTOM_THEME_ID2 }) {

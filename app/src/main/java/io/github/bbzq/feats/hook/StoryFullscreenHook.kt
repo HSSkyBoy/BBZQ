@@ -151,7 +151,7 @@ class StoryFullscreenHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private fun applyStoryFullscreen(window: Window?, activity: Activity) {
         if (window == null || activity.isFinishing || activity.isDestroyed) return
         runCatching {
-            val decor = window.decorView ?: return
+            val decor = window.decorView
             val target = StoryWindowTarget(WeakReference(window), WeakReference(activity))
             trackStoryWindow(target, decor)
             allowDisplayCutout(window)

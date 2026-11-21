@@ -73,6 +73,7 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     schedulePlayerUiTuning(activity)
                 }
             }
+            @Deprecated("Deprecated in Java")
             override fun onLowMemory() = Unit
             override fun onTrimMemory(level: Int) = Unit
         })
@@ -151,7 +152,7 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
             .filter {
                 !Modifier.isStatic(it.modifiers) &&
                     it.parameterTypes.isEmpty() &&
-                    (it.returnType == java.lang.Boolean.TYPE || it.returnType == java.lang.Boolean::class.java) &&
+                    (it.returnType == Boolean::class.javaPrimitiveType || it.returnType == Boolean::class.javaObjectType) &&
                     PlayerPortraitControlPolicy.isSafeLegacyWidgetBooleanMethod(it.name) &&
                     !PlayerPortraitControlPolicy.overridesInheritedMethod(it)
             }
@@ -247,7 +248,7 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     }
 
                     method.parameterTypes.isEmpty() &&
-                        (method.returnType == java.lang.Boolean.TYPE || method.returnType == java.lang.Boolean::class.java) &&
+                        (method.returnType == Boolean::class.javaPrimitiveType || method.returnType == Boolean::class.javaObjectType) &&
                         PlayerPortraitControlPolicy.isStoryServiceBooleanMethod(method.name) -> {
                         env.hookBefore(method) { param ->
                             if (ModuleSettings.isHidePlayerPortraitControlEnabled(prefs)) {

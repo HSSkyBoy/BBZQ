@@ -495,55 +495,50 @@ class CdnSpeedTestDialog(
                 item.pingMs = maxOf(1L, pingMs)
 
                 if (response.isSuccessful) {
-                    val stream = response.body?.byteStream()
-                    if (stream != null) {
-                        val buffer = ByteArray(65536)
-                        var totalBytes = 0L
-                        var timedBytes = 0L
+                    val stream = response.body.byteStream()
+                    val buffer = ByteArray(65536)
+                    var totalBytes = 0L
+                    var timedBytes = 0L
 
-                        val streamStartUs = System.nanoTime() / 1000
-                        var timedStartUs = streamStartUs
-                        var peakSpeedMBs = 0.0
+                    val streamStartUs = System.nanoTime() / 1000
+                    var timedStartUs = streamStartUs
 
-                        while (!isCancelled.get()) {
-                            val read = stream.read(buffer)
-                            if (read <= 0) break
-                            totalBytes += read
+                    while (!isCancelled.get()) {
+                        val read = stream.read(buffer)
+                        if (read <= 0) break
+                        totalBytes += read
 
-                            if (totalBytes > warmupBytes) {
-                                if (timedBytes == 0L) {
-                                    timedStartUs = System.nanoTime() / 1000
-                                }
-                                timedBytes += read
+                        if (totalBytes > warmupBytes) {
+                            if (timedBytes == 0L) {
+                                timedStartUs = System.nanoTime() / 1000
                             }
-
-                            val nowUs = System.nanoTime() / 1000
-                            val elapsedUs = nowUs - streamStartUs
-                            if (totalBytes >= targetSize || elapsedUs >= maxTestTimeUs) {
-                                break
-                            }
+                            timedBytes += read
                         }
-                        stream.close()
 
-                        val timedDurationUs = (System.nanoTime() / 1000) - timedStartUs
-                        val avgSpeedMBs = if (timedDurationUs > 0 && timedBytes > 0) timedBytes.toDouble() / timedDurationUs.toDouble() else (if (totalBytes > 0) totalBytes.toDouble() / ((System.nanoTime() / 1000) - streamStartUs).toDouble() else 0.0)
-                        val finalSpeedMBs = avgSpeedMBs
+                        val nowUs = System.nanoTime() / 1000
+                        val elapsedUs = nowUs - streamStartUs
+                        if (totalBytes >= targetSize || elapsedUs >= maxTestTimeUs) {
+                            break
+                        }
+                    }
+                    stream.close()
 
-                        if (totalBytes > 0 && finalSpeedMBs > 0.0) {
-                            item.speedMb = finalSpeedMBs
-                            item.speedKbps = (finalSpeedMBs * 1024).toLong()
-                            item.statusText = if (finalSpeedMBs >= 1.0) {
-                                String.format(Locale.US, "%.2f MB/s", finalSpeedMBs)
-                            } else {
-                                String.format(Locale.US, "%.0f KB/s", finalSpeedMBs * 1024)
-                            }
+                    val timedDurationUs = (System.nanoTime() / 1000) - timedStartUs
+                    val avgSpeedMBs = if (timedDurationUs > 0 && timedBytes > 0) timedBytes.toDouble() / timedDurationUs.toDouble() else (if (totalBytes > 0) totalBytes.toDouble() / ((System.nanoTime() / 1000) - streamStartUs).toDouble() else 0.0)
+                    val finalSpeedMBs = avgSpeedMBs
+
+                    if (totalBytes > 0 && finalSpeedMBs > 0.0) {
+                        item.speedMb = finalSpeedMBs
+                        item.speedKbps = (finalSpeedMBs * 1024).toLong()
+                        item.statusText = if (finalSpeedMBs >= 1.0) {
+                            String.format(Locale.US, "%.2f MB/s", finalSpeedMBs)
                         } else {
-                            item.speedMb = 0.0
-                            item.speedKbps = 0
-                            item.statusText = "测速失败"
+                            String.format(Locale.US, "%.0f KB/s", finalSpeedMBs * 1024)
                         }
                     } else {
-                        item.statusText = "空响应体"
+                        item.speedMb = 0.0
+                        item.speedKbps = 0
+                        item.statusText = "测速失败"
                     }
                     response.close()
                 } else {
@@ -585,7 +580,7 @@ class CdnSpeedTestDialog(
                     .header("Referer", "https://www.bilibili.com/")
                     .build()
                 val response = client.newCall(req).execute()
-                val jsonStr = response.body?.string().orEmpty()
+                val jsonStr = response.body.string()
                 response.close()
 
                 val json = JSONObject(jsonStr)
