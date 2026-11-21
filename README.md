@@ -1,7 +1,7 @@
 ﻿# BBZQ
 > 使用 `Modern API`、由 Kotlin 全量编写的哔哩哔哩增强 Xposed 模组
 
-![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF?logo=kotlin&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.4.21-7F52FF?logo=kotlin&logoColor=white)
 ![API](https://img.shields.io/badge/API-Modern%20API-orange)
 ![License](https://img.shields.io/badge/license-Mulan%20PubL%20v2-blue)
 
@@ -211,9 +211,9 @@ BBZQ 是一款适配 Modern API 的哔哩哔哩功能增强模组，采用 Kotli
 | 项目 | 版本     |
 |------|--------|
 | JDK | 21     |
-| Android Gradle Plugin | 9.4.0  |
-| Kotlin | 2.4.20 |
-| Gradle Wrapper | 9.7.1  |
+| Android Gradle Plugin | 9.5.2  |
+| Kotlin | 2.4.21 |
+| Gradle Wrapper | 9.8.0  |
 
 **Debug 构建**
 

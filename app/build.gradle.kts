@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 plugins {
     alias(libs.plugins.androidApplication)
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.kotlin.android)
     id("org.lsposed.lsplugin.jgit") version "1.1" 
     id("org.lsposed.lsplugin.resopt") version "1.6" 
     id("org.lsposed.lsplugin.apksign") version "1.4"
@@ -156,7 +156,7 @@ android {
             "-Xno-param-assertions",
             "-Xno-call-assertions",
             "-Xno-receiver-assertions",
-            "-language-version=2.0",
+            "-language-version=2.4",
             )
         }
     }
