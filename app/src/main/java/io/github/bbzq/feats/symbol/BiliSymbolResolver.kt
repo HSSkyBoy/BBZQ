@@ -594,14 +594,27 @@ object BiliSymbolResolver {
             shareBiliContentGetContentUrl,
         )
 
+        val copyHandlerClass = SHARE_COPY_UTILITY_CLASSES.firstNotNullOfOrNull { classLoader.loadClassOrNull(it) }
         val copyContentClass = SHARE_COPY_CONTENT_CLASSES.firstNotNullOfOrNull { classLoader.loadClassOrNull(it) }
+            ?: copyHandlerClass?.declaredMethods
+                ?.asSequence()
+                ?.flatMap { it.parameterTypes.asSequence() }
+                ?.distinct()
+                ?.firstOrNull { type ->
+                    !type.isPrimitive &&
+                        !type.isInterface &&
+                        type.declaredConstructors.any { ctor ->
+                            ctor.parameterTypes.contentEquals(arrayOf(String::class.java))
+                        } &&
+                        (type.findNoArgStringMethod("c") != null || type.findNoArgStringMethod("mo127c") != null)
+                }
         val copyContentGetters = listOfNotNull(
             copyContentClass?.findNoArgStringMethod("c"),
             copyContentClass?.findNoArgStringMethod("mo127c"),
         )
         val copyContentCount = copyContentClass.installWeight(copyContentGetters)
 
-        val copyUtilityMethods = SHARE_COPY_UTILITY_CLASSES.firstNotNullOfOrNull { classLoader.loadClassOrNull(it) }
+        val copyUtilityMethods = copyHandlerClass
             ?.allMethods()
             ?.filter {
                 Modifier.isStatic(it.modifiers) &&
@@ -609,6 +622,20 @@ object BiliSymbolResolver {
             }
             ?.toList()
             .orEmpty()
+            .ifEmpty {
+                // 9.20 起 CopyShareHandler 佔用 copy.a，靜態剪貼簿工具方法遷至根包（如 t930.a(String)）
+                findDeclaredMethods(bridge, classLoader) {
+                    matcher(
+                        MethodMatcher.create()
+                            .modifiers(Modifier.STATIC)
+                            .paramTypes(String::class.java)
+                            .usingStrings(SHARE_COPY_CLIPBOARD_LOG),
+                    )
+                }.filter {
+                    Modifier.isStatic(it.modifiers) &&
+                        it.parameterTypes.contentEquals(arrayOf(String::class.java))
+                }.distinctBy(Method::toGenericString)
+            }
         val copyUtilityCount = copyUtilityMethods.size
         val hookPoints = listOf(
             optionalChildHookPoint(HP_SHARE_LEGACY, legacyCount > 0, "legacy share result hooks not found", "methods=$legacyCount"),
@@ -748,11 +775,19 @@ object BiliSymbolResolver {
         } else {
             null
         }
-        val timerSetTotalMethod = findDeclaredMethods(bridge, classLoader) {
-            searchPackages(REWARD_PACKAGE).matcher(
-                MethodMatcher.create().name("start").paramCount(0).returnType(Void.TYPE),
-            )
-        }.mapNotNull { it.declaringClass.findRewardTimerSetTotal() }.distinctBy(Method::toGenericString).singleOrNull()
+        // 9.20 起倒數計時器類遷至根包（如 rb92），優先由 RewardAdDisplay 欄位類型定位，不依賴包名
+        val timerSetTotalMethod = displayClass?.declaredFields
+            ?.asSequence()
+            ?.map { it.type }
+            ?.distinct()
+            ?.mapNotNull { it.findRewardTimerSetTotal() }
+            ?.distinctBy(Method::toGenericString)
+            ?.singleOrNull()
+            ?: findDeclaredMethods(bridge, classLoader) {
+                searchPackages(REWARD_PACKAGE).matcher(
+                    MethodMatcher.create().name("start").paramCount(0).returnType(Void.TYPE),
+                )
+            }.mapNotNull { it.declaringClass.findRewardTimerSetTotal() }.distinctBy(Method::toGenericString).singleOrNull()
 
         val hookPoints = listOf(
             childHookPoint(HP_REWARD_AD_ACTIVITY, activityCount > 0, "reward activity hooks not found", "methods=$activityCount"),
@@ -1065,12 +1100,19 @@ object BiliSymbolResolver {
                 ?.apply { isAccessible = true }
         }.getOrNull()
 
+        // 9.20 起畫質區間更新靜態方法遷至根包（如 aj52.c），不依賴包名並在反射載入前先以參數型別過濾
         val rangeUpdateMethod = runCatching {
             currentBridge.findMethod(
                 FindMethod.create()
-                    .searchPackages("com.bilibili.ship.theseus.united.player")
-                    .matcher(MethodMatcher.create().paramCount(11).returnType(Void.TYPE)),
-            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .matcher(MethodMatcher.create().modifiers(Modifier.STATIC).paramCount(11).returnType(Void.TYPE)),
+            ).filter { data ->
+                val params = data.paramTypeNames
+                params.getOrNull(0) == "boolean" &&
+                    params.getOrNull(1) == "kotlinx.coroutines.flow.MutableStateFlow" &&
+                    params.getOrNull(2) == "kotlinx.coroutines.flow.MutableStateFlow" &&
+                    params.getOrNull(3) == "kotlin.jvm.internal.Ref\$BooleanRef" &&
+                    params.getOrNull(4) == "kotlin.jvm.internal.Ref\$ObjectRef"
+            }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
                 .filter(QualityRangePolicy::matchesUpdate)
                 .distinctBy(Method::toGenericString)
                 .singleOrNull()
@@ -3112,7 +3154,8 @@ object BiliSymbolResolver {
 
         val quickReplyActionBaseMethods = (
             COMMENT_ACTION_BASE_CLASSES.asSequence().mapNotNull { classLoader.loadClassOrNull(it) } +
-                quickReplyActionClasses.asSequence()
+                quickReplyActionClasses.asSequence() +
+                quickReplyDispatcherMethods.asSequence().mapNotNull { it.parameterTypes.firstOrNull() }
             )
             .distinctBy { it.name }
             .flatMap { type ->
@@ -3152,7 +3195,8 @@ object BiliSymbolResolver {
                     method.returnType == Void.TYPE &&
                         method.parameterCount >= 1 &&
                         !method.name.contains("lambda", ignoreCase = true) &&
-                        method.name in VOTE_WIDGET_METHOD_NAMES
+                        !method.name.endsWith("\$default") &&
+                        method.name.substringBefore('$') in VOTE_WIDGET_METHOD_NAMES
                 }
             }
             .distinctBy(Method::toGenericString)
@@ -4529,6 +4573,7 @@ object BiliSymbolResolver {
         "kntr.common.share.common.handler.copy.a",
         "p7645kntr.common.share.common.handler.p7848copy.C134542a",
     )
+    private const val SHARE_COPY_CLIPBOARD_LOG = "copyToClipBoard:"
 
     private val REWARD_ACTIVITY_CLASSES = arrayOf(
         "com.bilibili.ad.reward.activity.RewardAdActivity",
@@ -4678,6 +4723,7 @@ object BiliSymbolResolver {
         "tv.danmaku.p9138bili.p9228ui.main2.HomeFragmentV2",
     )
     private val HOME_TAB_RESOURCE_CLASSES = arrayOf(
+        "tv.danmaku.bili.ui.main2.resource.l",
         "tv.danmaku.bili.ui.main2.resource.z",
         "tv.danmaku.p9138bili.p9228ui.main2.resource.z",
     )
@@ -4721,6 +4767,7 @@ object BiliSymbolResolver {
         "com.bilibili.p4439app.comment3.viewmodel.CommentViewModel",
     )
     private val COMMENT_ACTION_BASE_CLASSES = arrayOf(
+        "fou",
         "wtt",
         "Kj.AbstractC8070c",
         "Kj.c",
