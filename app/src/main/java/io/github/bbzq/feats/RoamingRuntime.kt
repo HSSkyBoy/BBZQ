@@ -5,84 +5,84 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import android.content.res.AssetManager
 import android.content.res.Resources
-import io.github.bbzq.ModuleSettingsBridge
 import io.github.bbzq.RuntimeEnvironmentInfo
+import io.github.bbzq.feats.hook.ad.BlockActivityMetaStickerHook
+import io.github.bbzq.feats.hook.ad.ChronosPromotionHook
+import io.github.bbzq.feats.hook.ad.PgcActivityPopupHook
+import io.github.bbzq.feats.hook.ad.RewardAdHook
+import io.github.bbzq.feats.hook.ad.SkipVideoAdHook
+import io.github.bbzq.feats.hook.ad.SkipVideoAdProgressHook
+import io.github.bbzq.feats.hook.ad.SplashAdHook
+import io.github.bbzq.feats.hook.ad.VideoDetailBannerAdHook
+import io.github.bbzq.feats.hook.comment.FreeCopyHook
+import io.github.bbzq.feats.hook.comment.VideoCommentHook
+import io.github.bbzq.feats.hook.extra.ReadEraHook
+import io.github.bbzq.feats.hook.extra.WoMicHook
+import io.github.bbzq.feats.hook.home.BottomBarHook
+import io.github.bbzq.feats.hook.home.DynamicPageHook
+import io.github.bbzq.feats.hook.home.HomeComponentHideHook
+import io.github.bbzq.feats.hook.home.HomeFrameHook
+import io.github.bbzq.feats.hook.home.HomeRecommendAdHook
+import io.github.bbzq.feats.hook.home.HomeRecommendPreloadHook
+import io.github.bbzq.feats.hook.home.HomeRecommendTabHook
+import io.github.bbzq.feats.hook.home.HomeTopBarPurifyHook
+import io.github.bbzq.feats.hook.home.SearchPurifyHook
+import io.github.bbzq.feats.hook.live.LiveReservationHook
+import io.github.bbzq.feats.hook.live.LiveRoomBlurMaskHook
+import io.github.bbzq.feats.hook.live.LiveRoomVerticalSwipeHook
+import io.github.bbzq.feats.hook.network.CustomCdnHook
+import io.github.bbzq.feats.hook.network.DownloadThreadHook
+import io.github.bbzq.feats.hook.network.FakeWifiHook
+import io.github.bbzq.feats.hook.network.P2pBlockHook
+import io.github.bbzq.feats.hook.player.AiDeclaredVideoHook
+import io.github.bbzq.feats.hook.player.AllowMiniPlayHook
+import io.github.bbzq.feats.hook.player.AutoLikeHook
+import io.github.bbzq.feats.hook.player.BackgroundPlayHook
+import io.github.bbzq.feats.hook.player.LongPressSpeedLockHook
+import io.github.bbzq.feats.hook.player.MediaSessionFixHook
+import io.github.bbzq.feats.hook.player.PlayArcConfHook
+import io.github.bbzq.feats.hook.player.PlayerUiHook
+import io.github.bbzq.feats.hook.player.SplitScreenFullscreenHook
+import io.github.bbzq.feats.hook.player.TripleSpeedHook
+import io.github.bbzq.feats.hook.player.TryFreeQualityHook
+import io.github.bbzq.feats.hook.player.VideoDetailRelateFilterHook
+import io.github.bbzq.feats.hook.player.VideoDetailShareRedirectHook
+import io.github.bbzq.feats.hook.player.VideoEndRecommendHook
+import io.github.bbzq.feats.hook.player.VideoMentionHook
+import io.github.bbzq.feats.hook.player.VideoQualityHook
+import io.github.bbzq.feats.hook.profile.AccessKeyHook
+import io.github.bbzq.feats.hook.profile.AutoClaimVipExpHook
+import io.github.bbzq.feats.hook.profile.CustomThemeHook
+import io.github.bbzq.feats.hook.profile.MineProfileHook
+import io.github.bbzq.feats.hook.profile.SpaceFixHook
+import io.github.bbzq.feats.hook.sea.SeaBangumiDetailHook
+import io.github.bbzq.feats.hook.sea.SeaBangumiPlayHook
+import io.github.bbzq.feats.hook.sea.SeaBangumiSearchHook
+import io.github.bbzq.feats.hook.sea.SeaBangumiSubtitleHook
+import io.github.bbzq.feats.hook.story.StoryComponentAlphaHook
+import io.github.bbzq.feats.hook.story.StoryDanmakuHook
+import io.github.bbzq.feats.hook.story.StoryDefaultLaunchHook
+import io.github.bbzq.feats.hook.story.StoryDetailRedirectHook
+import io.github.bbzq.feats.hook.story.StoryFullscreenHook
+import io.github.bbzq.feats.hook.story.StoryPlayerAdHook
+import io.github.bbzq.feats.hook.system.BlockUpdateHook
+import io.github.bbzq.feats.hook.system.ComponentPoolBlockHook
+import io.github.bbzq.feats.hook.system.CourseIntroCrashGuardHook
+import io.github.bbzq.feats.hook.system.DaggerCircularDependencyFixHook
+import io.github.bbzq.feats.hook.system.DialogBlurBackgroundHook
+import io.github.bbzq.feats.hook.system.FullNumberFormatHook
+import io.github.bbzq.feats.hook.system.PageFontScaleHook
+import io.github.bbzq.feats.hook.system.SettingHook
+import io.github.bbzq.feats.hook.system.ShareHook
+import io.github.bbzq.feats.hook.system.SplashAutoNightHook
+import io.github.bbzq.feats.hook.system.TeenagersModeHook
+import io.github.bbzq.feats.symbol.BiliHookSymbols
+import io.github.bbzq.feats.symbol.BiliSymbolResolver
+import io.github.bbzq.prefs.ModuleSettingsBridge
+import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Executable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import io.github.bbzq.feats.hook.BottomBarHook
-import io.github.bbzq.feats.hook.DaggerCircularDependencyFixHook
-import io.github.bbzq.feats.hook.DialogBlurBackgroundHook
-import io.github.bbzq.feats.hook.AutoClaimVipExpHook
-import io.github.bbzq.feats.hook.AutoLikeHook
-import io.github.bbzq.feats.hook.AiDeclaredVideoHook
-import io.github.bbzq.feats.hook.AllowMiniPlayHook
-import io.github.bbzq.feats.hook.PgcActivityPopupHook
-import io.github.bbzq.feats.hook.PlayArcConfHook
-import io.github.bbzq.feats.hook.AccessKeyHook
-import io.github.bbzq.feats.hook.ChronosPromotionHook
-import io.github.bbzq.feats.hook.CourseIntroCrashGuardHook
-import io.github.bbzq.feats.hook.CustomThemeHook
-import io.github.bbzq.feats.hook.CustomCdnHook
-import io.github.bbzq.feats.hook.DownloadThreadHook
-import io.github.bbzq.feats.hook.DynamicPageHook
-import io.github.bbzq.feats.hook.TeenagersModeHook
-import io.github.bbzq.feats.hook.TryFreeQualityHook
-import io.github.bbzq.feats.hook.VideoQualityHook
-import io.github.bbzq.feats.hook.FakeWifiHook
-import io.github.bbzq.feats.hook.FreeCopyHook
-import io.github.bbzq.feats.hook.HomeRecommendAdHook
-import io.github.bbzq.feats.hook.HomeRecommendPreloadHook
-import io.github.bbzq.feats.hook.HomeRecommendTabHook
-import io.github.bbzq.feats.hook.ComponentPoolBlockHook
-import io.github.bbzq.feats.hook.HomeComponentHideHook
-import io.github.bbzq.feats.hook.HomeTopBarPurifyHook
-import io.github.bbzq.feats.hook.HomeFrameHook
-import io.github.bbzq.feats.hook.SearchPurifyHook
-import io.github.bbzq.feats.hook.SeaBangumiDetailHook
-import io.github.bbzq.feats.hook.SeaBangumiPlayHook
-import io.github.bbzq.feats.hook.SeaBangumiSearchHook
-import io.github.bbzq.feats.hook.SeaBangumiSubtitleHook
-import io.github.bbzq.feats.hook.RewardAdHook
-import io.github.bbzq.feats.hook.SettingHook
-import io.github.bbzq.feats.hook.SpaceFixHook
-import io.github.bbzq.feats.hook.ShareHook
-import io.github.bbzq.feats.hook.SkipVideoAdHook
-import io.github.bbzq.feats.hook.SkipVideoAdProgressHook
-import io.github.bbzq.feats.hook.SplashAdHook
-import io.github.bbzq.feats.hook.SplashAutoNightHook
-import io.github.bbzq.feats.hook.SplitScreenFullscreenHook
-import io.github.bbzq.feats.hook.StoryComponentAlphaHook
-import io.github.bbzq.feats.hook.StoryDanmakuHook
-import io.github.bbzq.feats.hook.StoryDefaultLaunchHook
-import io.github.bbzq.feats.hook.StoryDetailRedirectHook
-import io.github.bbzq.feats.hook.StoryFullscreenHook
-import io.github.bbzq.feats.hook.StoryPlayerAdHook
-import io.github.bbzq.feats.hook.BackgroundPlayHook
-import io.github.bbzq.feats.hook.BlockUpdateHook
-import io.github.bbzq.feats.hook.VideoCommentHook
-import io.github.bbzq.feats.hook.VideoDetailBannerAdHook
-import io.github.bbzq.feats.hook.VideoDetailRelateFilterHook
-import io.github.bbzq.feats.hook.VideoMentionHook
-import io.github.bbzq.feats.hook.FullNumberFormatHook
-import io.github.bbzq.feats.hook.MineProfileHook
-import io.github.bbzq.feats.hook.PlayerUiHook
-import io.github.bbzq.feats.hook.TripleSpeedHook
-import io.github.bbzq.feats.hook.LongPressSpeedLockHook
-import io.github.bbzq.feats.hook.ReadEraHook
-import io.github.bbzq.feats.hook.BlockActivityMetaStickerHook
-import io.github.bbzq.feats.hook.WoMicHook
-import io.github.bbzq.feats.hook.LiveReservationHook
-import io.github.bbzq.feats.hook.LiveRoomBlurMaskHook
-import io.github.bbzq.feats.hook.LiveRoomVerticalSwipeHook
-import io.github.bbzq.feats.hook.MediaSessionFixHook
-import io.github.bbzq.feats.hook.VideoDetailShareRedirectHook
-import io.github.bbzq.feats.hook.VideoEndRecommendHook
-import io.github.bbzq.feats.hook.P2pBlockHook
-import io.github.bbzq.feats.hook.PageFontScaleHook
-import io.github.bbzq.feats.symbol.BiliHookSymbols
-import io.github.bbzq.feats.symbol.BiliSymbolResolver
-import io.github.libxposed.api.XposedInterface
 
 object RoamingRuntime {
     fun isProcessSupported(packageName: String, processName: String): Boolean =
@@ -371,20 +371,20 @@ private class ModuleResourceContext(
 }
 
 abstract class BaseRoamingHook(
-    protected val env: RoamingEnv,
+    internal val env: RoamingEnv,
 ) {
     private val started = AtomicBoolean(false)
 
-    protected val xposed: XposedInterface
+    internal val xposed: XposedInterface
         get() = env.xposed
 
-    protected val classLoader: ClassLoader
+    internal val classLoader: ClassLoader
         get() = env.classLoader
 
-    protected val prefs: SharedPreferences
+    internal val prefs: SharedPreferences
         get() = env.prefs
 
-    protected fun log(message: String, throwable: Throwable? = null) {
+    internal fun log(message: String, throwable: Throwable? = null) {
         env.log(message, throwable)
     }
 
@@ -399,4 +399,3 @@ abstract class BaseRoamingHook(
 
     abstract fun startHook()
 }
-

@@ -1,6 +1,8 @@
 package io.github.bbzq
 
 import android.app.Application
+import io.github.bbzq.prefs.ModuleRemotePreferences
+import io.github.bbzq.ui.DesktopIconHelper
 
 class BbzqApplication : Application() {
     override fun onCreate() {

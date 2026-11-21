@@ -10,6 +10,7 @@ import android.view.Window
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import io.github.bbzq.ui.settings.dp
 
 class WoMicIntroActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {

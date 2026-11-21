@@ -259,4 +259,3 @@ private fun Class<*>.findMethodOrNull(name: String, vararg parameterTypes: Class
         it.name == name && it.parameterTypes.contentEquals(parameterTypes)
     }
 }
-

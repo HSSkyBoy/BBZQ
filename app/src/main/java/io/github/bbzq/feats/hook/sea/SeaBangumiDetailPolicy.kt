@@ -1,0 +1,135 @@
+package io.github.bbzq.feats.hook.sea
+
+import io.github.bbzq.feats.AppSignature
+import io.github.bbzq.feats.ResolverRegion
+import io.github.bbzq.feats.callMethod
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.EOFException
+import java.net.URLDecoder
+import java.util.zip.GZIPInputStream
+
+/** Pure decisions for replaying a refused PGC HTTP request on the resolver server. */
+internal object SeaBangumiDetailPolicy {
+    /** Headers through which the host identifies the account; an anonymous replay must not carry them. */
+    val ACCOUNT_HEADERS = listOf("authorization", "x-bili-metadata-bin", "cookie")
+
+    /** PGC endpoints the host calls over HTTP for season detail and related data. */
+    private val PGC_PREFIXES = listOf("/pgc/view/", "/pgc/season/", "/pgc/player/")
+
+    private val CODE = Regex("\"code\"\\s*:\\s*(-?\\d+)")
+    private val MESSAGE = Regex("\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+
+    /** Bytes of a response worth peeking: a refusal is a tiny JSON object, a season is megabytes. */
+    const val PEEK_BYTES = 4096L
+
+    private const val NOT_FOUND = -404
+
+    fun isPgcPath(encodedPath: String): Boolean = PGC_PREFIXES.any { encodedPath.startsWith(it) }
+
+    /** Peeks prefix text from an OkHttp response, decompressing gzip if needed. */
+    fun peekPrefix(response: Any): String {
+        val body = response.callMethod("peekBody", PEEK_BYTES) ?: return ""
+        val bytes = (body.callMethod("bytes") as? ByteArray) ?: return ""
+        return decodePrefixBytes(bytes, PEEK_BYTES.toInt())
+    }
+
+    /**
+     * Decodes a (possibly truncated) response byte prefix into UTF-8 text.
+     * `peekBody(4096)` truncates large gzipped season responses mid-stream, which causes
+     * `GZIPInputStream` to throw [EOFException] after decompressing the available prefix.
+     */
+    fun decodePrefixBytes(bytes: ByteArray, maxBytes: Int = PEEK_BYTES.toInt()): String {
+        if (bytes.isEmpty()) return ""
+        if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(1024)
+            runCatching {
+                GZIPInputStream(ByteArrayInputStream(bytes)).use { gis ->
+                    while (out.size() < maxBytes) {
+                        val toRead = minOf(buf.size, maxBytes - out.size())
+                        val read = try {
+                            gis.read(buf, 0, toRead)
+                        } catch (_: EOFException) {
+                            -1
+                        }
+                        if (read <= 0) break
+                        out.write(buf, 0, read)
+                    }
+                }
+            }
+            return String(out.toByteArray(), Charsets.UTF_8)
+        }
+        val slice = if (bytes.size > maxBytes) bytes.copyOfRange(0, maxBytes) else bytes
+        return String(slice, Charsets.UTF_8)
+    }
+
+    /** The `code` at the start of a JSON response, or null when there is none. */
+    fun answerCode(prefix: String): Int? = CODE.find(prefix)?.groupValues?.get(1)?.toIntOrNull()
+
+    /**
+     * True when the start of a JSON response is a region refusal rather than data. A season the
+     * viewer's region may not see comes back as `-404`, as well as with the explicit region codes.
+     */
+    fun isRegionRefusal(prefix: String): Boolean {
+        val code = answerCode(prefix) ?: return false
+        if (code == 0) return false
+        if (code == NOT_FOUND) return true
+        val message = MESSAGE.find(prefix)?.groupValues?.get(1)?.let(::unescape)
+        return SeaBangumiPlayCodec.isRegionBlocked(code, message)
+    }
+
+    /** The same path and query on the resolver, so the host's own signature stays valid. */
+    fun replayUrl(baseUrl: String, encodedPath: String, encodedQuery: String?): String =
+        buildString {
+            append(baseUrl.trimEnd('/'))
+            append(encodedPath)
+            if (!encodedQuery.isNullOrEmpty()) append('?').append(encodedQuery)
+        }
+
+    /**
+     * Builds replay query string.
+     * When [region] is provided, adds the corresponding `area` query parameter (e.g. `area=hk` or `area=tw`).
+     * If [anonymous] is true, drops `access_key` and resigns with the standard app key.
+     */
+    fun buildReplayQuery(encodedQuery: String?, region: ResolverRegion? = null, anonymous: Boolean = true): String? {
+        if (encodedQuery.isNullOrEmpty()) {
+            if (region == null) return null
+            val params = linkedMapOf("area" to region.areaCode)
+            return if (anonymous) AppSignature.signedQuery(params) else "area=${region.areaCode}"
+        }
+        val params = LinkedHashMap<String, String>()
+        for (part in encodedQuery.split('&')) {
+            if (part.isEmpty()) continue
+            val name = URLDecoder.decode(part.substringBefore('='), "UTF-8")
+            val value = URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
+            if (anonymous) {
+                when (name) {
+                    "appkey", "access_key", "sign" -> Unit
+                    else -> params[name] = value
+                }
+            } else {
+                if (name != "sign") params[name] = value
+            }
+        }
+        if (region != null && !params.containsKey("area")) {
+            params["area"] = region.areaCode
+        }
+        return if (anonymous) {
+            AppSignature.signedQuery(params)
+        } else {
+            params.entries.joinToString("&") { (k, v) ->
+                "${java.net.URLEncoder.encode(k, "UTF-8")}=${java.net.URLEncoder.encode(v, "UTF-8")}"
+            }
+        }
+    }
+
+    /**
+     * The same request without the account: `access_key` is dropped and the query signed again with
+     * the standard app key, so the resolver can forward it.
+     */
+    fun anonymousQuery(encodedQuery: String?): String? = buildReplayQuery(encodedQuery, null, anonymous = true)
+
+    private fun unescape(raw: String): String =
+        Regex("\\\\u([0-9a-fA-F]{4})").replace(raw) { it.groupValues[1].toInt(16).toChar().toString() }
+}

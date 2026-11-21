@@ -2,12 +2,12 @@ package io.github.bbzq.feats
 
 import android.content.Context
 import io.github.bbzq.ModuleSettings
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 
 /**
  * Picks the fastest CDN line for a resolver playurl result by downloading the first few hundred KB

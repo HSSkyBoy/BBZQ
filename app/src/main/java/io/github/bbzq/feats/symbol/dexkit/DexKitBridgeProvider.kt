@@ -3,9 +3,9 @@ package io.github.bbzq.feats.symbol.dexkit
 import android.content.Context
 import android.os.Build
 import android.os.Process
-import org.luckypray.dexkit.DexKitBridge
 import java.io.File
 import java.util.zip.ZipFile
+import org.luckypray.dexkit.DexKitBridge
 
 class DexKitScanBridge(
     val sourcePath: String,

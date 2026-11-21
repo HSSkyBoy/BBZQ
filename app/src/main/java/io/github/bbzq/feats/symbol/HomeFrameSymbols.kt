@@ -1,7 +1,5 @@
 package io.github.bbzq.feats.symbol
 
-import org.json.JSONArray
-import org.json.JSONObject
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.GenericArrayType
@@ -9,6 +7,8 @@ import java.lang.reflect.Modifier
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import java.lang.reflect.WildcardType
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class HomeFrameSymbols(
     val constructors: List<ConstructorDescriptor>,

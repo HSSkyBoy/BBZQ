@@ -9,11 +9,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
+import io.github.bbzq.prefs.ModuleRemotePreferences
 import io.github.libxposed.api.XposedInterface
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.json.JSONObject
 
 object RuntimeEnvironmentInfo {
     private const val UNKNOWN = "unknown"

@@ -1,6 +1,7 @@
 package io.github.bbzq.feats.hook
 
 import android.app.Activity
+import io.github.bbzq.feats.hook.story.StorySceneDetector
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

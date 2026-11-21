@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats.symbol
+package io.github.bbzq.feats.symbol
 
 import android.content.SharedPreferences
 import io.github.bbzq.ModuleSettings

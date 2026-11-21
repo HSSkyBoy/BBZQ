@@ -1,13 +1,13 @@
 package io.github.bbzq.feats
 
 import io.github.bbzq.BuildConfig
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import java.security.MessageDigest
-import java.util.concurrent.TimeUnit
 
 class BilibiliSponsorBlock(
     private val bvid: String,
@@ -248,4 +248,3 @@ class BilibiliSponsorBlock(
         }
     }
 }
-

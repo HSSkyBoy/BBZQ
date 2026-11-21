@@ -22,18 +22,19 @@ import android.widget.TextView
 import android.widget.Toast
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.R
-import io.github.bbzq.feats.hook.CustomCdnProcessor
-import okhttp3.Call
-import okhttp3.ConnectionPool
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
+import io.github.bbzq.feats.hook.network.CustomCdnProcessor
+import io.github.bbzq.ui.settings.dp
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import okhttp3.Call
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 
 data class CdnSpeedResult(
     val name: String,

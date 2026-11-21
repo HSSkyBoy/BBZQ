@@ -1,7 +1,7 @@
 package io.github.bbzq.feats
 
 import android.content.Context
-import io.github.bbzq.AccessKeyRepository
+import io.github.bbzq.prefs.AccessKeyRepository
 import java.lang.reflect.Modifier
 
 internal object HostAccountResolver {

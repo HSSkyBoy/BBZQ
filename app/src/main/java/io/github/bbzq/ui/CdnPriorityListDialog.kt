@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.ui
+package io.github.bbzq.ui
 
 import android.app.AlertDialog
 import android.content.Context
@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.R
+import io.github.bbzq.ui.settings.dp
 
 class CdnPriorityListDialog(
     private val context: Context,

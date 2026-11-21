@@ -8,6 +8,7 @@ import android.view.Window
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import io.github.bbzq.ui.settings.dp
 
 class ReadEraIntroActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {

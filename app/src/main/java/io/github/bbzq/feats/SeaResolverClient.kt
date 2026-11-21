@@ -1,10 +1,10 @@
 package io.github.bbzq.feats
 
+import java.util.concurrent.TimeUnit
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
 
 /** Plain GET access to the user-configured resolver server; never sends account data on its own. */
 class SeaResolverClient(

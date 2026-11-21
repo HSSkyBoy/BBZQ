@@ -3,7 +3,7 @@ package io.github.bbzq
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Xml
-import org.xmlpull.v1.XmlPullParser
+import io.github.bbzq.prefs.safeStringSet
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.StringReader
@@ -12,6 +12,7 @@ import java.util.LinkedHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import org.xmlpull.v1.XmlPullParser
 
 object ConfigPorter {
     private const val ZIP_SWITCHES_ENTRY = "switches.xml"

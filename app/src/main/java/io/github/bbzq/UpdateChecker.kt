@@ -2,6 +2,8 @@ package io.github.bbzq
 
 import android.os.Handler
 import android.os.Looper
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -9,8 +11,6 @@ import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /**
  * 通过 LSPosed 模块仓库的 GitHub Release API 检查模组是否有新版本。
