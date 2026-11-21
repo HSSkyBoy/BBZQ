@@ -26,6 +26,8 @@ object RootUtils {
 
     val CANDIDATE_PACKAGES = listOf(
         "tv.danmaku.bili",
+        "com.bilibili.app.blue",
+        "com.bilibili.app.in",
     )
 
     fun isRootAvailable(): Boolean {

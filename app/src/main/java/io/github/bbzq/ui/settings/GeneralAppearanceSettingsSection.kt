@@ -84,6 +84,12 @@ internal fun SettingsContentFactory.startupRows(): List<View> {
         ModuleSettings.KEY_BLOCK_UPDATE_ENABLED,
         false,
     )
+    rows += createSwitchRow(
+        context.getString(R.string.risk_control_spoof_title),
+        context.getString(R.string.risk_control_spoof_summary),
+        ModuleSettings.KEY_RISK_CONTROL_SPOOF_ENABLED,
+        false,
+    )
     return rows
 }
 

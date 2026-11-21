@@ -845,6 +845,7 @@ class SettingsContentFactory(
         internal val SUPPORTED_HOST_PACKAGES = listOf(
             "tv.danmaku.bili",
             "com.bilibili.app.blue",
+            "com.bilibili.app.in",
             "top.nkbe.npatch",
         )
         /** 检查更新弹窗「前往下载」的兜底地址，当 Release 未给出链接时使用。 */

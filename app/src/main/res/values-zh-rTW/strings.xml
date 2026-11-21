@@ -663,4 +663,8 @@
     <string name="intro_readera_summary">解除背景與熄屏朗讀限制，移除付費提示</string>
     <string name="intro_repo_summary">官方發布倉庫：HSSkyBoy/BBZQ（後續更新統一由此倉庫發布）</string>
     <string name="intro_repo_notice">官方倉庫已統一至 HSSkyBoy/BBZQ，內建檢查更新與正式版皆於此發布。</string>
+
+    <!-- 風控採集偽裝 -->
+    <string name="risk_control_spoof_title">風控採集良民偽裝</string>
+    <string name="risk_control_spoof_summary">偽造 com.bilibili.gripper.riskcontrol.RiskCollect 的 36 項裝置風險檢測（Root / Xposed / Frida / 代理 / VPN / 模擬器等）與風險應用掃描結果，並保留合法 BUVID 校驗碼上報為正常裝置。</string>
 </resources>

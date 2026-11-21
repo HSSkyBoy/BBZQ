@@ -333,6 +333,7 @@ private val CATEGORY_SWITCHES: Map<SettingsCategory, List<Pair<String, Boolean>>
         ModuleSettings.KEY_SPLASH_AUTO_NIGHT_ENABLED to false,
         ModuleSettings.KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED to false,
         ModuleSettings.KEY_BLOCK_UPDATE_ENABLED to false,
+        ModuleSettings.KEY_RISK_CONTROL_SPOOF_ENABLED to false,
     ),
     SettingsCategory.NETWORK to listOf(
         ModuleSettings.KEY_CUSTOM_DOWNLOAD_THREAD_ENABLED to false,

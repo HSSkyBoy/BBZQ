@@ -656,4 +656,8 @@
     <string name="intro_readera_summary">Removes background / screen-off TTS pause limits and paywall prompts</string>
     <string name="intro_repo_summary">Official repository: HSSkyBoy/BBZQ (all future releases are published here)</string>
     <string name="intro_repo_notice">Official releases and in-app update checks are now unified under HSSkyBoy/BBZQ.</string>
+
+    <!-- Risk control spoofing -->
+    <string name="risk_control_spoof_title">Spoof risk control telemetry</string>
+    <string name="risk_control_spoof_summary">Reports a clean device state for com.bilibili.gripper.riskcontrol.RiskCollect (all 36 root / Xposed / Frida / proxy / VPN / emulator checks and suspicious app scans) while preserving valid BUVID checksums.</string>
 </resources>

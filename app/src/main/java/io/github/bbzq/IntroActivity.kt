@@ -573,6 +573,7 @@ class IntroActivity : Activity() {
         private val SUPPORTED_HOST_PACKAGES = listOf(
             "tv.danmaku.bili",
             "com.bilibili.app.blue",
+            "com.bilibili.app.in",
             "top.nkbe.npatch",
         )
     }

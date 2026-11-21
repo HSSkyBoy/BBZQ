@@ -707,4 +707,8 @@
     <string name="intro_readera_summary">解除后台与熄屏朗读限制，去除付费提示</string>
     <string name="intro_repo_summary">官方发布仓库：HSSkyBoy/BBZQ（后续更新统一从此仓库发布）</string>
     <string name="intro_repo_notice">官方仓库已统一至 HSSkyBoy/BBZQ，内置检查更新与正式版均在此发布。</string>
+
+    <!-- 风控采集伪装 -->
+    <string name="risk_control_spoof_title">风控采集良民伪装</string>
+    <string name="risk_control_spoof_summary">伪造 com.bilibili.gripper.riskcontrol.RiskCollect 的 36 项设备风险检测（Root / Xposed / Frida / 代理 / VPN / 模拟器等）与风险应用扫描结果，并保留合法 BUVID 校验码上报为正常设备。</string>
 </resources>

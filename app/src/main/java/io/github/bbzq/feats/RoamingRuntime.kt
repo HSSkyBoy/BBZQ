@@ -72,6 +72,7 @@ import io.github.bbzq.feats.hook.system.DaggerCircularDependencyFixHook
 import io.github.bbzq.feats.hook.system.DialogBlurBackgroundHook
 import io.github.bbzq.feats.hook.system.FullNumberFormatHook
 import io.github.bbzq.feats.hook.system.PageFontScaleHook
+import io.github.bbzq.feats.hook.system.RiskControlSpoofHook
 import io.github.bbzq.feats.hook.system.SettingHook
 import io.github.bbzq.feats.hook.system.ShareHook
 import io.github.bbzq.feats.hook.system.SplashAutoNightHook
@@ -196,6 +197,7 @@ object RoamingRuntime {
             ProcessScope.MAIN -> listOf(
                 ::DaggerCircularDependencyFixHook,
                 ::CourseIntroCrashGuardHook,
+                ::RiskControlSpoofHook,
                 ::SettingHook,
                 ::SplashAdHook,
                 ::SplashAutoNightHook,

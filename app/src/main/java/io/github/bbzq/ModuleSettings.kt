@@ -12,6 +12,7 @@ object ModuleSettings {
     const val KEY_SKIP_REWARD_AD_ENABLED = "skip_reward_ad"
     const val KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED = "block_teenagers_mode_dialog"
     const val KEY_BLOCK_UPDATE_ENABLED = "block_update_enabled"
+    const val KEY_RISK_CONTROL_SPOOF_ENABLED = "risk_control_spoof_enabled"
     const val KEY_BLOCK_P2P_ENABLED = "block_p2p_enabled"
     const val KEY_SKIP_SPLASH_AD_ENABLED = "skip_splash_ad_enabled"
     const val KEY_SPLASH_AUTO_NIGHT_ENABLED = "splash_auto_night_enabled"
@@ -292,6 +293,7 @@ object ModuleSettings {
         ExportableConfigSpec(KEY_SKIP_REWARD_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_REWARD_AD_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_TEENAGERS_MODE_DIALOG_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_UPDATE_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_UPDATE_ENABLED, false) },
+        ExportableConfigSpec(KEY_RISK_CONTROL_SPOOF_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_RISK_CONTROL_SPOOF_ENABLED, false) },
         ExportableConfigSpec(KEY_BLOCK_P2P_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_BLOCK_P2P_ENABLED, false) },
         ExportableConfigSpec(KEY_SKIP_SPLASH_AD_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SKIP_SPLASH_AD_ENABLED, true) },
         ExportableConfigSpec(KEY_SPLASH_AUTO_NIGHT_ENABLED, ExportableValueType.BOOLEAN) { it.getBoolean(KEY_SPLASH_AUTO_NIGHT_ENABLED, false) },
@@ -547,6 +549,9 @@ object ModuleSettings {
 
     fun isBlockUpdateEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_BLOCK_UPDATE_ENABLED, false)
+
+    fun isRiskControlSpoofEnabled(prefs: SharedPreferences): Boolean =
+        prefs.getBoolean(KEY_RISK_CONTROL_SPOOF_ENABLED, false)
 
     fun isUnlockVideoFeaturesEnabled(prefs: SharedPreferences): Boolean =
         prefs.getBoolean(KEY_UNLOCK_VIDEO_FEATURES_ENABLED, false)
