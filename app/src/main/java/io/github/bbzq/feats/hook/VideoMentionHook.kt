@@ -11,30 +11,33 @@ import io.github.bbzq.feats.hookBefore
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private val methodCache = ConcurrentHashMap<Class<*>, ConcurrentHashMap<String, Method?>>()
-    private var blockedCount = 0
+    private val blockedCount = AtomicInteger(0)
 
     override fun startHook() {
         if (env.processName != env.packageName) return
 
         var installed = 0
 
-        // 1. Data Layer (gRPC / Protobuf)
+        // 1. Data Layer (gRPC / Protobuf / playerbizcommon3)
         installed += installModuleBlock()
         installed += installVideoMentionsBlock()
         installed += installVideoMentionsReplyBlock()
         installed += installUpToolBlock()
+        installed += installPlayerBizCommon3Block()
 
         // 2. UI & Dialog Layer
         installed += installGameVideoMentionedComponentBlock()
         installed += installSeedVideoMentionedBlock()
         installed += installDialogBlock()
+        installed += installToyAutoFloatBlock()
 
         if (installed > 0) {
             isInstalled = true
-            log("startHook: VideoMentionHook installed=, initialEnabled=")
+            log("startHook: VideoMentionHook installed=$installed, initialEnabled=${ModuleSettings.isPurifyVideoMentionEnabled(prefs)}")
         } else {
             log("startHook: VideoMentionHook no hook point found")
         }
@@ -71,7 +74,7 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             count++
         }
 
-        log("startHook: VideoMentionHook Module hook count=")
+        log("startHook: VideoMentionHook Module hook count=$count")
         return count
     }
 
@@ -99,7 +102,7 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             count++
         }
 
-        log("startHook: VideoMentionHook VideoMentions hook count=")
+        log("startHook: VideoMentionHook VideoMentions hook count=$count")
         return count
     }
 
@@ -127,7 +130,7 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             count++
         }
 
-        log("startHook: VideoMentionHook VideoMentionsReply hook count=")
+        log("startHook: VideoMentionHook VideoMentionsReply hook count=$count")
         return count
     }
 
@@ -145,7 +148,27 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             count++
         }
 
-        log("startHook: VideoMentionHook UpTool hook count=")
+        log("startHook: VideoMentionHook UpTool hook count=$count")
+        return count
+    }
+
+    private fun installPlayerBizCommon3Block(): Int {
+        val dataClass = classLoader.findClassOrNull(VIDEO_MENTIONED_DATA_CLASS) ?: return 0
+        var count = 0
+        dataClass.declaredMethods.filter {
+            !Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                List::class.java.isAssignableFrom(it.returnType)
+        }.forEach { method ->
+            if (env.hookBefore(method) { param ->
+                    if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@hookBefore
+                    param.result = emptyList<Any>()
+                }
+            ) {
+                count++
+            }
+        }
+        log("startHook: VideoMentionHook VideoMentionedData hook count=$count")
         return count
     }
 
@@ -167,14 +190,14 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
                         if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@runCatching
                         val entry = if (method.name == "createViewEntry") param.result else param.args.firstOrNull()
                         hideViewEntry(entry)
-                        logBlocked(".")
+                        logBlocked("${compClass.simpleName}.${method.name}")
                     }
                 }
                 count++
             }
         }
 
-        log("startHook: VideoMentionHook GameVideoMentioned components hook count=")
+        log("startHook: VideoMentionHook GameVideoMentioned components hook count=$count")
         return count
     }
 
@@ -196,42 +219,70 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@runCatching
                     val entry = if (method.name == "createViewEntry") param.result else param.args.firstOrNull()
                     hideViewEntry(entry)
-                    logBlocked("SeedVideoMentioned.")
+                    logBlocked("SeedVideoMentioned.${method.declaringClass.simpleName}.${method.name}")
                 }
             }
             count++
         }
 
-        log("startHook: VideoMentionHook SeedVideoMentioned hook count=")
+        log("startHook: VideoMentionHook SeedVideoMentioned hook count=$count")
         return count
     }
 
     private fun installDialogBlock(): Int {
-        val dialogClass = classLoader.findClassOrNull("com.bilibili.ship.theseus.ugc.intro.videomentioned.dialog.VideoMentionedDialogService")
-            ?: return 0
         var count = 0
-
-        // showDialog() is obfuscated in newer builds; its coroutine lambdas keep the original name.
-        val showMethods = dialogClass.declaredMethods.filter {
-            it.name == "showDialog" && !Modifier.isStatic(it.modifiers)
-        }.ifEmpty {
-            if (classLoader.findClassOrNull("${dialogClass.name}\$showDialog\$1") == null) return@ifEmpty emptyList()
-            dialogClass.declaredMethods.filter {
-                !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == Void.TYPE
-            }.let { if (it.size == 1) it else emptyList() }
-        }
-        showMethods.forEach { method ->
-            env.hookBefore(method) { param ->
-                if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@hookBefore
-                logBlocked("VideoMentionedDialogService.showDialog")
-                param.result = null
+        DIALOG_SERVICE_CLASSES.forEach { className ->
+            val dialogClass = classLoader.findClassOrNull(className) ?: return@forEach
+            // showDialog() is obfuscated in newer builds; its coroutine lambdas keep the original name.
+            val showMethods = dialogClass.declaredMethods.filter {
+                it.name == "showDialog" && !Modifier.isStatic(it.modifiers)
+            }.ifEmpty {
+                val hasShowDialogLambda = SHOW_DIALOG_LAMBDA_SUFFIXES.any { suffix ->
+                    classLoader.findClassOrNull("${dialogClass.name}$suffix") != null
+                }
+                if (!hasShowDialogLambda) return@ifEmpty emptyList()
+                dialogClass.declaredMethods.filter {
+                    !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == Void.TYPE
+                }.let { if (it.size == 1) it else emptyList() }
             }
-            count++
+            showMethods.forEach { method ->
+                if (env.hookBefore(method) { param ->
+                        if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@hookBefore
+                        logBlocked("${dialogClass.name}.${method.name}")
+                        param.result = null
+                    }
+                ) {
+                    count++
+                }
+            }
         }
 
-        log("startHook: VideoMentionHook VideoMentionedDialogService hook count=")
+        log("startHook: VideoMentionHook VideoMentionedDialogService hook count=$count")
         return count
     }
+
+    private fun installToyAutoFloatBlock(): Int {
+        val autoFloatClass = classLoader.findClassOrNull(TOY_AUTO_FLOAT_LAMBDA_CLASS) ?: return 0
+        val unit = resolveKotlinUnit() ?: return 0
+        val invokeSuspend = autoFloatClass.declaredMethods.firstOrNull {
+            !Modifier.isStatic(it.modifiers) &&
+                it.name == "invokeSuspend" &&
+                it.parameterTypes.contentEquals(arrayOf(Any::class.java))
+        } ?: return 0
+        val hooked = env.hookBefore(invokeSuspend) { param ->
+            if (!ModuleSettings.isPurifyVideoMentionEnabled(prefs)) return@hookBefore
+            logBlocked("ToyAutoFloatLayerService.autoOpen")
+            param.result = unit
+        }
+        val count = if (hooked) 1 else 0
+        log("startHook: VideoMentionHook ToyAutoFloatLayerService hook count=$count")
+        return count
+    }
+
+    private fun resolveKotlinUnit(): Any? = runCatching {
+        val unitType = classLoader.findClassOrNull("kotlin.Unit") ?: return null
+        unitType.getField("INSTANCE").get(null)
+    }.getOrNull()
 
     private fun hideViewEntry(entry: Any?) {
         if (entry == null) return
@@ -272,13 +323,25 @@ class VideoMentionHook(env: RoamingEnv) : BaseRoamingHook(env) {
             }
 
     private fun logBlocked(action: String) {
-        val count = ++blockedCount
+        val count = blockedCount.incrementAndGet()
         if (count <= 20 || count % 20 == 0) {
-            log("VideoMentionHook blocked  count=")
+            log("VideoMentionHook blocked $action count=$count")
         }
     }
 
     private companion object {
         private const val SEED_PACKAGE = "com.bilibili.ship.theseus.united.page.intro.module.videomentioned.seed"
+        private const val VIDEO_MENTIONED_DATA_CLASS =
+            "com.bilibili.playerbizcommon3.videomentioned.VideoMentionedData"
+        private const val TOY_AUTO_FLOAT_LAMBDA_CLASS =
+            "com.bilibili.ship.theseus2.ugc.intro.videomentioned.ToyAutoFloatLayerService\$1"
+        private val DIALOG_SERVICE_CLASSES = listOf(
+            "com.bilibili.ship.theseus.ugc.intro.videomentioned.dialog.VideoMentionedDialogService",
+            "com.bilibili.ship.theseus2.ugc.intro.videomentioned.dialog.VideoMentionedDialogService",
+        )
+        private val SHOW_DIALOG_LAMBDA_SUFFIXES = listOf(
+            "\$showDialog\$1",
+            "\$showDialog\$layerJob\$1",
+        )
     }
 }

@@ -48,6 +48,7 @@ data class BiliHookSymbols(
     val customTheme: CustomThemeSymbols? = null,
     val customSkin: CustomSkinSymbols? = null,
     val videoQuality: VideoQualitySymbols? = null,
+    val videoEndRecommend: VideoEndRecommendSymbols? = null,
 ) {
     fun isUsableWith(expectedFingerprint: String): Boolean =
         cacheSchemaVersion == CACHE_SCHEMA_VERSION &&
@@ -92,9 +93,10 @@ data class BiliHookSymbols(
         .putOpt("customTheme", customTheme?.toJson())
         .putOpt("customSkin", customSkin?.toJson())
         .putOpt("videoQuality", videoQuality?.toJson())
+        .putOpt("videoEndRecommend", videoEndRecommend?.toJson())
 
     companion object {
-        const val CACHE_SCHEMA_VERSION = 40
+        const val CACHE_SCHEMA_VERSION = 41
 
         fun fromJson(raw: String?): BiliHookSymbols? {
             if (raw.isNullOrBlank()) return null
@@ -143,6 +145,7 @@ data class BiliHookSymbols(
                     customTheme = obj.optJSONObject("customTheme")?.let(CustomThemeSymbols::fromJson),
                     customSkin = obj.optJSONObject("customSkin")?.let(CustomSkinSymbols::fromJson),
                     videoQuality = obj.optJSONObject("videoQuality")?.let(VideoQualitySymbols::fromJson),
+                    videoEndRecommend = obj.optJSONObject("videoEndRecommend")?.let(VideoEndRecommendSymbols::fromJson),
                 )
             }.getOrNull()
         }
@@ -150,7 +153,7 @@ data class BiliHookSymbols(
 }
 
 object DexKitRuleVersions {
-    const val CURRENT = 68
+    const val CURRENT = 69
 }
 
 data class HookPointStatus(
@@ -2254,6 +2257,31 @@ data class RestoredVideoQualitySymbols(
     val rangeQualityUpdateMethod: Method? = null,
 )
 
+data class VideoEndRecommendSymbols(
+    val shouldShowEndPageMethod: MethodDescriptor? = null,
+    val evidence: String,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .putOpt("shouldShowEndPageMethod", shouldShowEndPageMethod?.toJson())
+        .put("evidence", evidence)
+
+    fun restore(classLoader: ClassLoader): RestoredVideoEndRecommendSymbols =
+        RestoredVideoEndRecommendSymbols(
+            shouldShowEndPageMethod = shouldShowEndPageMethod?.restoreOptional(classLoader),
+        )
+
+    companion object {
+        fun fromJson(obj: JSONObject): VideoEndRecommendSymbols = VideoEndRecommendSymbols(
+            shouldShowEndPageMethod = obj.optJSONObject("shouldShowEndPageMethod")?.let(MethodDescriptor::fromJson),
+            evidence = obj.optString("evidence", "-"),
+        )
+    }
+}
+
+data class RestoredVideoEndRecommendSymbols(
+    val shouldShowEndPageMethod: Method?,
+)
+
 data class MethodDescriptor(
     val declaringClassName: String,
     val name: String,
@@ -2332,17 +2360,8 @@ fun BiliHookSymbols.formatStatusLines(): List<String> =
             listOf("Scan Errors:") + scanErrors.map { "  - $it" }
         }
 
-internal fun ClassLoader.loadClassOrNull(name: String): Class<*>? {
-    runCatching { Class.forName(name, false, this) }.getOrNull()?.let { return it }
-    val relocatedName = name
-        .takeIf { it.startsWith(BILIBILI_TV_PACKAGE_PREFIX) }
-        ?.let { BILIBILI_950_TV_PACKAGE_PREFIX + it.removePrefix(BILIBILI_TV_PACKAGE_PREFIX) }
-        ?: return null
-    return runCatching { Class.forName(relocatedName, false, this) }.getOrNull()
-}
-
-private const val BILIBILI_TV_PACKAGE_PREFIX = "tv.danmaku.bili."
-private const val BILIBILI_950_TV_PACKAGE_PREFIX = "p371tv.danmaku.bili."
+internal fun ClassLoader.loadClassOrNull(name: String): Class<*>? =
+    runCatching { Class.forName(name, false, this) }.getOrNull()
 
 internal fun MethodDescriptor?.restoreOptional(classLoader: ClassLoader): Method? {
     val descriptor = this ?: return null

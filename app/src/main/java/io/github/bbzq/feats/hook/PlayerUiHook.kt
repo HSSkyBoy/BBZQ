@@ -434,7 +434,6 @@ class PlayerUiHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
         private val STORY_ENTRANCE_SERVICE_CANDIDATES = listOf(
             "com.bilibili.ship.theseus2.united.page.story.StoryEntranceService",
-            "com.bilibili.p5797ship.theseus2.united.p5850page.story.StoryEntranceService",
         )
         private val PORTRAIT_CLASS_MARKERS = listOf(
             "FullStoryWidget",

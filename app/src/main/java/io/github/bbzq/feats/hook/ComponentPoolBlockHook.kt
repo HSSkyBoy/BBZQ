@@ -171,14 +171,10 @@ class ComponentPoolBlockHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val MOSS_CLASSES = listOf(
             "com.bapis.bilibili.app.resource.v1.ModuleMoss",
             "com.bapis.bilibili.app.resource.v1.KModuleMoss",
-            "com.bapis.bilibili.p4218app.resource.p4240v1.ModuleMoss",
-            "com.bapis.bilibili.p4218app.resource.p4240v1.KModuleMoss",
         )
         val REQUEST_CLASSES = listOf(
             "com.bapis.bilibili.app.resource.v1.ListReq",
             "com.bapis.bilibili.app.resource.v1.KListReq",
-            "com.bapis.bilibili.p4218app.resource.p4240v1.ListReq",
-            "com.bapis.bilibili.p4218app.resource.p4240v1.KListReq",
         )
         val METHOD_NAMES = listOf("executeList", "list")
     }

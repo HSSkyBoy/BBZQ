@@ -221,18 +221,14 @@ class SettingHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
         private val HOME_MAIN_FRAGMENTS = setOf(
             "tv.danmaku.bili.ui.main2.basic.BaseMainFrameFragment",
-            "tv.danmaku.p9138bili.p9228ui.main2.basic.BaseMainFrameFragment",
             "tv.danmaku.bili.ui.main2.MainFragment",
-            "tv.danmaku.p9138bili.p9228ui.main2.MainFragment",
         )
         private val JOIN_US_KEYS = arrayOf("JoinUs", "pref_key_joinus")
         private const val ENTRY_TITLE = "高级设置"
         private const val ENTRY_SUMMARY = "BBZQ 设置"
         private val HELP_FRAGMENT_CLASSES = arrayOf(
             "com.bilibili.app.preferences.fragment.HelpFragment",
-            "com.bilibili.p4439app.preferences.fragment.HelpFragment",
             "com.bilibili.app.preferences.fragment.WideHelpFragment",
-            "com.bilibili.p4439app.preferences.fragment.WideHelpFragment",
         )
     }
 }

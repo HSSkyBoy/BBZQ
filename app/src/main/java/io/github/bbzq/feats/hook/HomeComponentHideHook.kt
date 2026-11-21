@@ -203,7 +203,6 @@ class HomeComponentHideHook(env: io.github.bbzq.feats.RoamingEnv) : BaseRoamingH
     private companion object {
         private val BASE_HOME_FRAGMENT_CLASSES = arrayOf(
             "tv.danmaku.bili.home.tab.page.BaseHomeFragment",
-            "tv.danmaku.p9138bili.p9170home.p9173tab.p9174page.BaseHomeFragment",
         )
         private val BASE_HOME_FRAGMENT_NAMES = BASE_HOME_FRAGMENT_CLASSES.map { it.lowercase() }
         private val HOME_CONTAINER_KEYWORDS = listOf(

@@ -29,6 +29,8 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         installed += installEndPageAdBridgeGuard()
         installed += installHalfScreenWidgetHook()
         installed += installFullScreenWidgetHook()
+        installed += installTheseus2UgcEndPageHook()
+        installed += installTheseus2OgvEndPageHook()
 
         if (installed > 0) {
             isInstalled = true
@@ -181,6 +183,185 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
         )
         return hookWidgetViews(fullWidgetClasses) {
             ModuleSettings.isDisableAllEndPage(prefs)
+        }
+    }
+
+    // =========================================================================
+    // 4b. Bilibili 9.20+ (theseus2 Compose) UGC / OGV 结束推荐拦截
+    // =========================================================================
+
+    private fun installTheseus2UgcEndPageHook(): Int {
+        var count = 0
+        val unit = resolveKotlinUnit()
+
+        env.symbols?.videoEndRecommend?.restore(classLoader)?.shouldShowEndPageMethod?.let { decisionMethod ->
+            if (env.hookBefore(decisionMethod) { param ->
+                    if (ModuleSettings.isDisableAllEndPage(prefs)) {
+                        param.result = false
+                    }
+                }
+            ) {
+                count++
+            }
+        }
+
+        if (unit != null) {
+            classLoader.findClassOrNull(THESEUS2_UGC_SHOW_SURFACE_LAMBDA_CLASS)?.declaredMethods?.firstOrNull {
+                !Modifier.isStatic(it.modifiers) &&
+                    it.name == "invokeSuspend" &&
+                    it.parameterTypes.contentEquals(arrayOf(Any::class.java))
+            }?.let { invokeSuspend ->
+                if (env.hookBefore(invokeSuspend) { param ->
+                        if (ModuleSettings.isDisableAllEndPage(prefs)) {
+                            param.result = unit
+                        }
+                    }
+                ) {
+                    count++
+                }
+            }
+        }
+
+        val widgetJobClass = classLoader.findClassOrNull(THESEUS2_UGC_WIDGET_JOB_LAMBDA_CLASS)
+        val composeLambdaMethods = widgetJobClass?.declaredMethods?.filter { method ->
+            Modifier.isStatic(method.modifiers) &&
+                method.parameterCount == 7 &&
+                method.parameterTypes[4].name == COMPOSE_MODIFIER_CLASS &&
+                method.parameterTypes[5].name == COMPOSE_COMPOSER_CLASS &&
+                method.parameterTypes[6] == Int::class.javaPrimitiveType
+        }.orEmpty()
+
+        val ugcServiceClass = composeLambdaMethods.firstOrNull()?.parameterTypes?.getOrNull(0)
+        val composeWidgetClass = composeLambdaMethods.firstOrNull()?.parameterTypes?.getOrNull(1)
+        val playerModeReader = ugcServiceClass?.let(::resolveScreenStatePlayerModeReader)
+
+        if (unit != null && composeLambdaMethods.isNotEmpty()) {
+            composeLambdaMethods.forEach { method ->
+                if (env.hookBefore(method) { param ->
+                        if (ModuleSettings.isDisableAllEndPage(prefs)) {
+                            param.result = unit
+                            return@hookBefore
+                        }
+                        if (!ModuleSettings.isDisableHalfEndPage(prefs)) return@hookBefore
+                        val service = param.args.getOrNull(0) ?: return@hookBefore
+                        if (playerModeReader?.invoke(service) == "HalfScreen") {
+                            param.result = unit
+                        }
+                    }
+                ) {
+                    count++
+                }
+            }
+        }
+
+        if (composeWidgetClass != null) {
+            val holderField = ugcServiceClass?.let { serviceType ->
+                composeWidgetClass.declaredFields.firstOrNull { field ->
+                    !Modifier.isStatic(field.modifiers) &&
+                        runCatching { field.type.declaredFields.any { it.type == serviceType } }.getOrDefault(false)
+                }?.apply { isAccessible = true }
+            }
+            val holderServiceField = if (holderField != null && ugcServiceClass != null) {
+                holderField.type.declaredFields.firstOrNull {
+                    !Modifier.isStatic(it.modifiers) && it.type == ugcServiceClass
+                }?.apply { isAccessible = true }
+            } else {
+                null
+            }
+            composeWidgetClass.declaredMethods.filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.returnType == Void.TYPE &&
+                    method.parameterCount == 3 &&
+                    method.parameterTypes[0].name == COMPOSE_MODIFIER_CLASS &&
+                    method.parameterTypes[1].name == COMPOSE_COMPOSER_CLASS &&
+                    method.parameterTypes[2] == Int::class.javaPrimitiveType
+            }.forEach { renderMethod ->
+                if (env.hookBefore(renderMethod) { param ->
+                        if (ModuleSettings.isDisableAllEndPage(prefs)) {
+                            param.result = null
+                            return@hookBefore
+                        }
+                        if (!ModuleSettings.isDisableHalfEndPage(prefs)) return@hookBefore
+                        val widget = param.thisObject ?: return@hookBefore
+                        val service = if (holderField != null && holderServiceField != null) {
+                            runCatching { holderField.get(widget)?.let(holderServiceField::get) }.getOrNull()
+                        } else {
+                            null
+                        }
+                        if (service != null && playerModeReader?.invoke(service) == "HalfScreen") {
+                            param.result = null
+                        }
+                    }
+                ) {
+                    count++
+                }
+            }
+        }
+
+        if (count > 0) {
+            log("VideoEndRecommend: installTheseus2UgcEndPageHook hooked $count points")
+        }
+        return count
+    }
+
+    private fun installTheseus2OgvEndPageHook(): Int {
+        val serviceClass = classLoader.findClassOrNull(THESEUS2_OGV_END_PAGE_SERVICE_CLASS) ?: return 0
+        val layoutClass = classLoader.findClassOrNull(THESEUS2_OGV_END_PAGE_LAYOUT_CLASS) ?: return 0
+        val unit = resolveKotlinUnit()
+        var count = 0
+
+        serviceClass.declaredMethods.filter { method ->
+            !Modifier.isStatic(method.modifiers) &&
+                method.parameterCount in 1..2 &&
+                method.parameterTypes[0] == layoutClass
+        }.forEach { method ->
+            val isVoid = method.returnType == Void.TYPE
+            if (!isVoid && unit == null) return@forEach
+            if (env.hookBefore(method) { param ->
+                    val layoutName = (param.args.firstOrNull() as? Enum<*>)?.name ?: return@hookBefore
+                    val shouldBlock = when (layoutName) {
+                        "Half" -> ModuleSettings.isDisableAllEndPage(prefs) || ModuleSettings.isDisableHalfEndPage(prefs)
+                        else -> ModuleSettings.isDisableAllEndPage(prefs)
+                    }
+                    if (shouldBlock) {
+                        param.result = if (isVoid) null else unit
+                    }
+                }
+            ) {
+                count++
+            }
+        }
+
+        if (count > 0) {
+            log("VideoEndRecommend: installTheseus2OgvEndPageHook hooked $count points")
+        }
+        return count
+    }
+
+    private fun resolveKotlinUnit(): Any? = runCatching {
+        classLoader.findClassOrNull("kotlin.Unit")?.getField("INSTANCE")?.get(null)
+    }.getOrNull()
+
+    private fun resolveScreenStatePlayerModeReader(ownerClass: Class<*>): ((Any) -> String?)? {
+        val playerModeClass = classLoader.findClassOrNull(THESEUS2_PLAYER_MODE_CLASS) ?: return null
+        val repoField = ownerClass.declaredFields.firstOrNull { field ->
+            !Modifier.isStatic(field.modifiers) &&
+                field.type.name.startsWith("com.bilibili.ship.theseus2.united.page.screenstate.")
+        }?.apply { isAccessible = true } ?: return null
+        val stateGetter = repoField.type.declaredMethods.firstOrNull { method ->
+            !Modifier.isStatic(method.modifiers) &&
+                method.parameterCount == 0 &&
+                runCatching { method.returnType.declaredFields.any { it.type == playerModeClass } }.getOrDefault(false)
+        }?.apply { isAccessible = true } ?: return null
+        val modeField = stateGetter.returnType.declaredFields.firstOrNull {
+            !Modifier.isStatic(it.modifiers) && it.type == playerModeClass
+        }?.apply { isAccessible = true } ?: return null
+        return { owner ->
+            runCatching {
+                val repo = repoField.get(owner) ?: return@runCatching null
+                val state = stateGetter.invoke(repo) ?: return@runCatching null
+                (modeField.get(state) as? Enum<*>)?.name
+            }.getOrNull()
         }
     }
 
@@ -396,6 +577,18 @@ class VideoEndRecommendHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
     private companion object {
         private const val AD_CARD_CLASS = "com.bilibili.gripper.api.ad.biz.videodetail.endpage.IVDEndPageAdCard"
+        private const val COMPOSE_MODIFIER_CLASS = "androidx.compose.ui.Modifier"
+        private const val COMPOSE_COMPOSER_CLASS = "androidx.compose.runtime.Composer"
+        private const val THESEUS2_PLAYER_MODE_CLASS =
+            "com.bilibili.ship.theseus2.united.page.screenstate.PlayerMode"
+        private const val THESEUS2_UGC_SHOW_SURFACE_LAMBDA_CLASS =
+            "com.bilibili.ship.theseus2.ugc.endpage.UGCEndPageService\$showEndPageSurface\$2"
+        private const val THESEUS2_UGC_WIDGET_JOB_LAMBDA_CLASS =
+            "com.bilibili.ship.theseus2.ugc.endpage.UGCEndPageService\$showEndPageSurface\$2\$widgetJob\$1"
+        private const val THESEUS2_OGV_END_PAGE_SERVICE_CLASS =
+            "com.bilibili.ship.theseus2.ogv.endpage.OgvEndPageService"
+        private const val THESEUS2_OGV_END_PAGE_LAYOUT_CLASS =
+            "com.bilibili.ship.theseus2.ogv.endpage.OgvEndPageLayout"
         private val AD_BRIDGE_CLASSES = listOf("com.bilibili.ship.theseus2.adaption.endpage.LegacyEndPageAdBridge")
         private val ROOT_VIEW_GETTERS = setOf("onCreateContentView", "createContentView", "getContentView", "getView", "getRoot")
     }

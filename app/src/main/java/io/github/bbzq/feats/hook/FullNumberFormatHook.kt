@@ -165,7 +165,6 @@ class FullNumberFormatHook(env: RoamingEnv) : BaseRoamingHook(env) {
         val YI_UNITS = setOf("亿", "億")
         val SPACE_HEADER_FRAGMENT_CLASSES = arrayOf(
             "com.bilibili.app.authorspace.ui.SpaceHeaderFragment2",
-            "com.bilibili.p4439app.authorspace.ui.SpaceHeaderFragment2",
         )
     }
 }

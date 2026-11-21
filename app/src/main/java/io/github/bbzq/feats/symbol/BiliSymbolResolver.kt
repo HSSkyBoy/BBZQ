@@ -153,9 +153,12 @@ object BiliSymbolResolver {
     private const val HP_CUSTOM_THEME = "CustomThemeHook.ThemeStore"
     private const val HP_CUSTOM_SKIN = "CustomSkinHook.GarbResolver"
     private const val HP_VIDEO_QUALITY = "VideoQualityHook.QualityStrategy"
+    private const val HP_VIDEO_END_RECOMMEND = "VideoEndRecommendHook.Theseus2Decision"
     private const val PLAY_SPEED_EXPERIMENT_PREF_KEY = "sp_play_speed_experiment"
     private const val HIGH_FRAME_RATE_SPEED_RESET_LOG = "reset 3x speed because target quality"
     private const val PLAY_SPEED_ARCHIVE_INFO_KEY = "united_player_archive_info"
+    private const val END_PAGE_DECISION_SERVICE_TAG = "UGCEpisodeEndPageDecisionService"
+    private const val END_PAGE_SHOULD_SHOW_LOG = "shouldShowEndPage: all conditions met, should show end page"
 
     @Volatile
     private var memorySymbols: BiliHookSymbols? = null
@@ -413,6 +416,9 @@ object BiliSymbolResolver {
         val videoQuality = scanOptionalHookPoint(HP_VIDEO_QUALITY, hookPoints, scanErrors, log) {
             scanVideoQuality(classLoader, ::bridge)
         }
+        val videoEndRecommend = scanOptionalHookPoint(HP_VIDEO_END_RECOMMEND, hookPoints, scanErrors, log) {
+            scanVideoEndRecommend(classLoader, ::bridge)
+        }
 
         runCatching { bridge?.close() }
             .onFailure { recordError("DexKitBridge close failed: ${it.scanMessage()}") }
@@ -453,6 +459,7 @@ object BiliSymbolResolver {
             customTheme = customTheme,
             customSkin = customSkin,
             videoQuality = videoQuality,
+            videoEndRecommend = videoEndRecommend,
         )
     }
 
@@ -1150,6 +1157,33 @@ object BiliSymbolResolver {
         } else {
             SymbolScanResult.Missing("video quality hook points not found")
         }
+    }
+
+    private fun scanVideoEndRecommend(
+        classLoader: ClassLoader,
+        bridge: () -> DexKitBridge?,
+    ): SymbolScanResult<VideoEndRecommendSymbols> {
+        val currentBridge = bridge() ?: return SymbolScanResult.Missing("DexKitBridge unavailable")
+        val shouldShowMethod = runCatching {
+            currentBridge.findMethod(
+                FindMethod.create()
+                    .matcher(
+                        MethodMatcher.create()
+                            .usingStrings(END_PAGE_DECISION_SERVICE_TAG, END_PAGE_SHOULD_SHOW_LOG)
+                            .paramCount(0),
+                    ),
+            ).mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .filter { !Modifier.isStatic(it.modifiers) && it.returnType == Boolean::class.javaPrimitiveType }
+                .distinctBy(Method::toGenericString)
+                .singleOrNull()
+                ?.apply { isAccessible = true }
+        }.getOrNull() ?: return SymbolScanResult.Missing("theseus2 end-page decision method not present")
+
+        val symbols = VideoEndRecommendSymbols(
+            shouldShowEndPageMethod = MethodDescriptor.of(shouldShowMethod),
+            evidence = "${shouldShowMethod.declaringClass.name}.${shouldShowMethod.name}",
+        )
+        return SymbolScanResult.Found(symbols, symbols.evidence, symbols.evidence)
     }
 
     private fun scanCustomSkin(
@@ -4222,7 +4256,7 @@ object BiliSymbolResolver {
 
     private fun Class<*>.isCommentActionBaseType(actionBases: List<Class<*>> = emptyList()): Boolean {
         if (actionBases.any { it == this || it.isAssignableFrom(this) || this.isAssignableFrom(it) }) return true
-        if (name == "Kj.AbstractC8070c" || name == "Wk.AbstractC24337c" || name == "Wk.c") return true
+        if (name == "Kj.c" || name == "Wk.c") return true
         if (simpleName.contains("Action", ignoreCase = true) && (name.startsWith("Kj.") || name.startsWith("Wk."))) return true
         return allMethods().any { method ->
             method.name == "a" &&
@@ -4539,25 +4573,19 @@ object BiliSymbolResolver {
     private val ACCOUNT_CLASS_NAMES = listOf(
         "com.bilibili.lib.accounts.BiliAccounts",
         "com.bilibili.app.accounts.BiliAccounts",
-        "com.bilibili.p4439app.accounts.BiliAccounts",
     )
 
     private val SHORT_ACCESS_METHODS = setOf("a", "b")
 
     private val SETTINGS_FRAGMENT_NAMES = listOf(
-        "com.bilibili.p4439app.preferences.BiliPreferencesActivity\$BiliPreferencesFragment",
         "com.bilibili.app.preferences.BiliPreferencesActivity\$BiliPreferencesFragment",
-        "com.bilibili.p4439app.preferences.fragment.WideBiliPreferencesFragment",
         "com.bilibili.app.preferences.fragment.WideBiliPreferencesFragment",
-        "com.bilibili.p4439app.preferences.fragment.BaseWidePreferenceFragment",
         "com.bilibili.app.preferences.fragment.BaseWidePreferenceFragment",
     )
 
     private val PREFERENCE_CLASS_NAMES = listOf(
-        "com.bilibili.p4439app.preferences.settingWide.CornerPreference",
         "com.bilibili.app.preferences.settingWide.CornerPreference",
         "tv.danmaku.bili.widget.preference.BLPreference",
-        "tv.danmaku.p9138bili.widget.preference.BLPreference",
         "androidx.preference.Preference",
     )
 
@@ -4569,7 +4597,6 @@ object BiliSymbolResolver {
     private val SPLASH_FAST_JSON_PARSE_METHODS = setOf("parse", "parseObject")
     private val SPLASH_KOTLINX_JSON_CLASSES = arrayOf(
         "kotlinx.serialization.json.Json",
-        "kotlinx.serialization.p7923json.AbstractC137025Json",
     )
 
     private const val SHARE_LEGACY_RESULT = "com.bilibili.lib.sharewrapper.online.api.ShareClickResult"
@@ -4578,19 +4605,15 @@ object BiliSymbolResolver {
     private const val SHARE_BASE_INFO_TO_STRING = "ShareBaseInfo(title="
     private val SHARE_CONTENT_CLASSES = arrayOf(
         "kntr.common.share.domain.v1.ShareContent",
-        "p7645kntr.common.share.domain.p7866v1.ShareContent",
     )
     private val SHARE_BILI_CONTENT_CLASSES = arrayOf(
         "kntr.common.share.domain.v1.ShareBiliContent",
-        "p7645kntr.common.share.domain.p7866v1.ShareBiliContent",
     )
     private val SHARE_COPY_CONTENT_CLASSES = arrayOf(
         "kntr.common.share.common.handler.copy.b",
-        "p7645kntr.common.share.common.handler.p7848copy.C134543b",
     )
     private val SHARE_COPY_UTILITY_CLASSES = arrayOf(
         "kntr.common.share.common.handler.copy.a",
-        "p7645kntr.common.share.common.handler.p7848copy.C134542a",
     )
     private const val SHARE_COPY_CLIPBOARD_LOG = "copyToClipBoard:"
 
@@ -4620,30 +4643,23 @@ object BiliSymbolResolver {
     )
     private val TEENAGERS_MODE_ACTIVITIES = arrayOf(
         "com.bilibili.app.preferences.TeenagersModeDialogActivity",
-        "com.bilibili.p4439app.preferences.TeenagersModeDialogActivity",
         "tv.danmaku.bili.ui.teenagersmode.TeenagersModeDialogActivity",
         "com.bilibili.teenagersmode.ui.TeenagersModeDialogActivity",
-        "com.bilibili.teenagersmode.p6010ui.TeenagersModeActivity",
         "com.bilibili.teenagersmode.ui.TeenagersModeActivity",
         "com.bilibili.teenagersmode.osteen.OSTeensParentControlRedirectActivity",
     )
 
     private val MINE_FRAGMENT_CLASS_NAMES = listOf(
         "tv.danmaku.bili.ui.main2.mine.HomeUserCenterFragment",
-        "tv.danmaku.p9138bili.p9228ui.main2.p9247mine.HomeUserCenterFragment",
-        "p4235tv.danmaku.bili.ui.main2.mine.HomeUserCenterFragment",
     )
 
     private val MINE_VIP_VIEW_CLASS_NAMES = listOf(
         "tv.danmaku.bili.ui.main2.mine.widgets.MineVipEntranceView",
-        "tv.danmaku.p9138bili.p9228ui.main2.p9247mine.widgets.MineVipEntranceView",
         "tv.danmaku.bili.ui.main2.mine.modularvip.VipEntranceView",
-        "tv.danmaku.p9138bili.p9228ui.main2.p9247mine.modularvip.VipEntranceView",
     )
 
     private val MINE_VIP_MANAGER_CLASS_NAMES = listOf(
         "tv.danmaku.bili.ui.main2.mine.modularvip.MineVipModuleManager",
-        "p4235tv.danmaku.bili.ui.main2.mine.modularvip.MineVipModuleManager",
     )
 
     private val DOWNLOAD_THREAD_LISTENER_CLASS_TERMS = listOf(
@@ -4710,9 +4726,7 @@ object BiliSymbolResolver {
     private const val HOME_MENU_ITEM_CLASS = "com.bilibili.lib.homepage.startdust.menu.a"
     private val HOME_BASE_MAIN_FRAME_FRAGMENTS = setOf(
         "tv.danmaku.bili.ui.main2.basic.BaseMainFrameFragment",
-        "tv.danmaku.p9138bili.p9228ui.main2.basic.BaseMainFrameFragment",
         "tv.danmaku.bili.ui.main2.MainFragment",
-        "tv.danmaku.p9138bili.p9228ui.main2.MainFragment",
     )
     private const val HOME_MAIN_FRAGMENT = "tv.danmaku.bili.ui.main2.MainFragment"
     private const val HOME_DEFAULT_SEARCH_WORD_CLASS = "com.bilibili.app.comm.list.common.api.b"
@@ -4720,36 +4734,28 @@ object BiliSymbolResolver {
         listOf("getDefaultWordGoto", "getDefaultWordType", "getShowFront", "getFlashScreenQueryId")
     private val BOTTOM_TAB_HOST_CLASSES = setOf(
         "com.bilibili.lib.homepage.widget.TabHost",
-        "com.bilibili.p5690lib.p5708homepage.widget.TabHost",
         "tv.danmaku.bili.ui.main2.widget.TabHost",
-        "tv.danmaku.p9138bili.p9228ui.main2.widget.TabHost",
     )
     private val PEGASUS_RESPONSE_CLASSES = arrayOf(
         "com.bilibili.pegasus.data.base.PegasusResponse",
-        "com.bilibili.pegasus.p5730data.p5731base.PegasusResponse",
         "com.bilibili.pegasus.data.request.PegasusResponseWrapper",
-        "com.bilibili.pegasus.p5730data.request.PegasusResponseWrapper",
     )
     private const val PEGASUS_HOLDER_DATA = "com.bilibili.pegasus.PegasusHolderData"
     private val BASE_PEGASUS_DATA_CLASSES = arrayOf(
         "com.bilibili.pegasus.data.base.BasePegasusData",
-        "com.bilibili.pegasus.p5730data.p5731base.BasePegasusData",
     )
     private const val PEGASUS_HOLDER_STYLE = "com.bilibili.pegasus.HolderStyle"
     private const val AD_INFO = "com.bilibili.adcommon.data.IAdInfo"
     private val HOME_FRAGMENT_V2_CLASSES = arrayOf(
         "tv.danmaku.bili.ui.main2.HomeFragmentV2",
-        "tv.danmaku.p9138bili.p9228ui.main2.HomeFragmentV2",
     )
     private val HOME_TAB_RESOURCE_CLASSES = arrayOf(
         "tv.danmaku.bili.ui.main2.resource.l",
         "tv.danmaku.bili.ui.main2.resource.z",
-        "tv.danmaku.p9138bili.p9228ui.main2.resource.z",
     )
     private const val ANDROIDX_FRAGMENT_CLASS = "androidx.fragment.app.Fragment"
     private val BASE_HOME_FRAGMENT_CLASSES = arrayOf(
         "tv.danmaku.bili.home.tab.page.BaseHomeFragment",
-        "tv.danmaku.p9138bili.p9170home.p9173tab.p9174page.BaseHomeFragment",
     )
     private val HOME_COMPONENT_LIFECYCLE_METHODS = listOf(
         "onAttach",
@@ -4760,7 +4766,6 @@ object BiliSymbolResolver {
     )
     private val NUMBER_FORMAT_CLASS_NAMES = listOf(
         "com.bilibili.base.util.NumberFormat",
-        "com.bilibili.p4566base.p4568util.NumberFormat",
         "com.bilibili.n9.util.NumberFormat",
         "com.bilibili.lib.utils.NumberFormat",
     )
@@ -4779,68 +4784,50 @@ object BiliSymbolResolver {
     private val KMP_NUMBER_FORMAT_FACADE_NAMES = listOf("kntr.base.localization.NumberFormat_androidKt")
     private val THESEUS_TAB_PAGER_SERVICE = arrayOf(
         "com.bilibili.ship.theseus.united.page.tab.TheseusTabPagerService",
-        "com.bilibili.p5797ship.theseus.united.p5850page.p5861tab.TheseusTabPagerService",
     )
     private val COMMENT_VIEW_MODEL_CLASSES = arrayOf(
         "com.bilibili.app.comment3.viewmodel.CommentViewModel",
-        "com.bilibili.p4439app.comment3.viewmodel.CommentViewModel",
     )
     private val COMMENT_ACTION_BASE_CLASSES = arrayOf(
         "fou",
         "wtt",
-        "Kj.AbstractC8070c",
         "Kj.c",
-        "Wk.AbstractC24337c",
         "Wk.c",
     )
     private const val QUICK_REPLY_SHOW_PUBLISH_DIALOG_STRING = "ShowPublishDialog(args="
     private val QUICK_REPLY_DIALOG_COLLECTOR_CLASSES = (1..50).flatMap { i ->
         listOf(
             "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$$i",
-            "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$$i",
-            "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$$i\$C636262",
-            "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$$i\$C636262",
             "com.bilibili.app.comment3.ui.CommentContainerImpl\$attachRepository\$$i\$2",
-            "com.bilibili.p4439app.comment3.p4518ui.CommentContainerImpl\$attachRepository\$$i\$2",
         )
     }.toTypedArray()
     private val CMT_VOTE_WIDGET_CLASSES = arrayOf(
         "com.bilibili.app.comment.ext.widgets.CmtVoteWidget",
-        "com.bilibili.p4439app.comment.p4511ext.widgets.CmtVoteWidget",
     )
     private val CMT_MOUNT_WIDGET_CLASSES = arrayOf(
         "com.bilibili.app.comment.ext.widgets.CmtMountWidget",
-        "com.bilibili.p4439app.comment.p4511ext.widgets.CmtMountWidget",
     )
     private val COMMENT_VOTE_VIEW_CLASSES = arrayOf(
         "com.bilibili.app.comment3.ui.widget.CommentVoteView",
-        "com.bilibili.p4439app.comment3.p4518ui.widget.CommentVoteView",
     )
     private val COMMENT_FOLLOW_WIDGET_CLASSES = arrayOf(
         "com.bilibili.app.comm.comment2.phoenix.view.CommentFollowWidget",
-        "com.bilibili.p4439app.p4450comm.comment2.phoenix.p4467view.CommentFollowWidget",
     )
     private val COMMENT_HEADER_DECORATIVE_VIEW_CLASSES = arrayOf(
         "com.bilibili.app.comment3.ui.widget.CommentHeaderDecorativeView",
-        "com.bilibili.p4439app.comment3.p4518ui.widget.CommentHeaderDecorativeView",
     )
     private val COMMENT_CONTENT_CLASSES = arrayOf(
         "com.bapis.bilibili.main.community.reply.v1.Content",
-        "com.bapis.bilibili.p4311main.community.reply.p4312v1.Content",
     )
     private val COMMENT_SUBJECT_CONTROL_CLASSES = arrayOf(
         "com.bapis.bilibili.main.community.reply.v1.SubjectControl",
-        "com.bapis.bilibili.p4311main.community.reply.p4312v1.SubjectControl",
     )
     private val COMMENT_SUBJECT_DESC_CLASSES = arrayOf(
         "com.bapis.bilibili.main.community.reply.v2.SubjectDescriptionReply",
-        "com.bapis.bilibili.p4311main.community.reply.p4313v2.SubjectDescriptionReply",
     )
     private val COMMENT_MAIN_LIST_OBSERVERS = arrayOf(
         "com.bapis.bilibili.main.community.reply.v1.ReplyMossKtxKt\$suspendMainList\$\$inlined\$suspendCall\$1",
         "com.bapis.bilibili.main.community.reply.v1.KReplyMoss\$mainList\$\$inlined\$suspendCall\$2",
-        "com.bapis.bilibili.p4311main.community.reply.p4312v1.ReplyMossKtxKt\$suspendMainList\$\$inlined\$suspendCall\$1",
-        "com.bapis.bilibili.p4311main.community.reply.p4312v1.KReplyMoss\$mainList\$\$inlined\$suspendCall\$2",
     )
     private val VOTE_WIDGET_METHOD_NAMES = setOf("a", "setData", "setVoteData", "bindData", "update", "refresh", "bind", "onBind")
     private val FOLLOW_WIDGET_METHOD_NAMES = setOf("W", "setData", "bindData", "update", "refresh", "bind", "onBind")
@@ -4853,22 +4840,18 @@ object BiliSymbolResolver {
     private val PLAYER_MOSS_CANDIDATES = arrayOf(
         "com.bapis.bilibili.app.playerunite.v1.PlayerMoss",
         "com.bapis.bilibili.app.playerunite.v1.KPlayerMoss",
-        "com.bapis.bilibili.p4218app.playerunite.p4240v1.PlayerMoss",
-        "com.bapis.bilibili.p4218app.playerunite.p4240v1.KPlayerMoss",
     )
     private const val PROGRESS_BAR_CLASS = "android.widget.ProgressBar"
     private const val PANEL_WIDGET_KT_CLASS = "com.bilibili.inline.panel.PanelWidgetKt"
     private const val STORY_SEEK_BAR_CLASS = "com.bilibili.video.story.view.StorySeekBar"
     private val INLINE_PROGRESS_CLASSES = setOf(
         "com.bilibili.app.comm.list.common.inline.widgetV3.InlineProgressWidgetV3",
-        "com.bilibili.p4439app.p4450comm.p4472list.common.inline.widgetV3.InlineProgressWidgetV3",
-        "com.bilibili.p4440app.p4451comm.p4473list.common.inline.widgetV3.InlineProgressWidgetV3",
     )
     private const val DETAIL_LIKE_COMPONENT =
         "com.bilibili.ship.theseus.united.page.intro.module.kingposition.KingPositionComponent2\$LikeComponent"
     private const val DETAIL_LIKE_STATE_OWNER =
         "com.bilibili.ship.theseus.united.page.intro.module.kingposition.KingPositionService\$d"
-    private const val STORY_ACTION_OWNER = "com.bilibili.video.story.action.InterfaceC24213g"
+    private const val STORY_ACTION_OWNER = "com.bilibili.video.story.action.g"
     private const val STORY_LIKE_WIDGET = "com.bilibili.video.story.action.widget.StoryLikeWidget"
     private const val STORY_LANDSCAPE_LIKE_WIDGET = "com.bilibili.video.story.action.widget.StoryLandscapeLikeWidget"
     private const val GEMINI_PLAYER_LIKE_WIDGET = "com.bilibili.app.gemini.player.widget.like.GeminiPlayerLikeWidget"

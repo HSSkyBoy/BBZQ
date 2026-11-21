@@ -11,12 +11,16 @@ internal object QualityRangePolicy {
             types[1].name == "kotlinx.coroutines.flow.MutableStateFlow" && types[2] == types[1] &&
             types[3].name == "kotlin.jvm.internal.Ref\$BooleanRef" &&
             types[4].name == "kotlin.jvm.internal.Ref\$ObjectRef" &&
-            types[5].name.startsWith("com.bilibili.ship.theseus.united.player.mediaplay.") &&
-            types[6].name.startsWith("com.bilibili.ship.theseus.united.page.playingarea.") &&
-            types[7].name.startsWith("com.bilibili.ship.theseus.united.page.screenstate.") &&
+            types[5].name.isTheseusUnitedPackage("player.mediaplay.") &&
+            types[6].name.isTheseusUnitedPackage("page.playingarea.") &&
+            types[7].name.isTheseusUnitedPackage("page.screenstate.") &&
             types[8] == Float::class.javaPrimitiveType &&
             types[9] == Boolean::class.javaPrimitiveType && types[10] == types[9]
     }
+
+    private fun String.isTheseusUnitedPackage(subpackagePrefix: String): Boolean =
+        startsWith("com.bilibili.ship.theseus.united.$subpackagePrefix") ||
+            startsWith("com.bilibili.ship.theseus2.united.$subpackagePrefix")
 
     fun overrideRanges(halfFlow: Any, autoFlow: Any, fullScreen: Boolean, halfQn: Int, fullQn: Int): Int {
         val target = if (fullScreen) fullQn else halfQn

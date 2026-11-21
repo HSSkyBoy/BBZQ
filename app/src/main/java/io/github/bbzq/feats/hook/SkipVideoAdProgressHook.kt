@@ -711,8 +711,6 @@ class SkipVideoAdProgressHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
         private val INLINE_PROGRESS_CLASSES = setOf(
             "com.bilibili.app.comm.list.common.inline.widgetV3.InlineProgressWidgetV3",
-            "com.bilibili.p4439app.p4450comm.p4472list.common.inline.widgetV3.InlineProgressWidgetV3",
-            "com.bilibili.p4440app.p4451comm.p4473list.common.inline.widgetV3.InlineProgressWidgetV3",
         )
     }
 }

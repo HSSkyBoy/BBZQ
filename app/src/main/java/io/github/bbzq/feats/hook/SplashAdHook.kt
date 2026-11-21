@@ -1,4 +1,4 @@
-﻿package io.github.bbzq.feats.hook
+package io.github.bbzq.feats.hook
 
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
@@ -124,7 +124,6 @@ class SplashAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
     private companion object {
         private val JSON_OBJECT_CLASSES = setOf(
             "kotlinx.serialization.json.JsonObject",
-            "kotlinx.serialization.p7923json.JsonObject",
         )
         private val SPLASH_LIST_FIELDS = listOf("adList", "showList", "splashList", "strategyList")
         private val SPLASH_SHOW_FIELDS = listOf("showList", "splashList", "strategyList")

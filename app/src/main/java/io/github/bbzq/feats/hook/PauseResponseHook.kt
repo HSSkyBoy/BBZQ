@@ -23,8 +23,53 @@ internal fun RoamingEnv.hookPauseResponses(): Int {
     return hookJavaMoss("$packageName.ViewMoss", "playPause", "$packageName.PlayPauseReq",
         "$packageName.PlayPauseReply", enabled, filter) +
         hookKotlinMoss("$packageName.KViewMoss", "playPause", "$packageName.PlayPauseReply", enabled, filter = filter) +
-        hookPausePanel() + hookPauseCountdown()
+        hookPausePanel() + hookPauseCountdown() + hookTheseus2PausedPage()
 }
+
+private fun RoamingEnv.hookTheseus2PausedPage(): Int = runCatching {
+    val service = classLoader.findClassOrNull("com.bilibili.ship.theseus2.united.page.pausedpage.PausedPageServiceImpl")
+        ?: return 0
+    val adSourceType = classLoader.findClassOrNull("kntr.app.ad.biz.videodetail.pausedpage.api.PausedPageAdSource")
+    val unitType = classLoader.findClassOrNull("kotlin.Unit")
+    val unit = unitType?.getField("INSTANCE")?.get(null)
+    var count = 0
+
+    if (adSourceType != null) {
+        service.declaredMethods.firstOrNull {
+            !Modifier.isStatic(it.modifiers) &&
+                it.returnType == Void.TYPE &&
+                it.parameterTypes.contentEquals(arrayOf(adSourceType))
+        }?.let { pauseAdMethod ->
+            if (hookBefore(pauseAdMethod) { param ->
+                    if (ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) {
+                        param.result = null
+                    }
+                }
+            ) {
+                count++
+            }
+        }
+    }
+
+    if (unitType != null && unit != null) {
+        service.declaredMethods.firstOrNull {
+            !Modifier.isStatic(it.modifiers) &&
+                it.returnType == unitType &&
+                it.parameterCount == 2 &&
+                it.parameterTypes[1].name == "kotlinx.coroutines.Deferred"
+        }?.let { prepareEndPageMethod ->
+            if (hookBefore(prepareEndPageMethod) { param ->
+                    if (ModuleSettings.isBlockVideoDetailBannerAdEnabled(prefs)) {
+                        param.result = unit
+                    }
+                }
+            ) {
+                count++
+            }
+        }
+    }
+    count
+}.getOrElse { log("Theseus2 paused-page advertising hook unavailable", it); 0 }
 
 private fun RoamingEnv.hookPausePanel(): Int = runCatching {
     val owner = classLoader.findClassOrNull("com.bilibili.ship.theseus.united.page.ad.AdPanelRepository") ?: return 0

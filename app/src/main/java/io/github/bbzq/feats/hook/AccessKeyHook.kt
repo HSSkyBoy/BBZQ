@@ -174,13 +174,11 @@ class AccessKeyHook(env: RoamingEnv) : BaseRoamingHook(env) {
         private val RUNTIME_CLASS_NAMES = arrayOf(
             "com.bilibili.lib.accounts.AccountRuntime",
             "com.bilibili.app.accounts.AccountRuntime",
-            "com.bilibili.p4439app.accounts.AccountRuntime",
         )
 
         private val ACCOUNT_CLASS_NAMES = arrayOf(
             "com.bilibili.lib.accounts.BiliAccounts",
             "com.bilibili.app.accounts.BiliAccounts",
-            "com.bilibili.p4439app.accounts.BiliAccounts",
         )
     }
 }

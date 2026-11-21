@@ -5,7 +5,6 @@ import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.BaseRoamingHook
 import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.RoamingEnv
-import io.github.bbzq.feats.getObjectField
 import io.github.bbzq.feats.hookAfter
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.symbol.RestoredVideoCommentSymbols
@@ -576,15 +575,10 @@ class VideoCommentHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (!isQuickReplyDialogIntentType()) return false
 
         val fields = publishDialogIntentFields.getOrPut(javaClass) { resolvePublishDialogIntentFields(javaClass) }
-        val isReply = runCatching { getObjectField("f184778b") as? Boolean }.getOrNull()
-            ?: runCatching { fields.isReply?.get(this) as? Boolean }.getOrNull()
-            ?: false
+        val isReply = runCatching { fields.isReply?.get(this) as? Boolean }.getOrNull() ?: false
         if (!isReply) return false
 
-        val posName = runCatching { getObjectField("f184787k")?.toString().orEmpty() }.getOrDefault("")
-            .ifBlank {
-                runCatching { fields.pos?.get(this)?.toString().orEmpty() }.getOrDefault("")
-            }
+        val posName = runCatching { fields.pos?.get(this)?.toString().orEmpty() }.getOrDefault("")
         if (posName.isBlank()) return true
 
         return when {

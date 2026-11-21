@@ -106,7 +106,6 @@ internal object HostAccountResolver {
     private val ACCOUNT_CLASS_NAMES = arrayOf(
         "com.bilibili.lib.accounts.BiliAccounts",
         "com.bilibili.app.accounts.BiliAccounts",
-        "com.bilibili.p4439app.accounts.BiliAccounts",
     )
 
     private val ACCOUNT_INFO_CLASS_NAMES = arrayOf(
