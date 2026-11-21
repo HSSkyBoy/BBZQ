@@ -56,8 +56,16 @@ fun safeCoerceResult(executable: Executable, value: Any?): Any? {
     return value
 }
 
-fun RoamingEnv.hookBefore(executable: Executable, hooker: Hooker): Boolean =
-    runCatching {
+internal enum class HookStage {
+    BEFORE,
+    AFTER,
+    REPLACE,
+    INTERCEPT,
+}
+
+fun RoamingEnv.hookBefore(executable: Executable, hooker: Hooker): Boolean {
+    if (!markHookInstalled(HookStage.BEFORE, executable, hooker)) return false
+    return runCatching {
         executable.isAccessible = true
         xposed.hook(executable)
             .setExceptionMode(XposedInterface.ExceptionMode.PASSTHROUGH)
@@ -81,12 +89,15 @@ fun RoamingEnv.hookBefore(executable: Executable, hooker: Hooker): Boolean =
             }
         true
     }.getOrElse { throwable ->
+        unmarkHookInstalled(HookStage.BEFORE, executable, hooker)
         log("Failed to register hookBefore at ${executable.declaringClass.name}.${executable.name}", throwable)
         false
     }
+}
 
-fun RoamingEnv.hookAfter(executable: Executable, hooker: Hooker) {
-    runCatching {
+fun RoamingEnv.hookAfter(executable: Executable, hooker: Hooker): Boolean {
+    if (!markHookInstalled(HookStage.AFTER, executable, hooker)) return false
+    return runCatching {
         executable.isAccessible = true
         xposed.hook(executable)
             .setExceptionMode(XposedInterface.ExceptionMode.PASSTHROUGH)
@@ -106,13 +117,17 @@ fun RoamingEnv.hookAfter(executable: Executable, hooker: Hooker) {
                 }
                 safeCoerceResult(executable, param.result)
             }
-    }.onFailure { throwable ->
+        true
+    }.getOrElse { throwable ->
+        unmarkHookInstalled(HookStage.AFTER, executable, hooker)
         log("Failed to register hookAfter at ${executable.declaringClass.name}.${executable.name}", throwable)
+        false
     }
 }
 
-fun RoamingEnv.replace(executable: Executable, replacer: Replacer) {
-    runCatching {
+fun RoamingEnv.replace(executable: Executable, replacer: Replacer): Boolean {
+    if (!markHookInstalled(HookStage.REPLACE, executable, replacer)) return false
+    return runCatching {
         executable.isAccessible = true
         xposed.hook(executable)
             .setExceptionMode(XposedInterface.ExceptionMode.PASSTHROUGH)
@@ -131,13 +146,17 @@ fun RoamingEnv.replace(executable: Executable, replacer: Replacer) {
                 }
                 safeCoerceResult(executable, computed)
             }
-    }.onFailure { throwable ->
+        true
+    }.getOrElse { throwable ->
+        unmarkHookInstalled(HookStage.REPLACE, executable, replacer)
         log("Failed to register replace at ${executable.declaringClass.name}.${executable.name}", throwable)
+        false
     }
 }
 
-fun RoamingEnv.intercept(executable: Executable, block: (XposedInterface.Chain) -> Any?) {
-    runCatching {
+fun RoamingEnv.intercept(executable: Executable, block: (XposedInterface.Chain) -> Any?): Boolean {
+    if (!markHookInstalled(HookStage.INTERCEPT, executable, block)) return false
+    return runCatching {
         executable.isAccessible = true
         xposed.hook(executable)
             .setExceptionMode(XposedInterface.ExceptionMode.PASSTHROUGH)
@@ -150,8 +169,11 @@ fun RoamingEnv.intercept(executable: Executable, block: (XposedInterface.Chain) 
                 }
                 safeCoerceResult(executable, res)
             }
-    }.onFailure { throwable ->
+        true
+    }.getOrElse { throwable ->
+        unmarkHookInstalled(HookStage.INTERCEPT, executable, block)
         log("Failed to register intercept at ${executable.declaringClass.name}.${executable.name}", throwable)
+        false
     }
 }
 
@@ -162,8 +184,7 @@ fun RoamingEnv.hookBeforeMethod(
     hooker: Hooker,
 ): Int {
     val method = type.findMethodOrNull(methodName, *parameterTypes) ?: return 0
-    hookBefore(method, hooker)
-    return 1
+    return if (hookBefore(method, hooker)) 1 else 0
 }
 
 fun RoamingEnv.hookAfterMethod(
@@ -173,8 +194,7 @@ fun RoamingEnv.hookAfterMethod(
     hooker: Hooker,
 ): Int {
     val method = type.findMethodOrNull(methodName, *parameterTypes) ?: return 0
-    hookAfter(method, hooker)
-    return 1
+    return if (hookAfter(method, hooker)) 1 else 0
 }
 
 fun RoamingEnv.replaceMethod(
@@ -184,8 +204,7 @@ fun RoamingEnv.replaceMethod(
     replacer: Replacer,
 ): Int {
     val method = type.findMethodOrNull(methodName, *parameterTypes) ?: return 0
-    replace(method, replacer)
-    return 1
+    return if (replace(method, replacer)) 1 else 0
 }
 
 fun RoamingEnv.hookBeforeAllMethods(type: Class<*>, methodName: String?, hooker: Hooker): Int {
@@ -195,8 +214,7 @@ fun RoamingEnv.hookBeforeAllMethods(type: Class<*>, methodName: String?, hooker:
             .distinctBy(Method::toGenericString)
             .toList()
     }.getOrElse { emptyList() }
-    methods.forEach { hookBefore(it, hooker) }
-    return methods.size
+    return methods.count { hookBefore(it, hooker) }
 }
 
 fun RoamingEnv.hookAfterAllMethods(type: Class<*>, methodName: String?, hooker: Hooker): Int {
@@ -206,24 +224,21 @@ fun RoamingEnv.hookAfterAllMethods(type: Class<*>, methodName: String?, hooker: 
             .distinctBy(Method::toGenericString)
             .toList()
     }.getOrElse { emptyList() }
-    methods.forEach { hookAfter(it, hooker) }
-    return methods.size
+    return methods.count { hookAfter(it, hooker) }
 }
 
 fun RoamingEnv.hookBeforeAllConstructors(type: Class<*>, hooker: Hooker): Int {
     val constructors = runCatching {
         type.declaredConstructors.onEach { it.isAccessible = true }
     }.getOrElse { emptyArray() }
-    constructors.forEach { hookBefore(it, hooker) }
-    return constructors.size
+    return constructors.count { hookBefore(it, hooker) }
 }
 
 fun RoamingEnv.hookAfterAllConstructors(type: Class<*>, hooker: Hooker): Int {
     val constructors = runCatching {
         type.declaredConstructors.onEach { it.isAccessible = true }
     }.getOrElse { emptyArray() }
-    constructors.forEach { hookAfter(it, hooker) }
-    return constructors.size
+    return constructors.count { hookAfter(it, hooker) }
 }
 
 fun RoamingEnv.hookBeforeConstructor(
@@ -234,8 +249,7 @@ fun RoamingEnv.hookBeforeConstructor(
     val constructor = runCatching {
         type.getDeclaredConstructor(*parameterTypes).apply { isAccessible = true }
     }.getOrNull() ?: return 0
-    hookBefore(constructor, hooker)
-    return 1
+    return if (hookBefore(constructor, hooker)) 1 else 0
 }
 
 private fun Class<*>.findMethodOrNull(name: String, vararg parameterTypes: Class<*>): Method? {

@@ -5,7 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import io.github.bbzq.feats.RoamingRuntime
-import io.github.bbzq.utils.ReflectionUtils
+import io.github.bbzq.feats.safeInvoke
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
@@ -128,7 +128,7 @@ class BbzqModule : XposedModule() {
 
     private fun resolveCurrentApplication(): Application? {
         return runCatching {
-            ReflectionUtils.safeInvoke(currentApplicationMethod, null) as? Application
+            currentApplicationMethod.safeInvoke(null) as? Application
         }.getOrNull()
     }
 
@@ -155,7 +155,7 @@ class BbzqModule : XposedModule() {
             "org.readera",
         )
 
-        private val currentApplicationMethod: java.lang.reflect.Method by lazy(LazyThreadSafetyMode.NONE) {
+        private val currentApplicationMethod: java.lang.reflect.Method by lazy(LazyThreadSafetyMode.PUBLICATION) {
             Class.forName("android.app.ActivityThread")
                 .getDeclaredMethod("currentApplication")
                 .apply { isAccessible = true }

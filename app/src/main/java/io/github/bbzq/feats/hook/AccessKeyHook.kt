@@ -8,7 +8,7 @@ import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.allMethods
 import io.github.bbzq.feats.callMethod
 import io.github.bbzq.feats.findClassOrNull
-import io.github.bbzq.utils.ReflectionUtils
+import io.github.bbzq.feats.safeInvoke
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
@@ -34,6 +34,7 @@ class AccessKeyHook(env: RoamingEnv) : BaseRoamingHook(env) {
             log("Initial AccessKey sync check failed", it)
         }
 
+        isInstalled = true
         log("AccessKeyHook installed")
     }
 
@@ -56,7 +57,7 @@ class AccessKeyHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     (method.name == "getAccounts" || method.returnType.name.contains("IAccount"))
             }
             if (getter != null) {
-                ReflectionUtils.safeInvoke(getter, null)
+                getter.safeInvoke(null)
             } else {
                 runtimeClass.declaredFields.firstOrNull { it.name == "accounts" }?.apply { isAccessible = true }?.get(null)
             }
@@ -77,7 +78,7 @@ class AccessKeyHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         val account = runCatching {
             val args = if (getMethod.parameterCount == 0) emptyArray() else arrayOf<Any?>(env.hostContext)
-            ReflectionUtils.safeInvoke(getMethod, null, *args) as? Any
+            getMethod.safeInvoke(null, *args)
         }.getOrNull() ?: return null
 
         return extractKeyFromAccountObject(account)

@@ -7,7 +7,9 @@ import android.content.res.AssetManager
 import android.content.res.Resources
 import io.github.bbzq.ModuleSettingsBridge
 import io.github.bbzq.RuntimeEnvironmentInfo
-import kotlin.LazyThreadSafetyMode
+import java.lang.reflect.Executable
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import io.github.bbzq.feats.hook.BottomBarHook
 import io.github.bbzq.feats.hook.DaggerCircularDependencyFixHook
 import io.github.bbzq.feats.hook.DialogBlurBackgroundHook
@@ -118,7 +120,7 @@ object RoamingRuntime {
                 )
             }
             val woMicHook = WoMicHook(env)
-            runCatching { woMicHook.startHook() }
+            runCatching { woMicHook.startOnce() }
                 .onFailure { env.log("WoMicHook failed", it) }
             env.log("BBZQ runtime installed WoMic hook(s)")
             return
@@ -136,7 +138,7 @@ object RoamingRuntime {
                 )
             }
             val readEraHook = ReadEraHook(env)
-            runCatching { readEraHook.startHook() }
+            runCatching { readEraHook.startOnce() }
                 .onFailure { env.log("ReadEraHook failed", it) }
             env.log("BBZQ runtime installed ReadEra hook(s)")
             return
@@ -162,15 +164,12 @@ object RoamingRuntime {
                 )
             }
         }
-        val symbols = if (processScope != ProcessScope.UNSUPPORTED) {
-            BiliSymbolResolver.resolve(
-                hostContext = env.hostContext,
-                classLoader = classLoader,
-                log = log,
-            )
-        } else {
-            null
-        }
+        val symbols = BiliSymbolResolver.resolve(
+            hostContext = env.hostContext,
+            classLoader = classLoader,
+            notifyUserOnAsyncComplete = processScope == ProcessScope.MAIN,
+            log = log,
+        )
         env.symbols = symbols
         if (processScope == ProcessScope.MAIN) {
             SymbolScanRefreshRequestHandler.install(
@@ -268,26 +267,15 @@ object RoamingRuntime {
 
         val activeHooks = hooks.map { it(env) }
         activeHooks.forEach { hook ->
-            runCatching { hook.startHook() }
+            runCatching { hook.startOnce() }
                 .onFailure { env.log("Hook failed: ${hook.javaClass.simpleName}", it) }
         }
 
-        BiliSymbolResolver.onSymbolsUpdated = { updatedSymbols ->
-            env.symbols = updatedSymbols
-            activeHooks.filter { !it.isInstalled }.forEach { hook ->
-                runCatching {
-                    hook.startHook()
-                    if (hook.isInstalled) {
-                        env.log("Deferred hook installed: ${hook.javaClass.simpleName}")
-                    }
-                }.onFailure { env.log("Deferred hook failed: ${hook.javaClass.simpleName}", it) }
-            }
-        }
-
         if (processScope == ProcessScope.WEB) {
-            runCatching { CustomThemeHook(env).insertColorForWebProcess() }
+            val webThemeHook = CustomThemeHook(env)
+            runCatching { webThemeHook.insertColorForWebProcess() }
                 .onFailure { env.log("CustomTheme web process hook failed", it) }
-            runCatching { CustomThemeHook(env).insertLoadEquipForWebProcess() }
+            runCatching { webThemeHook.insertLoadEquipForWebProcess() }
                 .onFailure { env.log("CustomTheme web load equip hook failed", it) }
         }
 
@@ -323,13 +311,22 @@ class RoamingEnv(
     val classLoader: ClassLoader,
     private val logger: (String, Throwable?) -> Unit,
 ) {
+    private data class InstalledHookKey(
+        val stage: HookStage,
+        val executable: Executable,
+        val callbackIdentity: Int,
+    )
+
+    private val installedHooks = ConcurrentHashMap.newKeySet<InstalledHookKey>()
+
+    @Volatile
     var symbols: BiliHookSymbols? = null
         internal set
 
     val prefs: SharedPreferences
         get() = ModuleSettingsBridge.instance
 
-    val moduleContext: Context? by lazy(LazyThreadSafetyMode.NONE) {
+    val moduleContext: Context? by lazy {
         runCatching {
             hostContext.createPackageContext(MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY)
         }
@@ -344,6 +341,13 @@ class RoamingEnv(
                 }.getOrNull() ?: return@lazy null
                 ModuleResourceContext(hostContext, resources)
             }
+    }
+
+    internal fun markHookInstalled(stage: HookStage, executable: Executable, callback: Any): Boolean =
+        installedHooks.add(InstalledHookKey(stage, executable, System.identityHashCode(callback)))
+
+    internal fun unmarkHookInstalled(stage: HookStage, executable: Executable, callback: Any) {
+        installedHooks.remove(InstalledHookKey(stage, executable, System.identityHashCode(callback)))
     }
 
     fun log(message: String, throwable: Throwable? = null) {
@@ -369,6 +373,8 @@ private class ModuleResourceContext(
 abstract class BaseRoamingHook(
     protected val env: RoamingEnv,
 ) {
+    private val started = AtomicBoolean(false)
+
     protected val xposed: XposedInterface
         get() = env.xposed
 
@@ -382,7 +388,14 @@ abstract class BaseRoamingHook(
         env.log(message, throwable)
     }
 
+    @Volatile
     var isInstalled: Boolean = false
+
+    internal fun startOnce() {
+        if (started.compareAndSet(false, true)) {
+            startHook()
+        }
+    }
 
     abstract fun startHook()
 }

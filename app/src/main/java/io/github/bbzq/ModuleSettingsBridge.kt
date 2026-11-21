@@ -4,12 +4,20 @@ import android.content.Context
 import android.content.SharedPreferences
 import io.github.bbzq.feats.BbzqLevelGate
 import io.github.libxposed.api.XposedInterface
-import java.lang.ref.WeakReference
 
 class ModuleSettingsBridge private constructor() : SharedPreferences {
     private val cacheLock = Any()
+    private var remoteSnapshot: Map<String, Any> = emptyMap()
+    private val readOnlyOverrides = mutableMapOf<String, Any?>()
+    private var readOnlyCleared = false
     private var localCache: Map<String, Any> = emptyMap()
     private var lastLoadTime = 0L
+
+    private val remoteChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        synchronized(cacheLock) {
+            lastLoadTime = 0L
+        }
+    }
 
     private fun ensureLoaded() {
         val now = System.currentTimeMillis()
@@ -19,11 +27,28 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
 
         val result = fetchRemotePreferences()
         synchronized(cacheLock) {
-            if (!result.isNullOrEmpty() || localCache.isEmpty()) {
-                localCache = if (localCache.isEmpty()) result.orEmpty() else (localCache + result.orEmpty())
+            if (result != null) {
+                remoteSnapshot = result
+                rebuildEffectiveCacheLocked()
             }
             lastLoadTime = now
         }
+    }
+
+    private fun rebuildEffectiveCacheLocked() {
+        if (readOnlyOverrides.isEmpty() && !readOnlyCleared) {
+            localCache = remoteSnapshot
+            return
+        }
+        val merged = if (readOnlyCleared) mutableMapOf() else remoteSnapshot.toMutableMap()
+        for ((key, value) in readOnlyOverrides) {
+            if (value == null) {
+                merged.remove(key)
+            } else {
+                merged[key] = value
+            }
+        }
+        localCache = merged
     }
 
     private fun fetchRemotePreferences(): Map<String, Any>? {
@@ -113,20 +138,27 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
     ) = Unit
 
     private fun resolveRemotePreferences(): SharedPreferences? {
-        cachedRemotePrefs.get()?.let { return it }
+        cachedRemotePrefs?.let { return it }
         val xposed = cachedXposed ?: return null
         return runCatching {
             xposed.getRemotePreferences(ModuleSettings.PREFS_NAME)
-        }.getOrNull()?.also {
-            cachedRemotePrefs = WeakReference(it)
+        }.getOrNull()?.also { prefs ->
+            runCatching { prefs.registerOnSharedPreferenceChangeListener(remoteChangeListener) }
+            cachedRemotePrefs = prefs
         }
     }
 
-    private fun applyRemoteOperations(operations: List<PreferenceOperation>): Boolean {
-        if (operations.isEmpty()) return true
+    private enum class RemoteWriteOutcome {
+        COMMITTED,
+        READ_ONLY_FALLBACK,
+        FAILED,
+    }
+
+    private fun applyRemoteOperations(operations: List<PreferenceOperation>): RemoteWriteOutcome {
+        if (operations.isEmpty()) return RemoteWriteOutcome.COMMITTED
         val remotePrefs = resolveRemotePreferences() ?: run {
             lastStatus = "remote unavailable"
-            return true
+            return RemoteWriteOutcome.READ_ONLY_FALLBACK
         }
         return runCatching {
             val editor = remotePrefs.edit()
@@ -141,17 +173,17 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
         }.fold(
             onSuccess = { committed ->
                 lastStatus = if (committed) "remote ok" else "remote commit failed"
-                committed
+                if (committed) RemoteWriteOutcome.COMMITTED else RemoteWriteOutcome.FAILED
             },
             onFailure = { throwable ->
                 if (throwable is UnsupportedOperationException) {
                     // Read-only remote preferences (e.g. injected host process under NPatch / LibXposed).
-                    // In-memory update still succeeds.
+                    // In-memory override layer still succeeds without masking future remote updates.
                     lastStatus = "remote ok (read-only snapshot)"
-                    true
+                    RemoteWriteOutcome.READ_ONLY_FALLBACK
                 } else {
                     lastStatus = "remote write ${throwable.javaClass.simpleName}: ${throwable.message}"
-                    false
+                    RemoteWriteOutcome.FAILED
                 }
             },
         )
@@ -159,15 +191,9 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
 
     private inner class Editor : SharedPreferences.Editor {
         private val operations = mutableListOf<PreferenceOperation>()
-        private val cacheUpdates = mutableListOf<(MutableMap<String, Any>) -> Unit>()
-        private var clearRequested = false
 
         override fun putString(key: String?, value: String?): SharedPreferences.Editor = apply {
             if (key != null) operations += PreferenceOperation.Put(key, value)
-            cacheUpdates += { cache ->
-                if (key != null && value != null) cache[key] = value
-                else if (key != null) cache.remove(key)
-            }
         }
 
         override fun putStringSet(
@@ -176,39 +202,29 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
         ): SharedPreferences.Editor = apply {
             val safeValues = safeStringSetOrNull(values)
             if (key != null) operations += PreferenceOperation.Put(key, safeValues)
-            cacheUpdates += { cache ->
-                if (key != null && safeValues != null) cache[key] = safeValues
-                else if (key != null) cache.remove(key)
-            }
         }
 
         override fun putInt(key: String?, value: Int): SharedPreferences.Editor = apply {
             if (key != null) operations += PreferenceOperation.Put(key, value)
-            cacheUpdates += { cache -> if (key != null) cache[key] = value }
         }
 
         override fun putLong(key: String?, value: Long): SharedPreferences.Editor = apply {
             if (key != null) operations += PreferenceOperation.Put(key, value)
-            cacheUpdates += { cache -> if (key != null) cache[key] = value }
         }
 
         override fun putFloat(key: String?, value: Float): SharedPreferences.Editor = apply {
             if (key != null) operations += PreferenceOperation.Put(key, value)
-            cacheUpdates += { cache -> if (key != null) cache[key] = value }
         }
 
         override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor = apply {
             if (key != null) operations += PreferenceOperation.Put(key, value)
-            cacheUpdates += { cache -> if (key != null) cache[key] = value }
         }
 
         override fun remove(key: String?): SharedPreferences.Editor = apply {
             if (key != null) operations += PreferenceOperation.Remove(key)
-            cacheUpdates += { cache -> if (key != null) cache.remove(key) }
         }
 
         override fun clear(): SharedPreferences.Editor = apply {
-            clearRequested = true
             operations += PreferenceOperation.Clear
         }
 
@@ -220,27 +236,71 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
         }
 
         private fun applyInternal(): Boolean {
-            ensureLoaded()
-            val success = applyRemoteOperations(operations)
-            if (success) {
-                synchronized(cacheLock) {
-                    val updated = if (clearRequested) mutableMapOf() else localCache.toMutableMap()
-                    cacheUpdates.forEach { it(updated) }
-                    localCache = updated
-                    lastLoadTime = System.currentTimeMillis()
-                }
-            }
+            val batch = operations.toList()
             operations.clear()
-            cacheUpdates.clear()
-            clearRequested = false
-            return success
+            if (batch.isEmpty()) return true
+
+            ensureLoaded()
+            return when (applyRemoteOperations(batch)) {
+                RemoteWriteOutcome.COMMITTED -> {
+                    synchronized(cacheLock) {
+                        val updatedRemote = remoteSnapshot.toMutableMap()
+                        batch.forEach { op ->
+                            when (op) {
+                                PreferenceOperation.Clear -> {
+                                    updatedRemote.clear()
+                                    readOnlyOverrides.clear()
+                                    readOnlyCleared = false
+                                }
+                                is PreferenceOperation.Remove -> {
+                                    updatedRemote.remove(op.key)
+                                    readOnlyOverrides.remove(op.key)
+                                }
+                                is PreferenceOperation.Put -> {
+                                    if (op.value == null) updatedRemote.remove(op.key)
+                                    else updatedRemote[op.key] = op.value
+                                    readOnlyOverrides.remove(op.key)
+                                }
+                            }
+                        }
+                        remoteSnapshot = updatedRemote
+                        rebuildEffectiveCacheLocked()
+                        lastLoadTime = System.currentTimeMillis()
+                    }
+                    true
+                }
+
+                RemoteWriteOutcome.READ_ONLY_FALLBACK -> {
+                    synchronized(cacheLock) {
+                        batch.forEach { op ->
+                            when (op) {
+                                PreferenceOperation.Clear -> {
+                                    readOnlyOverrides.clear()
+                                    readOnlyCleared = true
+                                }
+                                is PreferenceOperation.Remove -> {
+                                    readOnlyOverrides[op.key] = null
+                                }
+                                is PreferenceOperation.Put -> {
+                                    readOnlyOverrides[op.key] = op.value
+                                }
+                            }
+                        }
+                        rebuildEffectiveCacheLocked()
+                        lastLoadTime = System.currentTimeMillis()
+                    }
+                    true
+                }
+
+                RemoteWriteOutcome.FAILED -> false
+            }
         }
     }
 
     companion object {
         private const val CACHE_EXPIRATION = 5000L
-        private var cachedXposed: XposedInterface? = null
-        private var cachedRemotePrefs = WeakReference<SharedPreferences>(null)
+        @Volatile private var cachedXposed: XposedInterface? = null
+        @Volatile private var cachedRemotePrefs: SharedPreferences? = null
 
         @Volatile var lastStatus: String = "not called"
             private set
@@ -250,17 +310,22 @@ class ModuleSettingsBridge private constructor() : SharedPreferences {
             instance.resetTransientState()
         }
 
-        val instance: ModuleSettingsBridge by lazy(LazyThreadSafetyMode.NONE) {
-            ModuleSettingsBridge()
-        }
+        val instance: ModuleSettingsBridge = ModuleSettingsBridge()
     }
 
     private fun resetTransientState() {
+        val previousRemote = cachedRemotePrefs
+        cachedRemotePrefs = null
+        if (previousRemote != null) {
+            runCatching { previousRemote.unregisterOnSharedPreferenceChangeListener(remoteChangeListener) }
+        }
         synchronized(cacheLock) {
+            remoteSnapshot = emptyMap()
+            readOnlyOverrides.clear()
+            readOnlyCleared = false
             localCache = emptyMap()
             lastLoadTime = 0L
         }
-        cachedRemotePrefs = WeakReference(null)
     }
 }
 

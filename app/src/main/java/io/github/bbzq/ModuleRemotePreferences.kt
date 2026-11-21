@@ -8,6 +8,8 @@ import android.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -18,6 +20,9 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
     @Volatile private var appContext: Context? = null
     @Volatile private var service: XposedService? = null
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+    private val remoteSyncExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "BBZQ-RemotePrefsSync").apply { isDaemon = true }
+    }
 
     data class FrameworkInfo(
         val apiVersion: String,
@@ -158,16 +163,24 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         return localChanged || remoteChanged
     }
 
-    fun applyOperations(operations: List<PreferenceOperation>) {
+    fun applyOperations(operations: List<PreferenceOperation>, async: Boolean = false) {
         if (operations.isEmpty()) return
-        withRemoteEditor { editor ->
-            operations.forEach { operation ->
-                when (operation) {
-                    PreferenceOperation.Clear -> editor.clear()
-                    is PreferenceOperation.Remove -> editor.remove(operation.key)
-                    is PreferenceOperation.Put -> editor.putValue(operation.key, operation.value)
+        val snapshot = operations.toList()
+        val task = {
+            withRemoteEditor { editor ->
+                snapshot.forEach { operation ->
+                    when (operation) {
+                        PreferenceOperation.Clear -> editor.clear()
+                        is PreferenceOperation.Remove -> editor.remove(operation.key)
+                        is PreferenceOperation.Put -> editor.putValue(operation.key, operation.value)
+                    }
                 }
             }
+        }
+        if (async) {
+            remoteSyncExecutor.execute(task)
+        } else {
+            task()
         }
     }
 
@@ -237,7 +250,7 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         service: XposedService,
         requestId: String,
     ) {
-        mainHandler.postDelayed(
+        remoteSyncExecutor.schedule(
             {
                 runCatching {
                     val prefs = service.remoteSettingsPreferences()
@@ -252,6 +265,7 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
                 }
             },
             SYMBOL_SCAN_REQUEST_CLEANUP_MS,
+            TimeUnit.MILLISECONDS,
         )
     }
 

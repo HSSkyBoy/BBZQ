@@ -24,7 +24,7 @@ import io.github.bbzq.feats.symbol.RestoredCustomThemeSymbols
 import org.json.JSONObject
 import android.content.Context
 import android.os.Build
-import io.github.bbzq.utils.ReflectionUtils
+import io.github.bbzq.feats.safeInvoke
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -186,7 +186,7 @@ class CustomThemeHook(env: RoamingEnv) : BaseRoamingHook(env) {
         }
         runCatching {
             // 工厂是静态方法,传 null 接收者
-            val prefs = ReflectionUtils.safeInvoke(factory, null, env.hostContext, LOAD_EQUIP_CONF_PREFS_FILE, false, 0) ?: return@runCatching
+            val prefs = factory.safeInvoke(null, env.hostContext, LOAD_EQUIP_CONF_PREFS_FILE, false, 0) ?: return@runCatching
             if (!writeBlkv(prefs, LOAD_EQUIP_CONF_KEY, loadEquip.toString())) {
                 log("Custom skin load equip conf write failed: no putString api on ${prefs.javaClass.name}")
                 return@runCatching

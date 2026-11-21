@@ -71,17 +71,17 @@ class ReadableModulePreferences(
 
         override fun apply() {
             editor.apply()
-            syncRemote()
+            syncRemote(async = true)
         }
 
         override fun commit(): Boolean {
             val result = editor.commit()
-            syncRemote()
+            syncRemote(async = false)
             return result
         }
 
-        private fun syncRemote() {
-            ModuleRemotePreferences.applyOperations(operations)
+        private fun syncRemote(async: Boolean) {
+            ModuleRemotePreferences.applyOperations(operations, async = async)
             operations.clear()
         }
     }

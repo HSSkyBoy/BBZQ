@@ -13,6 +13,7 @@ import io.github.bbzq.feats.methodOrNull
 import io.github.bbzq.feats.setBooleanField
 import io.github.bbzq.feats.setIntField
 import io.github.bbzq.feats.setObjectField
+import java.util.concurrent.ConcurrentHashMap
 
 class WoMicHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
@@ -28,6 +29,7 @@ class WoMicHook(env: RoamingEnv) : BaseRoamingHook(env) {
         count += hookVolumeSeekbar()  // 拖拽音量条时强制解锁高级音量
         count += hookAds()  // 拦截AdMob广告加载展示
 
+        isInstalled = count > 0
         log("WoMicHook: installed $count hook(s)")
     }
 
@@ -106,7 +108,7 @@ class WoMicHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 
-    private val logged = hashSetOf<String>()
+    private val logged = ConcurrentHashMap.newKeySet<String>()
     private fun logOnce(key: String, msg: String) {
         if (logged.add(key)) log(msg)
     }
@@ -131,8 +133,8 @@ class WoMicHook(env: RoamingEnv) : BaseRoamingHook(env) {
             "onStartTrackingTouch",
             "onStopTrackingTouch",
         )
-        // l1.C1836f 混淆后的 AdMob 横幅 AdView，loadAd 混淆为 b(l1.C1834d) —— WO Mic 5.3
-        private const val BANNER_ADVIEW_CLASS = "l1.C1836f"
+        // l1.f 混淆后的 AdMob 横幅 AdView，loadAd 混淆为 b(l1.d) —— WO Mic 5.3
+        private const val BANNER_ADVIEW_CLASS = "l1.f"
         private const val BANNER_LOAD_METHOD = "b"
     }
 }

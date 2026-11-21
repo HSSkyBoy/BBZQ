@@ -212,3 +212,23 @@ private fun Class<*>.primitiveWrapper(): Class<*>? = when (this) {
     Char::class.javaPrimitiveType -> Char::class.javaObjectType
     else -> null
 }
+
+fun Method.safeInvoke(target: Any?, vararg args: Any?): Any? =
+    runCatching {
+        if (!isAccessible) isAccessible = true
+        invoke(target, *args)
+    }.getOrNull()
+
+fun Field.safeGet(target: Any?): Any? =
+    runCatching {
+        if (!isAccessible) isAccessible = true
+        get(target)
+    }.getOrNull()
+
+fun Field.safeSet(target: Any?, value: Any?): Boolean =
+    runCatching {
+        if (!isAccessible) isAccessible = true
+        set(target, value)
+        true
+    }.getOrDefault(false)
+

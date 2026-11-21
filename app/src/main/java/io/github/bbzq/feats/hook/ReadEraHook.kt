@@ -5,6 +5,7 @@ import io.github.bbzq.feats.RoamingEnv
 import io.github.bbzq.feats.findClassOrNull
 import io.github.bbzq.feats.hookBefore
 import io.github.bbzq.feats.methodOrNull
+import java.util.concurrent.ConcurrentHashMap
 
 class ReadEraHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
@@ -16,6 +17,7 @@ class ReadEraHook(env: RoamingEnv) : BaseRoamingHook(env) {
         log("ReadEraHook: starting for ${env.packageName}...")
 
         val count = unlockBackgroundPlayback()
+        isInstalled = count > 0
 
         log("ReadEraHook: installed $count hook(s)")
     }
@@ -29,11 +31,12 @@ class ReadEraHook(env: RoamingEnv) : BaseRoamingHook(env) {
         // 路径 1：退到后台即时暂停 SpeechService.C()（无参私有方法）
         val sleepPause = cls.methodOrNull(SLEEP_PAUSE_METHOD)
         if (sleepPause != null) {
-            env.hookBefore(sleepPause) { param ->
-                param.result = null
-                logOnce("sleep", "Blocked background(SLEEP) TTS pause")
+            if (env.hookBefore(sleepPause) { param ->
+                    param.result = null
+                    logOnce("sleep", "Blocked background(SLEEP) TTS pause")
+                }) {
+                count++
             }
-            count++
         } else {
             log("skip: $SPEECH_SERVICE_CLASS.$SLEEP_PAUSE_METHOD() missing")
         }
@@ -41,11 +44,12 @@ class ReadEraHook(env: RoamingEnv) : BaseRoamingHook(env) {
         // 路径 2：后台看门狗 SpeechService.a(SpeechService)（静态，单个 SpeechService 参数）
         val watchdogPause = cls.methodOrNull(WATCHDOG_PAUSE_METHOD, cls)
         if (watchdogPause != null) {
-            env.hookBefore(watchdogPause) { param ->
-                param.result = null
-                logOnce("watchdog", "Blocked background watchdog pause + premium upsell")
+            if (env.hookBefore(watchdogPause) { param ->
+                    param.result = null
+                    logOnce("watchdog", "Blocked background watchdog pause + premium upsell")
+                }) {
+                count++
             }
-            count++
         } else {
             log("skip: $SPEECH_SERVICE_CLASS.$WATCHDOG_PAUSE_METHOD(SpeechService) missing")
         }
@@ -54,7 +58,7 @@ class ReadEraHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return count
     }
 
-    private val logged = hashSetOf<String>()
+    private val logged = ConcurrentHashMap.newKeySet<String>()
     private fun logOnce(key: String, msg: String) {
         if (logged.add(key)) log(msg)
     }

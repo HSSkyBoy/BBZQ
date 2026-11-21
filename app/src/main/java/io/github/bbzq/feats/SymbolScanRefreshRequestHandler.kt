@@ -1,15 +1,22 @@
 package io.github.bbzq.feats
 
+import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.symbol.BiliSymbolResolver
 import io.github.libxposed.api.XposedInterface
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
@@ -19,6 +26,9 @@ object SymbolScanRefreshRequestHandler {
     private val running = AtomicBoolean(false)
     private val listeners = mutableListOf<SharedPreferences.OnSharedPreferenceChangeListener>()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val watchExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "BBZQ-RefreshWatch").apply { isDaemon = true }
+    }
 
     fun install(
         env: RoamingEnv,
@@ -34,8 +44,8 @@ object SymbolScanRefreshRequestHandler {
             env.log("Symbol scan refresh request listener unavailable", it)
             return
         }
-        val handledPrefs = env.hostContext.applicationContext
-            .getSharedPreferences(BiliSymbolResolver.CACHE_PREFS_NAME, Context.MODE_PRIVATE)
+        val appContext = env.hostContext.applicationContext ?: env.hostContext
+        val handledPrefs = appContext.getSharedPreferences(BiliSymbolResolver.CACHE_PREFS_NAME, Context.MODE_PRIVATE)
         val lastHandled = AtomicReference(
             runCatching {
                 handledPrefs.getString(ModuleSettings.KEY_SYMBOL_SCAN_REFRESH_HANDLED_ID, null)
@@ -82,16 +92,87 @@ object SymbolScanRefreshRequestHandler {
 
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == ModuleSettings.KEY_SYMBOL_SCAN_REFRESH_REQUEST_ID) {
-                handlePendingRequest("remote-pref")
+                watchExecutor.execute { handlePendingRequest("remote-pref") }
             }
         }
         synchronized(listeners) {
             listeners += listener
         }
         remotePrefs.registerOnSharedPreferenceChangeListener(listener)
-        handlePendingRequest("install")
-        pollPendingRequests(::handlePendingRequest)
+        watchExecutor.execute { handlePendingRequest("install") }
+        installForegroundPolling(appContext, ::handlePendingRequest)
         env.log("Symbol scan refresh request listener installed")
+    }
+
+    private fun installForegroundPolling(
+        appContext: Context,
+        handlePendingRequest: (String) -> Unit,
+    ) {
+        val application = appContext as? Application
+        if (application == null) {
+            watchExecutor.scheduleWithFixedDelay(
+                { runCatching { handlePendingRequest("poll-fallback") } },
+                FOREGROUND_POLL_MS,
+                FOREGROUND_POLL_MS,
+                TimeUnit.MILLISECONDS,
+            )
+            return
+        }
+
+        val startedActivities = AtomicInteger(0)
+        val pollLock = Any()
+        var pollFuture: ScheduledFuture<*>? = null
+
+        fun startPollingIfNeeded(trigger: String) {
+            synchronized(pollLock) {
+                if (pollFuture == null || pollFuture?.isCancelled == true) {
+                    pollFuture = watchExecutor.scheduleWithFixedDelay(
+                        { runCatching { handlePendingRequest("poll") } },
+                        FOREGROUND_POLL_MS,
+                        FOREGROUND_POLL_MS,
+                        TimeUnit.MILLISECONDS,
+                    )
+                }
+            }
+            watchExecutor.execute { handlePendingRequest(trigger) }
+        }
+
+        fun stopPolling() {
+            synchronized(pollLock) {
+                pollFuture?.cancel(false)
+                pollFuture = null
+            }
+        }
+
+        application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+
+            override fun onActivityStarted(activity: Activity) {
+                if (startedActivities.incrementAndGet() == 1) {
+                    startPollingIfNeeded("foreground-start")
+                }
+            }
+
+            override fun onActivityResumed(activity: Activity) {
+                if (startedActivities.get() <= 0) {
+                    startedActivities.set(1)
+                }
+                startPollingIfNeeded("foreground-resume")
+            }
+
+            override fun onActivityPaused(activity: Activity) = Unit
+
+            override fun onActivityStopped(activity: Activity) {
+                val remaining = startedActivities.updateAndGet { count -> (count - 1).coerceAtLeast(0) }
+                if (remaining == 0) {
+                    stopPolling()
+                }
+            }
+
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
     }
 
     private fun markRequestHandled(
@@ -107,16 +188,6 @@ object SymbolScanRefreshRequestHandler {
             env.log("Symbol scan refresh handled marker write failed id=$requestId", it)
             false
         }
-    }
-
-    private fun pollPendingRequests(handlePendingRequest: (String) -> Unit) {
-        mainHandler.postDelayed(
-            {
-                handlePendingRequest("poll")
-                pollPendingRequests(handlePendingRequest)
-            },
-            REQUEST_POLL_MS,
-        )
     }
 
     private fun restartHostApp(env: RoamingEnv, requestId: String) {
@@ -155,5 +226,5 @@ object SymbolScanRefreshRequestHandler {
     }
 
     private const val HOST_RESTART_DELAY_MS = 1_000L
-    private const val REQUEST_POLL_MS = 1_500L
+    private const val FOREGROUND_POLL_MS = 10_000L
 }

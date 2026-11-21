@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.SparseArray
@@ -15,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import io.github.bbzq.BuildConfig
 import io.github.bbzq.ModuleSettings
 import io.github.bbzq.feats.allFields
@@ -37,6 +39,7 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.ParameterizedType
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.Continuation
 
 object BiliSymbolResolver {
@@ -157,12 +160,12 @@ object BiliSymbolResolver {
     @Volatile
     private var memorySymbols: BiliHookSymbols? = null
 
-    @Volatile
-    var onSymbolsUpdated: ((BiliHookSymbols) -> Unit)? = null
+    private val asyncScanRunning = AtomicBoolean(false)
 
     fun resolve(
         hostContext: Context,
         classLoader: ClassLoader,
+        notifyUserOnAsyncComplete: Boolean = false,
         log: (String, Throwable?) -> Unit,
     ): BiliHookSymbols {
         val appContext = hostContext.applicationContext ?: hostContext
@@ -193,23 +196,39 @@ object BiliSymbolResolver {
                 allowDexKit = false,
             )
             memorySymbols = fastSymbols
-            kotlin.concurrent.thread(name = "BBZQ-AsyncScan", isDaemon = true) {
-                runCatching {
-                    log("BiliSymbolResolver: async full DexKit scan started", null)
-                    val fullSymbols = scan(
-                        hostContext = appContext,
-                        classLoader = classLoader,
-                        fingerprint = fingerprint,
-                        log = log,
-                        allowDexKit = true,
-                    )
-                    writeCache(prefs, fingerprint, fullSymbols, log)
-                    memorySymbols = fullSymbols
-                    log("BiliSymbolResolver: async full DexKit scan completed and cached fp=$fingerprint", null)
-                    publishStatus(appContext, fullSymbols, log)
-                    onSymbolsUpdated?.invoke(fullSymbols)
-                }.onFailure { throwable ->
-                    log("BiliSymbolResolver: async full DexKit scan failed", throwable)
+            if (asyncScanRunning.compareAndSet(false, true)) {
+                kotlin.concurrent.thread(name = "BBZQ-AsyncScan", isDaemon = true) {
+                    try {
+                        log("BiliSymbolResolver: async full DexKit scan started", null)
+                        val fullSymbols = scan(
+                            hostContext = appContext,
+                            classLoader = classLoader,
+                            fingerprint = fingerprint,
+                            log = log,
+                            allowDexKit = true,
+                        )
+                        writeCache(prefs, fingerprint, fullSymbols, log)
+                        memorySymbols = fullSymbols
+                        log("BiliSymbolResolver: async full DexKit scan completed and cached fp=$fingerprint", null)
+                        publishStatus(appContext, fullSymbols, log)
+                        if (notifyUserOnAsyncComplete) {
+                            Handler(Looper.getMainLooper()).post {
+                                runCatching {
+                                    Toast.makeText(
+                                        appContext,
+                                        "BBZQ 符號快取已更新，重啟嗶哩嗶哩後完整生效",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                }.onFailure { toastError ->
+                                    log("BiliSymbolResolver: failed to show symbol cache toast", toastError)
+                                }
+                            }
+                        }
+                    } catch (throwable: Throwable) {
+                        log("BiliSymbolResolver: async full DexKit scan failed", throwable)
+                    } finally {
+                        asyncScanRunning.set(false)
+                    }
                 }
             }
             return fastSymbols

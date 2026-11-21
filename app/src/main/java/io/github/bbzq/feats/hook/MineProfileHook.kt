@@ -13,7 +13,7 @@ import java.util.Collections
 import java.util.WeakHashMap
 
 class MineProfileHook(env: RoamingEnv) : BaseRoamingHook(env) {
-    private val mineSymbols: RestoredMineProfileSymbols? by lazy(LazyThreadSafetyMode.NONE) {
+    private val mineSymbols: RestoredMineProfileSymbols? by lazy(LazyThreadSafetyMode.PUBLICATION) {
         env.symbols?.mineProfile?.restore(classLoader)
     }
     private val seenMenuTitles: MutableSet<String> = Collections.synchronizedSet(HashSet())

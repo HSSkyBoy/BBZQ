@@ -10,7 +10,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import io.github.bbzq.utils.ReflectionUtils
+import io.github.bbzq.feats.safeInvoke
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -110,7 +110,7 @@ object RootUtils {
             check(isShizukuReady()) { "Shizuku/Sui is unavailable or permission was denied" }
             val method = checkNotNull(shizukuNewProcessMethod) { "Shizuku process API is unavailable" }
             val args = arrayOf("sh", "-c", command)
-            val process = ReflectionUtils.safeInvoke(method, null, args, null, null) as? Process
+            val process = method.safeInvoke(null, args, null, null) as? Process
             checkNotNull(process) { "Could not create Shizuku/Sui process" }
             awaitRestart(process)
         }
